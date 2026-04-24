@@ -1,0 +1,314 @@
+{
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "delta_mae": 0.06351088972386319,
+        "delta_rmse": 0.10384492633564402,
+        "loss_collision_next": 0.09907811676160498,
+        "loss_collision_within_3": 0.2373547856938812,
+        "loss_collision_within_5": 0.37591372799474637,
+        "loss_delta": 0.9207379786876324,
+        "loss_risk": 0.046723693072829656,
+        "loss_total": 1.032970148419577,
+        "loss_total_one_step": 1.032970148419577,
+        "loss_vel": 0.36431350773559407,
+        "risk_mae": 0.17761417471565086,
+        "risk_mse": 0.046723693072829656
+      },
+      "val": {
+        "delta_mae": 0.04100108661867203,
+        "delta_rmse": 0.06252055956011122,
+        "loss_collision_next": 0.04058961602052651,
+        "loss_collision_within_3": 0.16150440847094943,
+        "loss_collision_within_5": 0.3117202966241166,
+        "loss_delta": 0.5015655232870833,
+        "loss_risk": 0.06316667521729115,
+        "loss_total": 0.5871151251361725,
+        "loss_total_one_step": 0.5871151251361725,
+        "loss_vel": 0.1817084643593494,
+        "risk_mae": 0.21109522910828285,
+        "risk_mse": 0.06316667521729115
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "delta_mae": 0.029865768148886914,
+        "delta_rmse": 0.04627399751810936,
+        "loss_collision_next": 0.0341383978075616,
+        "loss_collision_within_3": 0.11245627764426594,
+        "loss_collision_within_5": 0.20995490620854626,
+        "loss_delta": 0.3070298450874363,
+        "loss_risk": 0.04363029535074218,
+        "loss_total": 0.36440671286007176,
+        "loss_total_one_step": 0.36440671286007176,
+        "loss_vel": 0.10404507773601009,
+        "risk_mae": 0.17025204492804685,
+        "risk_mse": 0.04363029535074218
+      },
+      "val": {
+        "delta_mae": 0.018097411028723767,
+        "delta_rmse": 0.022798501688273663,
+        "loss_collision_next": 0.03014897721035634,
+        "loss_collision_within_3": 0.11842330926849676,
+        "loss_collision_within_5": 0.3218239659460217,
+        "loss_delta": 0.10420380572372294,
+        "loss_risk": 0.06071264294788559,
+        "loss_total": 0.1682358035381804,
+        "loss_total_one_step": 0.1682358035381804,
+        "loss_vel": 0.02727246096238811,
+        "risk_mae": 0.20673793340299992,
+        "risk_mse": 0.06071264294788559
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "delta_mae": 0.013495748875295224,
+        "delta_rmse": 0.01801477139710096,
+        "loss_collision_next": 0.02201859792377673,
+        "loss_collision_within_3": 0.07520711861704972,
+        "loss_collision_within_5": 0.15276574286211983,
+        "loss_delta": 0.062273986899460794,
+        "loss_risk": 0.03910762143412144,
+        "loss_total": 0.1008253174236302,
+        "loss_total_one_step": 0.1008253174236302,
+        "loss_vel": 0.016366611625534606,
+        "risk_mae": 0.16000546822472225,
+        "risk_mse": 0.03910762143412144
+      },
+      "val": {
+        "delta_mae": 0.01343302365313185,
+        "delta_rmse": 0.01691565981649972,
+        "loss_collision_next": 0.02064323005423772,
+        "loss_collision_within_3": 0.08899632155906999,
+        "loss_collision_within_5": 0.25612567802114,
+        "loss_delta": 0.059347651621445695,
+        "loss_risk": 0.056056909778333726,
+        "loss_total": 0.11265642956850376,
+        "loss_total_one_step": 0.11265642956850376,
+        "loss_vel": 0.015100843332549359,
+        "risk_mae": 0.19357437838582284,
+        "risk_mse": 0.056056909778333726
+      }
+    },
+    {
+      "epoch": 4,
+      "train": {
+        "delta_mae": 0.00914693709838789,
+        "delta_rmse": 0.012278610329373893,
+        "loss_collision_next": 0.014320329670338151,
+        "loss_collision_within_3": 0.04444421579037865,
+        "loss_collision_within_5": 0.09893695063373736,
+        "loss_delta": 0.02973286867513408,
+        "loss_risk": 0.03698955002386554,
+        "loss_total": 0.059812598133168256,
+        "loss_total_one_step": 0.059812598133168256,
+        "loss_vel": 0.007616523154873967,
+        "risk_mae": 0.15410762863094304,
+        "risk_mse": 0.03698955002386554
+      },
+      "val": {
+        "delta_mae": 0.009998976669095933,
+        "delta_rmse": 0.01282022535761303,
+        "loss_collision_next": 0.020899700279061746,
+        "loss_collision_within_3": 0.0951989630678791,
+        "loss_collision_within_5": 0.26870101673565394,
+        "loss_delta": 0.03499922725035155,
+        "loss_risk": 0.06212872254880185,
+        "loss_total": 0.09199370534971674,
+        "loss_total_one_step": 0.09199370534971674,
+        "loss_vel": 0.008851986026708433,
+        "risk_mae": 0.20626896992325783,
+        "risk_mse": 0.06212872254880185
+      }
+    },
+    {
+      "epoch": 5,
+      "train": {
+        "delta_mae": 0.0067397869707353395,
+        "delta_rmse": 0.009162886438853279,
+        "loss_collision_next": 0.009060157154856488,
+        "loss_collision_within_3": 0.02853004801308297,
+        "loss_collision_within_5": 0.07470463247032089,
+        "loss_delta": 0.016602196428679824,
+        "loss_risk": 0.034278057177726376,
+        "loss_total": 0.04165879317269979,
+        "loss_total_one_step": 0.04165879317269979,
+        "loss_vel": 0.004233159085254179,
+        "risk_mae": 0.14791710715310102,
+        "risk_mse": 0.034278057177726376
+      },
+      "val": {
+        "delta_mae": 0.0087975246158052,
+        "delta_rmse": 0.011273016647851847,
+        "loss_collision_next": 0.017816790347035535,
+        "loss_collision_within_3": 0.07379143927923035,
+        "loss_collision_within_5": 0.21596472650479823,
+        "loss_delta": 0.027620124987306746,
+        "loss_risk": 0.05401530193085683,
+        "loss_total": 0.07528173685707945,
+        "loss_total_one_step": 0.07528173685707945,
+        "loss_vel": 0.006949014590181252,
+        "risk_mae": 0.1883402184603062,
+        "risk_mse": 0.05401530193085683
+      }
+    },
+    {
+      "epoch": 6,
+      "train": {
+        "delta_mae": 0.005845521420426244,
+        "delta_rmse": 0.007855932704487693,
+        "loss_collision_next": 0.00902401236516963,
+        "loss_collision_within_3": 0.022062232840321414,
+        "loss_collision_within_5": 0.06077779075175037,
+        "loss_delta": 0.012291909861769063,
+        "loss_risk": 0.03299590101562728,
+        "loss_total": 0.03524780485888863,
+        "loss_total_one_step": 0.03524780485888863,
+        "loss_vel": 0.003104303582558776,
+        "risk_mae": 0.14438860659020827,
+        "risk_mse": 0.03299590101562728
+      },
+      "val": {
+        "delta_mae": 0.008071993507365597,
+        "delta_rmse": 0.0103965898024592,
+        "loss_collision_next": 0.01954246604257489,
+        "loss_collision_within_3": 0.086392530684091,
+        "loss_collision_within_5": 0.21696894001813738,
+        "loss_delta": 0.02365461210819318,
+        "loss_risk": 0.05970257761432452,
+        "loss_total": 0.07554257603639618,
+        "loss_total_one_step": 0.07554257603639618,
+        "loss_vel": 0.005947281239910963,
+        "risk_mae": 0.2019802598243064,
+        "risk_mse": 0.05970257761432452
+      }
+    },
+    {
+      "epoch": 7,
+      "train": {
+        "delta_mae": 0.005232095247442895,
+        "delta_rmse": 0.0070014547983230915,
+        "loss_collision_next": 0.005357952410458542,
+        "loss_collision_within_3": 0.014808441695410637,
+        "loss_collision_within_5": 0.04769342772266933,
+        "loss_delta": 0.009765478273401726,
+        "loss_risk": 0.031146847628175267,
+        "loss_total": 0.029986277290212325,
+        "loss_total_one_step": 0.029986277290212325,
+        "loss_vel": 0.002460643772644048,
+        "risk_mae": 0.14037428897659796,
+        "risk_mse": 0.031146847628175267
+      },
+      "val": {
+        "delta_mae": 0.007804016939344558,
+        "delta_rmse": 0.010025216276420558,
+        "loss_collision_next": 0.023596265459287193,
+        "loss_collision_within_3": 0.10488977161408619,
+        "loss_collision_within_5": 0.2482784950288141,
+        "loss_delta": 0.021843664090525596,
+        "loss_risk": 0.05204123216978413,
+        "loss_total": 0.07367426565194383,
+        "loss_total_one_step": 0.07367426565194383,
+        "loss_vel": 0.005474559028949985,
+        "risk_mae": 0.18223055753302067,
+        "risk_mse": 0.05204123216978413
+      }
+    },
+    {
+      "epoch": 8,
+      "train": {
+        "delta_mae": 0.004789526575369562,
+        "delta_rmse": 0.006411087397240998,
+        "loss_collision_next": 0.004571249045148677,
+        "loss_collision_within_3": 0.00997940434212473,
+        "loss_collision_within_5": 0.038903965585368266,
+        "loss_delta": 0.00817657757630728,
+        "loss_risk": 0.027831279780386256,
+        "loss_total": 0.02569873606503145,
+        "loss_total_one_step": 0.02569873606503145,
+        "loss_vel": 0.002062549746210968,
+        "risk_mae": 0.13174918141900277,
+        "risk_mse": 0.027831279780386256
+      },
+      "val": {
+        "delta_mae": 0.007620006026898293,
+        "delta_rmse": 0.00976539231797165,
+        "loss_collision_next": 0.023521428245012712,
+        "loss_collision_within_3": 0.10818210191300197,
+        "loss_collision_within_5": 0.3213391302637177,
+        "loss_delta": 0.02076081308397524,
+        "loss_risk": 0.06055827319939086,
+        "loss_total": 0.0807975871646975,
+        "loss_total_one_step": 0.0807975871646975,
+        "loss_vel": 0.005203268280193368,
+        "risk_mae": 0.1950216275104817,
+        "risk_mse": 0.06055827319939086
+      }
+    },
+    {
+      "epoch": 9,
+      "train": {
+        "delta_mae": 0.004663944637715444,
+        "delta_rmse": 0.006230466436307514,
+        "loss_collision_next": 0.004817373782427648,
+        "loss_collision_within_3": 0.011781710486657238,
+        "loss_collision_within_5": 0.04065396113662314,
+        "loss_delta": 0.007765532926341641,
+        "loss_risk": 0.028458441073357925,
+        "loss_total": 0.025883158423901955,
+        "loss_total_one_step": 0.025883158423901955,
+        "loss_vel": 0.001957984145175319,
+        "risk_mae": 0.13278089309968646,
+        "risk_mse": 0.028458441073357925
+      },
+      "val": {
+        "delta_mae": 0.0075079402291869865,
+        "delta_rmse": 0.009556405474134583,
+        "loss_collision_next": 0.02660011378518465,
+        "loss_collision_within_3": 0.12432304090158977,
+        "loss_collision_within_5": 0.3170871337904621,
+        "loss_delta": 0.01996753282567605,
+        "loss_risk": 0.05700456552663224,
+        "loss_total": 0.07991659806724241,
+        "loss_total_one_step": 0.07991659806724241,
+        "loss_vel": 0.005001082877687951,
+        "risk_mae": 0.18672019227388056,
+        "risk_mse": 0.05700456552663224
+      }
+    },
+    {
+      "epoch": 10,
+      "train": {
+        "delta_mae": 0.004332287003689545,
+        "delta_rmse": 0.005765850876422088,
+        "loss_collision_next": 0.003285667525757129,
+        "loss_collision_within_3": 0.008049000364399386,
+        "loss_collision_within_5": 0.02840602694276209,
+        "loss_delta": 0.006623619651029102,
+        "loss_risk": 0.025273487385776307,
+        "loss_total": 0.021980814483700966,
+        "loss_total_one_step": 0.021980814483700966,
+        "loss_vel": 0.001666829329989259,
+        "risk_mae": 0.12538071434581632,
+        "risk_mse": 0.025273487385776307
+      },
+      "val": {
+        "delta_mae": 0.006967072226503428,
+        "delta_rmse": 0.008955397464810534,
+        "loss_collision_next": 0.026606699483689072,
+        "loss_collision_within_3": 0.11500857521986343,
+        "loss_collision_within_5": 0.26160097177596786,
+        "loss_delta": 0.017784184360123696,
+        "loss_risk": 0.0488918944995137,
+        "loss_total": 0.06991710210654964,
+        "loss_total_one_step": 0.06991710210654964,
+        "loss_vel": 0.0044539357050064395,
+        "risk_mae": 0.17636595135356517,
+        "risk_mse": 0.0488918944995137
+      }
+    }
+  ]
+}

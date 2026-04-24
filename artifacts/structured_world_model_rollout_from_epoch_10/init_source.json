@@ -1,0 +1,22 @@
+{
+  "init_checkpoint_best_val_loss": 0.06991710210654964,
+  "init_checkpoint_epoch": 10,
+  "init_checkpoint_metrics": {
+    "delta_mae": 0.006967072226503428,
+    "delta_rmse": 0.008955397464810534,
+    "loss_collision_next": 0.026606699483689072,
+    "loss_collision_within_3": 0.11500857521986343,
+    "loss_collision_within_5": 0.26160097177596786,
+    "loss_delta": 0.017784184360123696,
+    "loss_risk": 0.0488918944995137,
+    "loss_total": 0.06991710210654964,
+    "loss_total_one_step": 0.06991710210654964,
+    "loss_vel": 0.0044539357050064395,
+    "risk_mae": 0.17636595135356517,
+    "risk_mse": 0.0488918944995137
+  },
+  "init_checkpoint_path": "/home/stavan/s4/rnl/4proj/artifacts/structured_world_model/epoch_010.pt",
+  "new_output_dir": "artifacts/structured_world_model_rollout_from_epoch_10",
+  "optimizer_state_loaded": false,
+  "timestamp": "2026-04-23T20:32:18.679426+00:00"
+}

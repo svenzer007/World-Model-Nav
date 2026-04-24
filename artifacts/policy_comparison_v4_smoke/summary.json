@@ -1,0 +1,151 @@
+{
+  "checkpoint": "artifacts/structured_world_model_rollout_from_epoch_10/epoch_014.pt",
+  "config": {
+    "dynamic_collision_penalty": 1000000.0,
+    "dynamic_risk_tau": 0.5,
+    "horizon": 10,
+    "max_steps": 200,
+    "min_clearance_clip": 0.05,
+    "num_dynamic_obstacles": 4,
+    "num_episodes": 2,
+    "seed": 1000,
+    "static_collision_penalty": 1000000.0,
+    "weights": {
+      "dynamic": 2.0,
+      "heading": 0.8,
+      "path": 1.1,
+      "progress": 2.0,
+      "static": 0.5,
+      "velocity": 0.3
+    }
+  },
+  "controllers": {
+    "baseline_structured": {
+      "action_distribution": {
+        "forward": 0.4675,
+        "forward_left": 0.13,
+        "forward_right": 0.1075,
+        "slow_left": 0.0925,
+        "slow_right": 0.0975,
+        "stop": 0.105
+      },
+      "average_min_dynamic_clearance": 0.07358208561144323,
+      "average_min_static_clearance": 0.1393317733878305,
+      "average_path_length": 6.209999999999992,
+      "average_progress": -0.10699388384819031,
+      "dynamic_collision_rate": 0.0,
+      "mean_score_components": {
+        "clearance": 5.99794198707727,
+        "heading": 0.6864568188655069,
+        "infeasibility_penalty": 0.0,
+        "path": 0.7544312562412065,
+        "progress": 0.8345475403288017,
+        "velocity": 0.0895
+      },
+      "num_episodes": 2,
+      "static_collision_rate": 0.0,
+      "stop_fraction": 0.105,
+      "success_rate": 0.0,
+      "timeout_rate": 1.0
+    },
+    "learned_structured": {
+      "action_distribution": {
+        "forward": 0.5793357933579336,
+        "forward_left": 0.02952029520295203,
+        "forward_right": 0.09225092250922509,
+        "slow_left": 0.07749077490774908,
+        "slow_right": 0.09225092250922509,
+        "stop": 0.12915129151291513
+      },
+      "average_min_dynamic_clearance": 0.03103313904006119,
+      "average_min_static_clearance": 0.1908110713714411,
+      "average_path_length": 4.144999999999994,
+      "average_progress": -0.024255603551864624,
+      "dynamic_collision_rate": 0.5,
+      "mean_score_components": {
+        "clearance": 6.304135829327782,
+        "heading": 0.5816367951539632,
+        "infeasibility_penalty": 0.0,
+        "path": 0.5197513170821394,
+        "progress": 0.7755043215571477,
+        "velocity": 0.0940959409594096
+      },
+      "num_episodes": 2,
+      "static_collision_rate": 0.0,
+      "stop_fraction": 0.0875,
+      "success_rate": 0.0,
+      "timeout_rate": 0.5
+    }
+  },
+  "episodes": {
+    "baseline_structured": [
+      {
+        "controller": "baseline_structured",
+        "done_reason": "timeout",
+        "dynamic_collision": false,
+        "episode_id": 0,
+        "min_dynamic_clearance": 0.13922908086639754,
+        "min_static_clearance": 0.14296970143814497,
+        "num_steps": 200,
+        "robot_path_length": 5.645000000000002,
+        "seed": 437485271,
+        "static_collision": false,
+        "stop_fraction": 0.21,
+        "success": false,
+        "timeout": true,
+        "total_progress": -0.00459975004196167
+      },
+      {
+        "controller": "baseline_structured",
+        "done_reason": "timeout",
+        "dynamic_collision": false,
+        "episode_id": 1,
+        "min_dynamic_clearance": 0.007935090356488927,
+        "min_static_clearance": 0.13569384533751605,
+        "num_steps": 200,
+        "robot_path_length": 6.774999999999983,
+        "seed": 1119667345,
+        "static_collision": false,
+        "stop_fraction": 0.0,
+        "success": false,
+        "timeout": true,
+        "total_progress": -0.20938801765441895
+      }
+    ],
+    "learned_structured": [
+      {
+        "controller": "learned_structured",
+        "done_reason": "timeout",
+        "dynamic_collision": false,
+        "episode_id": 0,
+        "min_dynamic_clearance": 0.07324734838353378,
+        "min_static_clearance": 0.0996946858116622,
+        "num_steps": 200,
+        "robot_path_length": 5.750000000000007,
+        "seed": 437485271,
+        "static_collision": false,
+        "stop_fraction": 0.175,
+        "success": false,
+        "timeout": true,
+        "total_progress": -0.00017112493515014648
+      },
+      {
+        "controller": "learned_structured",
+        "done_reason": "dynamic_collision",
+        "dynamic_collision": true,
+        "episode_id": 1,
+        "min_dynamic_clearance": -0.011181070303411395,
+        "min_static_clearance": 0.28192745693122,
+        "num_steps": 71,
+        "robot_path_length": 2.539999999999982,
+        "seed": 1119667345,
+        "static_collision": false,
+        "stop_fraction": 0.0,
+        "success": false,
+        "timeout": false,
+        "total_progress": -0.0483400821685791
+      }
+    ]
+  },
+  "schema_version": "v4_policy_comparison_1"
+}

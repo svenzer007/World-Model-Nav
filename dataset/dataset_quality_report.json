@@ -1,0 +1,358 @@
+{
+  "actions": {
+    "forward": {
+      "count": 14203,
+      "percentage": 0.40672966781214204
+    },
+    "forward_left": {
+      "count": 2355,
+      "percentage": 0.06743986254295532
+    },
+    "forward_right": {
+      "count": 2170,
+      "percentage": 0.06214203894616266
+    },
+    "slow_left": {
+      "count": 5538,
+      "percentage": 0.1585910652920962
+    },
+    "slow_right": {
+      "count": 5713,
+      "percentage": 0.16360252004581902
+    },
+    "stop": {
+      "count": 4941,
+      "percentage": 0.14149484536082474
+    },
+    "stop_fraction": 0.14149484536082474,
+    "unknown_action_count": 0
+  },
+  "basic": {
+    "avg_steps_per_episode": 174.6,
+    "num_episodes": 200,
+    "total_steps": 34920
+  },
+  "clearance": {
+    "fraction_clearance_lt_0_3": 0.7446735395189004,
+    "histogram_counts": {
+      "0_2_to_0_3": 9866,
+      "0_3_to_0_5": 6728,
+      "gt_0_5": 2188,
+      "lt_0_2": 16138
+    },
+    "mean_clearance": 0.24197136548403037,
+    "num_clearance_samples": 34920
+  },
+  "episode_lengths": {
+    "max_episode_length": 200,
+    "mean_episode_length": 174.6,
+    "median_episode_length": 200.0,
+    "min_episode_length": 53
+  },
+  "feasibility": {
+    "avg_feasible_actions_per_step": 4.563516609392898,
+    "avg_feasible_non_stop_actions_per_step": 3.6077319587628867,
+    "fraction_only_stop_feasible": 0.1356529209621993,
+    "fraction_zero_non_stop_actions_feasible": 0.1527777777777778,
+    "num_feasibility_samples": 34920
+  },
+  "goal_features": {
+    "angle_bins": {
+      "front": 19686,
+      "large": 2982,
+      "moderate": 12252
+    },
+    "distance": {
+      "max": 3.0981459617614746,
+      "mean": 1.0656133653952358,
+      "min": 0.4001666009426117
+    },
+    "num_goal_samples": 34920
+  },
+  "maneuver_diversity": {
+    "avg_unique_actions_per_episode": 5.215,
+    "turning_action_fraction": 0.4517754868270332
+  },
+  "map_distribution": {
+    "local_clutter": {
+      "count": 50,
+      "fraction": 0.25
+    },
+    "local_corridor": {
+      "count": 50,
+      "fraction": 0.25
+    },
+    "local_maze": {
+      "count": 50,
+      "fraction": 0.25
+    },
+    "local_rooms": {
+      "count": 50,
+      "fraction": 0.25
+    }
+  },
+  "path_complexity": {
+    "directness_ratio": {
+      "count": 200,
+      "max": 3.8696646150114518,
+      "mean": 1.6261634089654542,
+      "min": 1.2006994631435026,
+      "p05": 1.2156452726824238,
+      "p50": 1.4206483310563214,
+      "p95": 2.7155723410004695,
+      "std": 0.5025869291169793
+    },
+    "turn_angle_sum": {
+      "count": 200,
+      "max": 29.059732045705683,
+      "mean": 11.957687037726208,
+      "min": 3.9269908169872565,
+      "p05": 7.068583470577046,
+      "p50": 11.38827336926304,
+      "p95": 18.849555921538826,
+      "std": 4.1421377173624885
+    }
+  },
+  "stop_persistence": {
+    "avg_longest_stop_run": 24.135,
+    "episodes_with_stop_run_gt_10": 51,
+    "episodes_with_stop_run_gt_20": 45,
+    "max_longest_stop_run": 192,
+    "num_episodes": 200
+  },
+  "termination": {
+    "dynamic_collision": {
+      "count": 35,
+      "percentage": 0.175
+    },
+    "goal_reached": {
+      "count": 29,
+      "percentage": 0.145
+    },
+    "static_collision": {
+      "count": 11,
+      "percentage": 0.055
+    },
+    "timeout": {
+      "count": 125,
+      "percentage": 0.625
+    }
+  },
+  "trajectory_quality": {
+    "avg_displacement": 3.53299429798591,
+    "avg_path_length": 4.5618750000000015,
+    "episodes_with_path_length_lt_1_0": 10
+  },
+  "v2_base_labels": {
+    "clearance": {
+      "dynamic_t1": {
+        "count": 34920,
+        "max": 4.014402270408182,
+        "mean": 0.7398095376720959,
+        "min": -0.05722443827075524,
+        "p05": 0.0978871594356091,
+        "p50": 0.5219380514759913,
+        "p95": 2.0816026638905107,
+        "std": 0.6541477442323967
+      },
+      "static_t1": {
+        "count": 34920,
+        "max": 2.0337475207975597,
+        "mean": 0.33548418483428755,
+        "min": -0.025083874659520486,
+        "p05": 0.1242314082093899,
+        "p50": 0.269208585503152,
+        "p95": 0.7606055601659681,
+        "std": 0.2246522502399394
+      },
+      "total_t1": {
+        "count": 34920,
+        "max": 1.5550861927320463,
+        "mean": 0.2829720007692749,
+        "min": -0.05722443827075524,
+        "p05": 0.08867990875482736,
+        "p50": 0.24180563385559356,
+        "p95": 0.6033639239842628,
+        "std": 0.16800600460952517
+      }
+    },
+    "collision_t1": {
+      "count": 46,
+      "fraction": 0.0013172966781214205
+    },
+    "collision_within_3": {
+      "count": 138,
+      "fraction": 0.003951890034364261
+    },
+    "collision_within_5": {
+      "count": 230,
+      "fraction": 0.006586483390607102
+    },
+    "distance_to_path": {
+      "t": {
+        "count": 34920,
+        "max": 2.66849317571308,
+        "mean": 0.21424261511113227,
+        "min": 0.0,
+        "p05": 0.008689535663516223,
+        "p50": 0.12803258183801325,
+        "p95": 0.8036027643995788,
+        "std": 0.26880152246136557
+      },
+      "t1": {
+        "count": 34920,
+        "max": 2.66849317571308,
+        "mean": 0.2158394750608587,
+        "min": 1.2607208964306778e-05,
+        "p05": 0.009911596864854367,
+        "p50": 0.12928495186774525,
+        "p95": 0.8036027643995788,
+        "std": 0.2697504097006474
+      }
+    },
+    "heading_error_abs": {
+      "count": 34920,
+      "max": 3.1385288657697585,
+      "mean": 0.6126970695305582,
+      "min": 1.9317663039849114e-05,
+      "p05": 0.03724931212516766,
+      "p50": 0.4535245777005827,
+      "p95": 1.8438159713394053,
+      "std": 0.5637177104403253
+    },
+    "num_steps": 34920,
+    "progress_to_subgoal": {
+      "count": 34920,
+      "max": 0.550625205039978,
+      "mean": 1.2789131542251691e-05,
+      "min": -0.6180518269538879,
+      "p05": -0.09951715469360352,
+      "p50": 0.013911247253417969,
+      "p95": 0.03975284695625305,
+      "std": 0.047293284808455835
+    },
+    "risk_t1": {
+      "count": 34920,
+      "max": 1.0,
+      "mean": 0.5960785085478381,
+      "min": 0.044593267446548825,
+      "p05": 0.29917462441131326,
+      "p50": 0.6165528293269489,
+      "p95": 0.8374783913553648,
+      "std": 0.166349589891461
+    }
+  },
+  "v4_dynamic_labels": {
+    "dynamic_collision_t1": {
+      "count": 37,
+      "fraction": 0.0010595647193585337
+    },
+    "dynamic_collision_within_3": {
+      "count": 111,
+      "fraction": 0.0031786941580756014
+    },
+    "dynamic_collision_within_5": {
+      "count": 185,
+      "fraction": 0.005297823596792669
+    },
+    "dynamic_event_step_t": {
+      "count": 28331,
+      "fraction": 0.81131156930126
+    },
+    "dynamic_hit_fraction_t": {
+      "count": 34920,
+      "max": 0.6224066390041494,
+      "mean": 0.13160882253687148,
+      "min": 0.0,
+      "p05": 0.0,
+      "p50": 0.11203319502074689,
+      "p95": 0.35269709543568467,
+      "std": 0.1150688895423323
+    },
+    "dynamic_residual_energy_t": {
+      "count": 34920,
+      "max": 2.312033176422119,
+      "mean": 0.2720856504641272,
+      "min": 0.0,
+      "p05": 0.0,
+      "p50": 0.20248963683843613,
+      "p95": 0.8037655442953082,
+      "std": 0.27975032348067247
+    },
+    "dynamic_residual_nonzero_beam_fraction": 0.13160882253687148,
+    "dynamic_risk_t1": {
+      "count": 34920,
+      "max": 1.0,
+      "mean": 0.37012199734332124,
+      "min": 0.0003259376212333946,
+      "p05": 0.015557610807867748,
+      "p50": 0.35208730698767865,
+      "p95": 0.8221977682625613,
+      "std": 0.2601785212741844
+    },
+    "dynamic_visible_t": {
+      "count": 28331,
+      "fraction": 0.81131156930126
+    },
+    "lidar_dynamic_visible_t": {
+      "count": 27574,
+      "fraction": 0.7896334478808705
+    },
+    "min_dynamic_clearance_t1": {
+      "count": 34920,
+      "max": 4.014402270408182,
+      "mean": 0.7398095376720959,
+      "min": -0.05722443827075524,
+      "p05": 0.0978871594356091,
+      "p50": 0.5219380514759913,
+      "p95": 2.0816026638905107,
+      "std": 0.6541477442323967
+    },
+    "num_steps": 34920
+  },
+  "v4_structured_state": {
+    "delta_world_norm_t": {
+      "count": 139680,
+      "max": 0.029990934279802137,
+      "mean": 0.02393660730179033,
+      "min": 2.6401691738877137e-05,
+      "p05": 0.01852955999381712,
+      "p50": 0.02398399201721716,
+      "p95": 0.02949244562159735,
+      "std": 0.003680504162721121
+    },
+    "ids_consistent": true,
+    "num_dynamic_obstacles_values": [
+      4
+    ],
+    "obstacle_clearance_robot_frame_t": {
+      "count": 139680,
+      "max": 8.174369566868492,
+      "mean": 1.9786540741536094,
+      "min": 2.9433739827056105e-05,
+      "p05": 0.2228476805431832,
+      "p50": 1.6985311878652183,
+      "p95": 4.789859281725804,
+      "std": 1.43214117629151
+    },
+    "obstacle_distance_robot_frame_t": {
+      "count": 139680,
+      "max": 8.609297092388816,
+      "mean": 2.3835038078563455,
+      "min": 0.36542764490604823,
+      "p05": 0.6295175485987675,
+      "p50": 2.1003447492899987,
+      "p95": 5.194312063311985,
+      "std": 1.4332315376511262
+    },
+    "shape_counts": {
+      "radii(4,)": 34920,
+      "robot_t(4, 2)": 34920,
+      "world_t(4, 2)": 34920
+    },
+    "world_t1_to_next_world_t_consistent": true
+  },
+  "warnings": [
+    "Many episodes have long stop runs; persistent freezing detected."
+  ]
+}
