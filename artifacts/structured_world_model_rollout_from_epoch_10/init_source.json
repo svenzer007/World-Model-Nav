@@ -18,5 +18,5 @@
   "init_checkpoint_path": "/home/stavan/s4/rnl/4proj/artifacts/structured_world_model/epoch_010.pt",
   "new_output_dir": "artifacts/structured_world_model_rollout_from_epoch_10",
   "optimizer_state_loaded": false,
-  "timestamp": "2026-04-23T20:32:18.679426+00:00"
+  "timestamp": "2026-04-24T16:55:41.885434+00:00"
 }

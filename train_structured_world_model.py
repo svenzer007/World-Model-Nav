@@ -181,9 +181,11 @@ def compute_rollout_loss(
     batch: Mapping[str, torch.Tensor],
     config: Mapping[str, Any],
     pos_weights: Mapping[str, torch.Tensor],
+    *,
+    active_rollout_horizon: int | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     rollout_cfg = config.get("rollout", {})
-    horizon = int(rollout_cfg.get("horizon", 3))
+    horizon = int(active_rollout_horizon if active_rollout_horizon is not None else rollout_cfg.get("horizon", 3))
     if horizon <= 0 or batch["obstacle_pos"].shape[1] <= 1:
         zero = batch["obstacle_pos"].sum() * 0.0
         return zero, {"loss_rollout": zero.detach()}
@@ -222,8 +224,13 @@ def compute_rollout_loss(
         step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
             outputs["pred_delta_rel_scaled"][:, None], target_delta_scaled[:, None], mask[:, None]
         )
+        # Rollout velocity targets must use the same finite-difference robot-frame
+        # convention as the predicted rollout velocity, especially during turning.
+        target_vel = (batch["obstacle_pos"][:, target_index + 1] - batch["obstacle_pos"][:, target_index]) / (
+            batch["dt"][:, None, None] + 1e-6
+        )
         step_loss = step_loss + float(loss_cfg.get("lambda_vel", 0.1)) * masked_huber(
-            v_pred[:, None], batch["obstacle_vel"][:, target_index][:, None], mask[:, None]
+            v_pred[:, None], target_vel[:, None], mask[:, None]
         )
         step_loss = step_loss + float(loss_cfg.get("lambda_risk", 0.5)) * masked_mse(
             outputs["pred_risk"], batch["risk"][:, target_index], mask
@@ -275,6 +282,8 @@ def run_epoch(
     device: torch.device,
     config: Mapping[str, Any],
     pos_weights: Mapping[str, torch.Tensor],
+    *,
+    active_rollout_horizon: int | None = None,
     optimizer: torch.optim.Optimizer | None = None,
     progress_label: str | None = None,
 ) -> dict[str, float]:
@@ -297,7 +306,13 @@ def run_epoch(
             )
             loss, components = compute_one_step_loss(outputs, batch, config, pos_weights)
             if bool(config.get("rollout", {}).get("enabled", False)):
-                rollout_loss, rollout_components = compute_rollout_loss(model, batch, config, pos_weights)
+                rollout_loss, rollout_components = compute_rollout_loss(
+                    model,
+                    batch,
+                    config,
+                    pos_weights,
+                    active_rollout_horizon=active_rollout_horizon,
+                )
                 loss = loss + float(config["loss_weights"].get("lambda_rollout", 0.5)) * rollout_loss
                 components.update(rollout_components)
             metrics = compute_metrics(outputs, batch)
@@ -329,6 +344,7 @@ def save_checkpoint(
     config: Mapping[str, Any],
     metrics: Mapping[str, float],
     best_val_loss: float,
+    active_rollout_horizon: int,
 ) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -341,10 +357,47 @@ def save_checkpoint(
             "config": dict(config),
             "metrics": dict(metrics),
             "best_val_loss": float(best_val_loss),
+            "active_rollout_horizon": int(active_rollout_horizon),
         },
         output,
     )
     torch.save(model.state_dict(), weights_output)
+
+
+def resolve_rollout_curriculum(config: Mapping[str, Any]) -> tuple[list[dict[str, int]], int]:
+    rollout_cfg = dict(config.get("rollout", {}))
+    curriculum_cfg = rollout_cfg.get("curriculum")
+    if not curriculum_cfg:
+        horizon = int(rollout_cfg.get("horizon", 0))
+        epochs = int(config.get("training", {}).get("epochs", 0))
+        return ([{"horizon": horizon, "epochs": epochs}] if horizon > 0 and epochs > 0 else []), epochs
+    if not isinstance(curriculum_cfg, list):
+        raise TypeError("rollout.curriculum must be a list of {horizon, epochs} mappings")
+    phases: list[dict[str, int]] = []
+    total_epochs = 0
+    for phase in curriculum_cfg:
+        if not isinstance(phase, Mapping):
+            raise TypeError("Each rollout curriculum phase must be a mapping")
+        horizon = int(phase.get("horizon", 0))
+        epochs = int(phase.get("epochs", 0))
+        if horizon <= 0 or epochs <= 0:
+            raise ValueError("Each rollout curriculum phase must have positive horizon and epochs")
+        phases.append({"horizon": horizon, "epochs": epochs})
+        total_epochs += epochs
+    return phases, total_epochs
+
+
+def active_rollout_horizon_for_epoch(curriculum: list[dict[str, int]], epoch: int, fallback_horizon: int) -> int:
+    if epoch <= 0:
+        raise ValueError("epoch must be positive")
+    if not curriculum:
+        return int(fallback_horizon)
+    running_total = 0
+    for phase in curriculum:
+        running_total += int(phase["epochs"])
+        if epoch <= running_total:
+            return int(phase["horizon"])
+    return int(curriculum[-1]["horizon"])
 
 
 def load_checkpoint(
@@ -416,7 +469,16 @@ def main() -> None:
     data_cfg = config["data"]
     model_cfg = config["model"]
     training_cfg = config["training"]
-    rollout_horizon = int(config.get("rollout", {}).get("horizon", 0)) if config.get("rollout", {}).get("enabled") else 0
+    rollout_cfg = dict(config.get("rollout", {}))
+    rollout_enabled = bool(rollout_cfg.get("enabled", False))
+    fallback_rollout_horizon = int(rollout_cfg.get("horizon", 0)) if rollout_enabled else 0
+    rollout_curriculum, curriculum_total_epochs = resolve_rollout_curriculum(config) if rollout_enabled else ([], 0)
+    total_epochs = int(curriculum_total_epochs if rollout_curriculum else training_cfg.get("epochs", 40))
+    active_rollout_horizon = active_rollout_horizon_for_epoch(
+        rollout_curriculum,
+        1,
+        fallback_rollout_horizon,
+    ) if rollout_enabled else 0
 
     episode_paths = list_episode_paths(data_cfg["data_dir"])
     train_paths, val_paths = split_episode_paths(episode_paths, float(data_cfg.get("train_fraction", 0.9)))
@@ -426,7 +488,7 @@ def main() -> None:
         stride=int(data_cfg.get("stride", 1)),
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
-        rollout_horizon=rollout_horizon,
+        rollout_horizon=active_rollout_horizon,
     )
     val_dataset = StructuredSequenceDataset(
         val_paths,
@@ -434,7 +496,7 @@ def main() -> None:
         stride=int(data_cfg.get("stride", 1)),
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
-        rollout_horizon=rollout_horizon,
+        rollout_horizon=active_rollout_horizon,
     )
     if len(train_dataset) == 0 or len(val_dataset) == 0:
         raise ValueError("Train/val datasets must both have at least one sequence")
@@ -479,6 +541,7 @@ def main() -> None:
         output_dir / "config_snapshot.json",
         {
             "config": config,
+            "resolved_rollout_curriculum": rollout_curriculum,
             "num_train_episodes": len(train_paths),
             "num_val_episodes": len(val_paths),
             "num_train_sequences": len(train_dataset),
@@ -505,9 +568,15 @@ def main() -> None:
         )
         start_epoch = int(checkpoint.get("epoch", 0)) + 1
         best_val_loss = float(checkpoint.get("best_val_loss", checkpoint.get("metrics", {}).get("loss_total", float("inf"))))
+        resumed_horizon = active_rollout_horizon_for_epoch(
+            rollout_curriculum,
+            start_epoch,
+            fallback_rollout_horizon,
+        ) if rollout_enabled else 0
         print(
             f"Resuming from {checkpoint_path} at epoch {start_epoch} "
-            f"({'fresh optimizer' if args.fresh_optimizer else 'optimizer restored'}).",
+            f"({'fresh optimizer' if args.fresh_optimizer else 'optimizer restored'}); "
+            f"active rollout horizon={resumed_horizon}.",
             flush=True,
         )
     elif init_checkpoint_path is not None:
@@ -529,19 +598,48 @@ def main() -> None:
         )
         print(
             f"Initialized new run from {init_checkpoint_path} at local epoch 1 "
-            f"({'optimizer restored' if init_load_optimizer_state else 'fresh optimizer'}).",
+            f"({'optimizer restored' if init_load_optimizer_state else 'fresh optimizer'}); "
+            f"starting rollout horizon={active_rollout_horizon}.",
             flush=True,
         )
 
-    for epoch in range(start_epoch, int(training_cfg.get("epochs", 40)) + 1):
+    previous_rollout_horizon: int | None = (
+        active_rollout_horizon_for_epoch(
+            rollout_curriculum,
+            start_epoch - 1,
+            fallback_rollout_horizon,
+        )
+        if rollout_enabled and start_epoch > 1
+        else None
+    )
+    if start_epoch > total_epochs:
+        print(
+            f"Checkpoint is already at or beyond configured epochs={total_epochs}; nothing to train.",
+            flush=True,
+        )
+        return
+
+    for epoch in range(start_epoch, total_epochs + 1):
+        active_rollout_horizon = active_rollout_horizon_for_epoch(
+            rollout_curriculum,
+            epoch,
+            fallback_rollout_horizon,
+        ) if rollout_enabled else 0
+        if previous_rollout_horizon is not None and active_rollout_horizon != previous_rollout_horizon:
+            print(
+                f"Switching rollout horizon from {previous_rollout_horizon} to {active_rollout_horizon} at epoch {epoch}",
+                flush=True,
+            )
+        learning_rate = float(optimizer.param_groups[0]["lr"])
         train_metrics = run_epoch(
             model,
             train_loader,
             device,
             config,
             pos_weights,
+            active_rollout_horizon=active_rollout_horizon,
             optimizer=optimizer,
-            progress_label=f"train {epoch}",
+            progress_label=f"train {epoch} h={active_rollout_horizon}",
         )
         with torch.no_grad():
             val_metrics = run_epoch(
@@ -550,25 +648,36 @@ def main() -> None:
                 device,
                 config,
                 pos_weights,
+                active_rollout_horizon=active_rollout_horizon,
                 optimizer=None,
-                progress_label=f"val {epoch}",
+                progress_label=f"val {epoch} h={active_rollout_horizon}",
             )
-        summary = {"epoch": epoch, "train": train_metrics, "val": val_metrics}
+        summary = {
+            "epoch": epoch,
+            "active_rollout_horizon": int(active_rollout_horizon),
+            "learning_rate": learning_rate,
+            "train": train_metrics,
+            "val": val_metrics,
+        }
         history.append(summary)
         print(json.dumps(summary, sort_keys=True))
         save_json(history_path, {"history": history})
 
         if val_metrics["loss_total"] < best_val_loss:
             best_val_loss = float(val_metrics["loss_total"])
-            save_checkpoint(output_dir / "best.pt", model, optimizer, epoch, config, val_metrics, best_val_loss)
-        save_checkpoint(output_dir / f"epoch_{epoch:03d}.pt", model, optimizer, epoch, config, val_metrics, best_val_loss)
-        save_checkpoint(output_dir / "latest.pt", model, optimizer, epoch, config, val_metrics, best_val_loss)
-
-    if start_epoch > int(training_cfg.get("epochs", 40)):
-        print(
-            f"Checkpoint is already at or beyond configured epochs={int(training_cfg.get('epochs', 40))}; nothing to train.",
-            flush=True,
+            save_checkpoint(output_dir / "best.pt", model, optimizer, epoch, config, val_metrics, best_val_loss, active_rollout_horizon)
+        save_checkpoint(
+            output_dir / f"epoch_{epoch:03d}.pt",
+            model,
+            optimizer,
+            epoch,
+            config,
+            val_metrics,
+            best_val_loss,
+            active_rollout_horizon,
         )
+        save_checkpoint(output_dir / "latest.pt", model, optimizer, epoch, config, val_metrics, best_val_loss, active_rollout_horizon)
+        previous_rollout_horizon = active_rollout_horizon
 
 
 if __name__ == "__main__":
