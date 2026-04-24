@@ -239,7 +239,9 @@ class LearnedStructuredController:
         predicted_positions_robot: list[list[list[float]]] = []
         predicted_velocities_robot: list[list[list[float]]] = []
         true_positions_robot: list[list[list[float]]] = []
+        true_relative_velocities: list[list[list[float]]] = []
         true_dynamic_clearances: list[float] = []
+        true_dynamic_collisions: list[bool] = []
         drift_per_obstacle: list[list[float]] = []
         drift_mean: list[float] = []
         drift_max: list[float] = []
@@ -248,6 +250,7 @@ class LearnedStructuredController:
         collision_within_3_probs: list[float] = []
         collision_within_5_probs: list[float] = []
         infeasible_reasons: list[str] = []
+        true_pos_rel_current = np.asarray(current_state["pos_rel"], dtype=np.float32).copy()
 
         action_index_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
         action_cont_tensor = torch.tensor([[float(action["v"]), float(action["omega"])]], dtype=torch.float32, device=self.device)
@@ -318,9 +321,16 @@ class LearnedStructuredController:
                 obstacle.step(float(self.config.robot_config.dt))
             true_world = np.asarray([obstacle.position.copy() for obstacle in true_obstacles], dtype=float)
             true_robot = robot_frame_points(pose, true_world)
+            # Log true robot-frame relative velocity using the same finite-difference
+            # convention as the predicted rollout velocity so rollout error stays comparable.
+            true_vel_rel_next = (true_robot.astype(np.float32) - true_pos_rel_current) / float(self.config.robot_config.dt)
             true_clearances = dynamic_clearances_from_positions(true_robot, radii.astype(float), self.config.robot_config.radius)
             true_positions_robot.append(true_robot.astype(float).tolist())
+            true_relative_velocities.append(true_vel_rel_next.astype(float).tolist())
             true_dynamic_clearances.append(float(np.min(true_clearances)) if true_clearances.size else float("inf"))
+            # Log the true per-step dynamic collision boundary so we can compare the
+            # learned rollout's safety classification against the true rollout outcome.
+            true_dynamic_collisions.append(bool(np.any(true_clearances <= 0.0)))
 
             drift = np.linalg.norm(pos_rel_next.astype(float) - true_robot.astype(float), axis=1)
             drift_per_obstacle.append(drift.astype(float).tolist())
@@ -334,6 +344,7 @@ class LearnedStructuredController:
 
             pos_rel_current = pos_rel_next
             vel_rel_current = vel_rel_next
+            true_pos_rel_current = true_robot.astype(np.float32)
 
         if any(planning_collisions):
             infeasible_reasons.append("planning_collision")
@@ -376,7 +387,9 @@ class LearnedStructuredController:
             "predicted_positions_robot": predicted_positions_robot,
             "predicted_relative_velocities": predicted_velocities_robot,
             "true_positions_robot": true_positions_robot,
+            "true_relative_velocities": true_relative_velocities,
             "true_dynamic_clearances": true_dynamic_clearances,
+            "true_dynamic_collisions": true_dynamic_collisions,
             "drift_per_obstacle": drift_per_obstacle,
             "drift_mean_per_step": drift_mean,
             "drift_max_per_step": drift_max,

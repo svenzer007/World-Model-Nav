@@ -5,12 +5,12 @@
   "episode_id": 1,
   "min_dynamic_clearance": 0.007935090356488927,
   "min_static_clearance": 0.13569384533751605,
-  "num_steps": 200,
-  "robot_path_length": 6.774999999999983,
+  "num_steps": 250,
+  "robot_path_length": 8.199999999999976,
   "seed": 1119667345,
   "static_collision": false,
   "stop_fraction": 0.0,
   "success": false,
   "timeout": true,
-  "total_progress": -0.20938801765441895
+  "total_progress": -0.052155375480651855
 }

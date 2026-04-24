@@ -118,6 +118,445 @@ def _score_components_from_debug(chosen_debug: dict[str, object]) -> dict[str, f
     }
 
 
+def _safe_action_family(action_name: str) -> str:
+    families = {"stop", "forward", "forward_left", "forward_right", "slow_left", "slow_right"}
+    return action_name if action_name in families else "unknown"
+
+
+def _scalar_error_stats(samples: list[float]) -> dict[str, float | int]:
+    if not samples:
+        return {
+            "num_samples": 0,
+            "mean_error": float("nan"),
+            "variance": float("nan"),
+            "mae": float("nan"),
+            "rmse": float("nan"),
+        }
+    values = np.asarray(samples, dtype=float)
+    return {
+        "num_samples": int(values.size),
+        "mean_error": float(np.mean(values)),
+        "variance": float(np.var(values)),
+        "mae": float(np.mean(np.abs(values))),
+        "rmse": float(np.sqrt(np.mean(np.square(values)))),
+    }
+
+
+def _collision_confusion_stats(predicted_flags: list[bool], true_flags: list[bool]) -> dict[str, float | int]:
+    if len(predicted_flags) != len(true_flags):
+        raise ValueError("Predicted and true collision flag samples must have matching lengths")
+    num_samples = int(len(predicted_flags))
+    if num_samples == 0:
+        return {
+            "num_samples": 0,
+            "predicted_collision_count": 0,
+            "true_collision_count": 0,
+            "true_positive_count": 0,
+            "true_negative_count": 0,
+            "false_positive_count": 0,
+            "false_negative_count": 0,
+            "predicted_collision_rate": float("nan"),
+            "true_collision_rate": float("nan"),
+            "false_positive_rate": float("nan"),
+            "false_negative_rate": float("nan"),
+            "accuracy": float("nan"),
+        }
+    predicted = np.asarray(predicted_flags, dtype=bool)
+    truth = np.asarray(true_flags, dtype=bool)
+    true_positive = int(np.sum(predicted & truth))
+    true_negative = int(np.sum((~predicted) & (~truth)))
+    false_positive = int(np.sum(predicted & (~truth)))
+    false_negative = int(np.sum((~predicted) & truth))
+    predicted_collision_count = int(np.sum(predicted))
+    true_collision_count = int(np.sum(truth))
+    return {
+        "num_samples": num_samples,
+        "predicted_collision_count": predicted_collision_count,
+        "true_collision_count": true_collision_count,
+        "true_positive_count": true_positive,
+        "true_negative_count": true_negative,
+        "false_positive_count": false_positive,
+        "false_negative_count": false_negative,
+        "predicted_collision_rate": float(predicted_collision_count / num_samples),
+        "true_collision_rate": float(true_collision_count / num_samples),
+        "false_positive_rate": float(false_positive / num_samples),
+        "false_negative_rate": float(false_negative / num_samples),
+        "accuracy": float((true_positive + true_negative) / num_samples),
+    }
+
+
+def _metric_stats_from_error_lists(metric_errors: dict[str, list[float]]) -> dict[str, object]:
+    return {
+        "num_samples": int(len(metric_errors["x_rel"])),
+        "x_rel": _scalar_error_stats(metric_errors["x_rel"]),
+        "y_rel": _scalar_error_stats(metric_errors["y_rel"]),
+        "vx_rel": _scalar_error_stats(metric_errors["vx_rel"]),
+        "vy_rel": _scalar_error_stats(metric_errors["vy_rel"]),
+        "speed_rel": _scalar_error_stats(metric_errors["speed_rel"]),
+        "radial_distance": _scalar_error_stats(metric_errors["radial_distance"]),
+        "radial_closing_speed": _scalar_error_stats(metric_errors["radial_closing_speed"]),
+    }
+
+
+def _empty_metric_error_lists() -> dict[str, list[float]]:
+    return {
+        "x_rel": [],
+        "y_rel": [],
+        "vx_rel": [],
+        "vy_rel": [],
+        "speed_rel": [],
+        "radial_distance": [],
+        "radial_closing_speed": [],
+    }
+
+
+def _empty_collision_confusion_lists() -> dict[str, list[bool]]:
+    return {
+        "predicted": [],
+        "true": [],
+    }
+
+
+def _radial_closing_speed(position_rel: np.ndarray, velocity_rel: np.ndarray, eps: float = 1e-6) -> float:
+    radial_distance = float(np.linalg.norm(position_rel))
+    return float(np.dot(position_rel, velocity_rel) / max(radial_distance, float(eps)))
+
+
+def _append_rollout_error_sample(
+    target: dict[str, list[float]],
+    *,
+    pred_pos: np.ndarray,
+    true_pos: np.ndarray,
+    pred_vel: np.ndarray,
+    true_vel: np.ndarray,
+) -> None:
+    pred_speed = float(np.linalg.norm(pred_vel))
+    true_speed = float(np.linalg.norm(true_vel))
+    pred_radial_distance = float(np.linalg.norm(pred_pos))
+    true_radial_distance = float(np.linalg.norm(true_pos))
+    pred_radial_closing = _radial_closing_speed(pred_pos, pred_vel)
+    true_radial_closing = _radial_closing_speed(true_pos, true_vel)
+
+    target["x_rel"].append(float(pred_pos[0] - true_pos[0]))
+    target["y_rel"].append(float(pred_pos[1] - true_pos[1]))
+    target["vx_rel"].append(float(pred_vel[0] - true_vel[0]))
+    target["vy_rel"].append(float(pred_vel[1] - true_vel[1]))
+    target["speed_rel"].append(float(pred_speed - true_speed))
+    target["radial_distance"].append(float(pred_radial_distance - true_radial_distance))
+    target["radial_closing_speed"].append(float(pred_radial_closing - true_radial_closing))
+
+
+def _step_key(step_index: int) -> str:
+    return f"step_{int(step_index) + 1}"
+
+
+def _horizon_error_growth_from_steps(step_stats: dict[str, dict[str, object]]) -> dict[str, list[float]]:
+    metric_names = ["x_rel", "y_rel", "vx_rel", "vy_rel", "radial_distance", "radial_closing_speed"]
+    growth = {metric: [] for metric in metric_names}
+    for step_name in sorted(step_stats.keys(), key=lambda name: int(name.split("_")[1])):
+        stats = step_stats[step_name]
+        for metric in metric_names:
+            growth[metric].append(float(dict(stats[metric]).get("mae", float("nan"))))
+    return growth
+
+
+def _clearance_error_growth_from_steps(step_stats: dict[str, dict[str, object]]) -> list[float]:
+    return [
+        float(dict(step_stats[step_name]["clearance_error"]).get("mae", float("nan")))
+        for step_name in sorted(step_stats.keys(), key=lambda name: int(name.split("_")[1]))
+    ]
+
+
+def _false_negative_rate_growth_from_steps(step_stats: dict[str, dict[str, object]]) -> list[float]:
+    return [
+        float(dict(step_stats[step_name]["dynamic_collision_confusion"]).get("false_negative_rate", float("nan")))
+        for step_name in sorted(step_stats.keys(), key=lambda name: int(name.split("_")[1]))
+    ]
+
+
+def _build_rollout_error_stats_from_episodes(episodes: list[dict[str, object]]) -> dict[str, object]:
+    per_step_errors: defaultdict[int, dict[str, list[float]]] = defaultdict(_empty_metric_error_lists)
+    per_step_clearance_errors: defaultdict[int, list[float]] = defaultdict(list)
+    per_step_collision_confusion: defaultdict[int, dict[str, list[bool]]] = defaultdict(_empty_collision_confusion_lists)
+    per_action_family_errors: defaultdict[str, defaultdict[int, dict[str, list[float]]]] = defaultdict(
+        lambda: defaultdict(_empty_metric_error_lists)
+    )
+    per_action_family_clearance_errors: defaultdict[str, defaultdict[int, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    per_action_family_collision_confusion: defaultdict[str, defaultdict[int, dict[str, list[bool]]]] = defaultdict(
+        lambda: defaultdict(_empty_collision_confusion_lists)
+    )
+    per_action_family_timestep_counts: Counter[str] = Counter()
+    horizon = 0
+
+    for episode in episodes:
+        for step in episode.get("steps", []):
+            controller_debug = dict(step.get("controller_debug", {}))
+            if str(controller_debug.get("mode", "")) != "learned_structured_rollout":
+                continue
+            chosen = dict(controller_debug.get("chosen", {}))
+            pred_positions = list(chosen.get("predicted_positions_robot", []))
+            pred_velocities = list(chosen.get("predicted_relative_velocities", []))
+            true_positions = list(chosen.get("true_positions_robot", []))
+            true_velocities = list(chosen.get("true_relative_velocities", []))
+            predicted_clearances = [float(value) for value in chosen.get("dynamic_clearances", [])]
+            predicted_collisions = [bool(value) for value in chosen.get("dynamic_collisions", [])]
+            true_clearances = [float(value) for value in chosen.get("true_dynamic_clearances", [])]
+            true_collisions = [bool(value) for value in chosen.get("true_dynamic_collisions", [])]
+            action_family = _safe_action_family(str(step.get("action_name", "")))
+            per_action_family_timestep_counts[action_family] += 1
+            horizon = max(horizon, len(pred_positions))
+            for step_index, (pred_pos_step, pred_vel_step, true_pos_step, true_vel_step) in enumerate(
+                zip(pred_positions, pred_velocities, true_positions, true_velocities)
+            ):
+                for pred_pos, pred_vel, true_pos, true_vel in zip(pred_pos_step, pred_vel_step, true_pos_step, true_vel_step):
+                    _append_rollout_error_sample(
+                        per_step_errors[step_index],
+                        pred_pos=np.asarray(pred_pos, dtype=float),
+                        true_pos=np.asarray(true_pos, dtype=float),
+                        pred_vel=np.asarray(pred_vel, dtype=float),
+                        true_vel=np.asarray(true_vel, dtype=float),
+                    )
+                    _append_rollout_error_sample(
+                        per_action_family_errors[action_family][step_index],
+                        pred_pos=np.asarray(pred_pos, dtype=float),
+                        true_pos=np.asarray(true_pos, dtype=float),
+                        pred_vel=np.asarray(pred_vel, dtype=float),
+                        true_vel=np.asarray(true_vel, dtype=float),
+                    )
+            for step_index, (predicted_clearance, true_clearance, predicted_collision, true_collision) in enumerate(
+                zip(predicted_clearances, true_clearances, predicted_collisions, true_collisions)
+            ):
+                per_step_clearance_errors[step_index].append(float(predicted_clearance - true_clearance))
+                per_step_collision_confusion[step_index]["predicted"].append(bool(predicted_collision))
+                per_step_collision_confusion[step_index]["true"].append(bool(true_collision))
+                per_action_family_clearance_errors[action_family][step_index].append(float(predicted_clearance - true_clearance))
+                per_action_family_collision_confusion[action_family][step_index]["predicted"].append(bool(predicted_collision))
+                per_action_family_collision_confusion[action_family][step_index]["true"].append(bool(true_collision))
+
+    aggregate_per_horizon_step = {
+        _step_key(step_index): {
+            **_metric_stats_from_error_lists(errors),
+            "clearance_error": _scalar_error_stats(per_step_clearance_errors[step_index]),
+            "dynamic_collision_confusion": _collision_confusion_stats(
+                per_step_collision_confusion[step_index]["predicted"],
+                per_step_collision_confusion[step_index]["true"],
+            ),
+        }
+        for step_index, errors in sorted(per_step_errors.items())
+    }
+    aggregate_by_action_family = {}
+    for action_family, step_errors in sorted(per_action_family_errors.items()):
+        per_horizon_step = {
+            _step_key(step_index): {
+                **_metric_stats_from_error_lists(errors),
+                "clearance_error": _scalar_error_stats(per_action_family_clearance_errors[action_family][step_index]),
+                "dynamic_collision_confusion": _collision_confusion_stats(
+                    per_action_family_collision_confusion[action_family][step_index]["predicted"],
+                    per_action_family_collision_confusion[action_family][step_index]["true"],
+                ),
+            }
+            for step_index, errors in sorted(step_errors.items())
+        }
+        aggregate_by_action_family[action_family] = {
+            "num_contributing_timesteps": int(per_action_family_timestep_counts[action_family]),
+            "per_horizon_step": per_horizon_step,
+        }
+
+    summary: dict[str, object] = {
+        "controller": "learned_structured",
+        "num_episodes": int(len(episodes)),
+        "horizon": int(horizon),
+        "aggregate_per_horizon_step": aggregate_per_horizon_step,
+        "aggregate_by_action_family": aggregate_by_action_family,
+    }
+    if aggregate_per_horizon_step:
+        summary["horizon_error_growth"] = _horizon_error_growth_from_steps(aggregate_per_horizon_step)
+        summary["horizon_clearance_error_mae"] = _clearance_error_growth_from_steps(aggregate_per_horizon_step)
+        summary["horizon_false_negative_rate"] = _false_negative_rate_growth_from_steps(aggregate_per_horizon_step)
+    if aggregate_by_action_family:
+        summary["action_conditioned_horizon_error_growth"] = {
+            action_family: _horizon_error_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+        summary["action_conditioned_horizon_clearance_error_mae"] = {
+            action_family: _clearance_error_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+        summary["action_conditioned_horizon_false_negative_rate"] = {
+            action_family: _false_negative_rate_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+    return summary
+
+
+def _build_learned_rollout_error_stats(episode: dict[str, object]) -> dict[str, object]:
+    per_obstacle_per_horizon_step: defaultdict[str, defaultdict[int, dict[str, list[float]]]] = defaultdict(
+        lambda: defaultdict(_empty_metric_error_lists)
+    )
+    aggregate_per_horizon_step_errors: defaultdict[int, dict[str, list[float]]] = defaultdict(_empty_metric_error_lists)
+    aggregate_per_horizon_step_clearance_errors: defaultdict[int, list[float]] = defaultdict(list)
+    aggregate_per_horizon_step_collision_confusion: defaultdict[int, dict[str, list[bool]]] = defaultdict(
+        _empty_collision_confusion_lists
+    )
+    aggregate_by_action_family_errors: defaultdict[str, defaultdict[int, dict[str, list[float]]]] = defaultdict(
+        lambda: defaultdict(_empty_metric_error_lists)
+    )
+    aggregate_by_action_family_clearance_errors: defaultdict[str, defaultdict[int, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    aggregate_by_action_family_collision_confusion: defaultdict[str, defaultdict[int, dict[str, list[bool]]]] = defaultdict(
+        lambda: defaultdict(_empty_collision_confusion_lists)
+    )
+    action_family_timestep_counts: Counter[str] = Counter()
+    obstacle_timestep_counts: Counter[str] = Counter()
+    episode_obstacle_ids: list[str] | None = None
+    obstacle_ids_stable = True
+    horizon = 0
+
+    for step in episode.get("steps", []):
+        controller_debug = dict(step.get("controller_debug", {}))
+        if str(controller_debug.get("mode", "")) != "learned_structured_rollout":
+            continue
+        chosen = dict(controller_debug.get("chosen", {}))
+        pred_positions = list(chosen.get("predicted_positions_robot", []))
+        pred_velocities = list(chosen.get("predicted_relative_velocities", []))
+        true_positions = list(chosen.get("true_positions_robot", []))
+        true_velocities = list(chosen.get("true_relative_velocities", []))
+        predicted_clearances = [float(value) for value in chosen.get("dynamic_clearances", [])]
+        predicted_collisions = [bool(value) for value in chosen.get("dynamic_collisions", [])]
+        true_clearances = [float(value) for value in chosen.get("true_dynamic_clearances", [])]
+        true_collisions = [bool(value) for value in chosen.get("true_dynamic_collisions", [])]
+        if not (pred_positions and pred_velocities and true_positions and true_velocities):
+            continue
+
+        obstacle_ids = [str(snapshot["obstacle_id"]) for snapshot in step.get("dynamic_obstacles_t", [])]
+        if episode_obstacle_ids is None:
+            episode_obstacle_ids = list(obstacle_ids)
+        elif obstacle_ids != episode_obstacle_ids:
+            obstacle_ids_stable = False
+
+        action_family = _safe_action_family(str(step.get("action_name", "")))
+        action_family_timestep_counts[action_family] += 1
+        for obstacle_id in obstacle_ids:
+            obstacle_timestep_counts[obstacle_id] += 1
+
+        horizon = max(horizon, len(pred_positions))
+        # Aggregate chosen-candidate rollout error per obstacle and horizon step so we can
+        # tell whether failures come from long-horizon drift, turning actions, or specific obstacles.
+        for step_index, (pred_pos_step, pred_vel_step, true_pos_step, true_vel_step) in enumerate(
+            zip(pred_positions, pred_velocities, true_positions, true_velocities)
+        ):
+            for obstacle_id, pred_pos, pred_vel, true_pos, true_vel in zip(
+                obstacle_ids, pred_pos_step, pred_vel_step, true_pos_step, true_vel_step
+            ):
+                pred_pos_arr = np.asarray(pred_pos, dtype=float)
+                pred_vel_arr = np.asarray(pred_vel, dtype=float)
+                true_pos_arr = np.asarray(true_pos, dtype=float)
+                true_vel_arr = np.asarray(true_vel, dtype=float)
+                _append_rollout_error_sample(
+                    per_obstacle_per_horizon_step[obstacle_id][step_index],
+                    pred_pos=pred_pos_arr,
+                    true_pos=true_pos_arr,
+                    pred_vel=pred_vel_arr,
+                    true_vel=true_vel_arr,
+                )
+                _append_rollout_error_sample(
+                    aggregate_per_horizon_step_errors[step_index],
+                    pred_pos=pred_pos_arr,
+                    true_pos=true_pos_arr,
+                    pred_vel=pred_vel_arr,
+                    true_vel=true_vel_arr,
+                )
+                _append_rollout_error_sample(
+                    aggregate_by_action_family_errors[action_family][step_index],
+                    pred_pos=pred_pos_arr,
+                    true_pos=true_pos_arr,
+                    pred_vel=pred_vel_arr,
+                    true_vel=true_vel_arr,
+                )
+        for step_index, (predicted_clearance, true_clearance, predicted_collision, true_collision) in enumerate(
+            zip(predicted_clearances, true_clearances, predicted_collisions, true_collisions)
+        ):
+            aggregate_per_horizon_step_clearance_errors[step_index].append(float(predicted_clearance - true_clearance))
+            aggregate_per_horizon_step_collision_confusion[step_index]["predicted"].append(bool(predicted_collision))
+            aggregate_per_horizon_step_collision_confusion[step_index]["true"].append(bool(true_collision))
+            aggregate_by_action_family_clearance_errors[action_family][step_index].append(float(predicted_clearance - true_clearance))
+            aggregate_by_action_family_collision_confusion[action_family][step_index]["predicted"].append(bool(predicted_collision))
+            aggregate_by_action_family_collision_confusion[action_family][step_index]["true"].append(bool(true_collision))
+
+    obstacle_ids_out = episode_obstacle_ids or []
+    per_obstacle_stats = {
+        obstacle_id: {
+            _step_key(step_index): _metric_stats_from_error_lists(errors)
+            for step_index, errors in sorted(step_errors.items())
+        }
+        for obstacle_id, step_errors in sorted(per_obstacle_per_horizon_step.items())
+    }
+    aggregate_per_horizon_step = {
+        _step_key(step_index): {
+            **_metric_stats_from_error_lists(errors),
+            "clearance_error": _scalar_error_stats(aggregate_per_horizon_step_clearance_errors[step_index]),
+            "dynamic_collision_confusion": _collision_confusion_stats(
+                aggregate_per_horizon_step_collision_confusion[step_index]["predicted"],
+                aggregate_per_horizon_step_collision_confusion[step_index]["true"],
+            ),
+        }
+        for step_index, errors in sorted(aggregate_per_horizon_step_errors.items())
+    }
+    aggregate_by_action_family = {}
+    for action_family, step_errors in sorted(aggregate_by_action_family_errors.items()):
+        per_horizon_step = {
+            _step_key(step_index): {
+                **_metric_stats_from_error_lists(errors),
+                "clearance_error": _scalar_error_stats(aggregate_by_action_family_clearance_errors[action_family][step_index]),
+                "dynamic_collision_confusion": _collision_confusion_stats(
+                    aggregate_by_action_family_collision_confusion[action_family][step_index]["predicted"],
+                    aggregate_by_action_family_collision_confusion[action_family][step_index]["true"],
+                ),
+            }
+            for step_index, errors in sorted(step_errors.items())
+        }
+        aggregate_by_action_family[action_family] = {
+            "num_contributing_timesteps": int(action_family_timestep_counts[action_family]),
+            "per_horizon_step": per_horizon_step,
+        }
+
+    stats: dict[str, object] = {
+        "episode_id": int(episode["episode_id"]),
+        "seed": int(episode["seed"]),
+        "controller": str(episode["controller"]),
+        "horizon": int(horizon),
+        "num_real_steps": int(len(episode.get("steps", []))),
+        "obstacle_ids": obstacle_ids_out,
+        "obstacle_ids_stable": bool(obstacle_ids_stable),
+        "num_contributing_timesteps_per_action_family": dict(sorted(action_family_timestep_counts.items())),
+        "num_contributing_timesteps_per_obstacle": dict(sorted(obstacle_timestep_counts.items())),
+        "per_obstacle_per_horizon_step": per_obstacle_stats,
+        "aggregate_per_horizon_step": aggregate_per_horizon_step,
+        "aggregate_by_action_family": aggregate_by_action_family,
+    }
+    if aggregate_per_horizon_step:
+        stats["horizon_error_growth"] = _horizon_error_growth_from_steps(aggregate_per_horizon_step)
+        stats["horizon_clearance_error_mae"] = _clearance_error_growth_from_steps(aggregate_per_horizon_step)
+        stats["horizon_false_negative_rate"] = _false_negative_rate_growth_from_steps(aggregate_per_horizon_step)
+    if aggregate_by_action_family:
+        stats["action_conditioned_horizon_error_growth"] = {
+            action_family: _horizon_error_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+        stats["action_conditioned_horizon_clearance_error_mae"] = {
+            action_family: _clearance_error_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+        stats["action_conditioned_horizon_false_negative_rate"] = {
+            action_family: _false_negative_rate_growth_from_steps(dict(payload["per_horizon_step"]))
+            for action_family, payload in aggregate_by_action_family.items()
+        }
+    return stats
+
+
 def _run_controller_episode(
     *,
     simulator: EpisodeSimulator,
@@ -427,6 +866,9 @@ def _save_episode_artifacts(
     stem = f"episode_{int(episode['episode_id']):06d}"
     save_json(controller_dir / "decision_logs" / f"{stem}.json", _build_decision_log(episode))
     save_json(controller_dir / "episode_results" / f"{stem}.json", _episode_result(episode))
+    if str(episode["controller"]) == "learned_structured":
+        rollout_error_stats = _build_learned_rollout_error_stats(episode)
+        save_json(controller_dir / "rollout_error_stats" / f"{stem}_rollout_error_stats.json", json_safe(rollout_error_stats))
     if save_episodes:
         save_episode_pickle(episode, controller_dir / "episodes" / f"{stem}.pkl")
     if save_previews:
@@ -517,6 +959,12 @@ def main() -> None:
         "episodes": {name: [_episode_result(episode) for episode in episodes] for name, episodes in all_episodes.items()},
     }
     save_json(output_dir / "summary.json", json_safe(summary))
+    learned_episodes = all_episodes.get("learned_structured", [])
+    if learned_episodes:
+        save_json(
+            output_dir / "learned_structured" / "rollout_error_stats_summary.json",
+            json_safe(_build_rollout_error_stats_from_episodes(learned_episodes)),
+        )
     print(json_safe(summary["controllers"]))
 
 
