@@ -1,11 +1,154 @@
-# V4 Structured Dynamic-Obstacle Dataset
+# V4 Dataset Requirements
 
-V4 generates data for structured dynamic-obstacle prediction and dynamic-risk supervision. The primary learning inputs are fixed-ID obstacle states, especially robot-relative obstacle positions and robot-relative velocities. LiDAR is saved only as auxiliary front-sector context and should not be treated as the main dynamic-obstacle representation.
+This README is the shared dataset-format reference for:
 
-## Generate
+- training
+- checkpoint evaluation
+- policy-comparison-adjacent debugging
+
+The training and evaluation scripts in this repo consume episode pickle files and turn them into contiguous fixed-length sequence windows. The policy comparison runner does not read this dataset directly, but the learned checkpoint it uses was trained against this schema.
+
+## Expected Directory Layout
+
+The loader accepts either:
+
+- a dataset root containing `episodes/`
+- or the `episodes/` directory itself
+
+Expected file layout:
+
+```text
+<data_dir>/
+  episodes/
+    episode_000000.pkl
+    episode_000001.pkl
+    ...
+```
+
+The filename pattern must match:
+
+```text
+episode_*.pkl
+```
+
+This is enforced by `list_episode_paths(...)` in `data/sequence_dataset.py`.
+
+## Split Behavior
+
+Train/validation splitting is deterministic and based on sorted filename order:
+
+- `split_episode_paths(paths, train_fraction=0.9)`
+
+That means collaborators should not expect a random split unless they rename or reshuffle the episode files externally.
+
+## Sequence Window Construction
+
+`StructuredSequenceDataset` builds contiguous windows from each episode:
+
+- default `sequence_length: 20`
+- default `stride: 1`
+
+Episodes shorter than `sequence_length` are skipped.
+
+Each dataset sample corresponds to one contiguous time window and returns tensors such as:
+
+- `obstacle_pos`
+- `obstacle_vel`
+- `radii`
+- `action_index`
+- `action_cont`
+- `delta_rel`
+- `risk`
+- `collision_next`
+- `collision_within_3`
+- `collision_within_5`
+- `valid_mask`
+- `dt`
+- `goal` when enabled
+- `lidar` when enabled
+
+## Required Per-Step Fields
+
+The current training/evaluation pipeline reads these fields from each episode step:
+
+- `dynamic_obstacles_robot_t`
+- `dynamic_obstacles_robot_t1`
+- `dynamic_obstacle_rel_vel_robot_t`
+- `dynamic_obstacle_radii`
+- `action_index`
+- `v_t`
+- `omega_t`
+- `dynamic_risk_t1`
+- `dynamic_collision_t1`
+- `dynamic_collision_within_3`
+- `dynamic_collision_within_5`
+
+Additional fields used conditionally:
+
+- `goal_t` when `model.use_goal: true`
+- `lidar_t` when `model.use_lidar: true`
+
+Time step handling:
+
+- `dt` is taken from the step if present
+- otherwise it falls back to `episode["robot_config"]["dt"]`
+- otherwise it falls back again to `0.1`
+
+## Shapes And Meaning
+
+For the current model path, the important structured dynamic-obstacle fields are:
+
+- `dynamic_obstacles_robot_t`: `(N_dyn, 2)` robot-relative obstacle positions at time `t`
+- `dynamic_obstacles_robot_t1`: `(N_dyn, 2)` robot-relative obstacle positions at time `t+1`
+- `dynamic_obstacle_rel_vel_robot_t`: `(N_dyn, 2)` robot-relative obstacle velocities used as the model velocity input
+- `dynamic_obstacle_radii`: `(N_dyn,)` obstacle radii, constant across an episode
+
+The dataset code derives:
+
+- `delta_rel = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t`
+- `action_cont = [v_t, omega_t]`
+
+Risk/collision targets are scalar per step:
+
+- `dynamic_risk_t1`
+- `dynamic_collision_t1`
+- `dynamic_collision_within_3`
+- `dynamic_collision_within_5`
+
+## Fixed Obstacle Count Assumption
+
+The current config uses:
+
+```yaml
+model:
+  num_dynamic_obstacles: 4
+```
+
+So the documented working path assumes a fixed four-obstacle representation. Collaborator-generated datasets should match that expectation unless they also change the model/config accordingly.
+
+## Goal And LiDAR Inputs
+
+The checked-in model config currently uses:
+
+```yaml
+model:
+  use_goal: true
+  use_lidar: false
+```
+
+So for the default workflow:
+
+- `goal_t` is required
+- `lidar_t` is not required
+
+If `use_lidar` is turned on in the config, each step must also contain `lidar_t`.
+
+## Generation
+
+Generate a dataset with the current simulator pipeline:
 
 ```bash
-cd /home/stavan/s4/rnl/4proj
+cd /home/stavan/s4/rnl/4proj_3horizon
 python -m sim2d.generate_data \
   --num_episodes 20 \
   --max_steps 250 \
@@ -16,7 +159,7 @@ python -m sim2d.generate_data \
 Smoke test:
 
 ```bash
-cd /home/stavan/s4/rnl/4proj
+cd /home/stavan/s4/rnl/4proj_3horizon
 python -m sim2d.generate_data \
   --num_episodes 2 \
   --max_steps 40 \
@@ -24,144 +167,24 @@ python -m sim2d.generate_data \
   --seed 0
 ```
 
-Inspect:
+Inspect the generated episodes:
 
 ```bash
-cd /home/stavan/s4/rnl/4proj
+cd /home/stavan/s4/rnl/4proj_3horizon
 python -m sim2d.inspect_episodes \
   /tmp/rnl_v4_smoke \
   --report \
   --report_path /tmp/rnl_v4_smoke/dataset_quality_report.json
 ```
 
-## Defaults
+## Notes For Training And Evaluation
 
-- Robot: radius `0.19m`, `dt=0.1s`, goal tolerance `0.4m`.
-- LiDAR: auxiliary front sector, `241` beams, `[-pi/2, pi/2]`, max range `6.0m`, step size `0.05m`.
-- Dynamic obstacles: fixed `N_dyn=4`, radii sampled from `(0.17, 0.26)m`, speeds from `(0.18, 0.30)m/s`, route length from `2` to `4` waypoints.
-- Dynamic labels: `dynamic_risk_tau=0.5`, `dynamic_risk_positive_threshold=0.35`, `dynamic_visibility_radius=1.2`.
-- Acceptance: `min_dynamic_visible_fraction=0.06`, `min_dynamic_risk_fraction=0.04`, `min_dynamic_event_steps=3`, `dynamic_interaction_resample_limit=30`.
+- Training and evaluation both consume episode pickles, not pre-baked sequence files.
+- Evaluation runs on the validation split derived from the same deterministic filename-based split logic as training.
+- If a collaborator points `data.data_dir` at the wrong directory level and there is no `episodes/episode_*.pkl`, loading will fail immediately.
 
-## Per-Step Schema
+For commands, outputs, and workflow details:
 
-Robot/action/task:
-
-```text
-robot_pose_t, robot_pose_t1
-goal_t, goal_t1
-action_index, action_name, v_t, omega_t
-```
-
-Primary structured obstacle fields:
-
-```text
-dynamic_obstacle_ids
-dynamic_obstacles_world_t       shape (N_dyn, 2)
-dynamic_obstacles_world_t1      shape (N_dyn, 2)
-dynamic_obstacle_delta_world_t  shape (N_dyn, 2)
-dynamic_obstacles_robot_t       shape (N_dyn, 2)
-dynamic_obstacles_robot_t1      shape (N_dyn, 2)
-dynamic_obstacle_radii          shape (N_dyn,)
-dynamic_obstacle_vel_world_t    shape (N_dyn, 2)
-dynamic_obstacle_vel_robot_t    shape (N_dyn, 2)
-dynamic_obstacle_rel_vel_robot_t shape (N_dyn, 2)
-```
-
-Auxiliary context:
-
-```text
-lidar_t, lidar_t1
-lidar_static_t, lidar_static_t1
-lidar_dynamic_residual_t, lidar_dynamic_residual_t1
-```
-
-Dynamic hazard targets:
-
-```text
-dynamic_visible_t
-dynamic_collision_t1
-dynamic_collision_within_3
-dynamic_collision_within_5
-min_dynamic_clearance_t
-min_dynamic_clearance_t1
-dynamic_risk_t1
-dynamic_event_step_t
-```
-
-## Identity and Motion
-
-Obstacle identity is fixed within each episode. Obstacles are sampled once, assigned stable IDs `dyn_00`, `dyn_01`, ..., and every `(N_dyn, 2)` array is assembled in that same list order. The inspector verifies that IDs remain unchanged and that `dynamic_obstacles_world_t1` at step `i` matches `dynamic_obstacles_world_t` at step `i+1`.
-
-Dynamic motion is smooth waypoint patrol motion: each obstacle moves at a sampled constant speed toward its current route target, then advances to the next waypoint. There is no frame-to-frame random walk, so deterministic short-horizon prediction over about seven steps remains meaningful.
-
-## Frames, Deltas, and Velocities
-
-Robot-frame obstacle position is:
-
-```text
-p_robot = R(-theta_robot) @ (p_world - robot_xy)
-```
-
-The rollout target delta is:
-
-```text
-dynamic_obstacle_delta_world_t = dynamic_obstacles_world_t1 - dynamic_obstacles_world_t
-```
-
-Velocity fields are finite-difference fields:
-
-```text
-dynamic_obstacle_vel_world_t = dynamic_obstacle_delta_world_t / dt
-dynamic_obstacle_vel_robot_t = R(-theta_t) @ dynamic_obstacle_vel_world_t
-robot_vel_world_t = (robot_pose_t1[:2] - robot_pose_t[:2]) / dt
-dynamic_obstacle_rel_vel_robot_t = R(-theta_t) @ (dynamic_obstacle_vel_world_t - robot_vel_world_t)
-```
-
-`dynamic_obstacle_vel_robot_t` is world velocity expressed in robot axes. It is not ego-relative. `dynamic_obstacle_rel_vel_robot_t` subtracts robot translation and is the preferred relative-velocity input for later control learning.
-
-## Dynamic Labels
-
-Clearance is dynamic-only:
-
-```text
-min_dynamic_clearance = min_i(||robot_xy - obs_i_xy|| - robot_radius - obs_i_radius)
-```
-
-Visibility is structured-state based:
-
-```text
-dynamic_visible_t = min_dynamic_clearance_t < dynamic_visibility_radius
-```
-
-Dynamic collision and risk:
-
-```text
-dynamic_collision_t1 = min_dynamic_clearance_t1 <= 0
-dynamic_risk_t1 = 1.0 if min_dynamic_clearance_t1 <= 0
-dynamic_risk_t1 = exp(-min_dynamic_clearance_t1 / dynamic_risk_tau) otherwise
-```
-
-Horizon labels:
-
-```text
-dynamic_collision_within_H at step i =
-  any dynamic_collision_t1 in step indices [i, i + H - 1]
-```
-
-Because `dynamic_collision_t1` is already the collision event after taking the action at step `i`, `dynamic_collision_within_H` corresponds to collision events from times `t+1` through `t+H`.
-
-Event steps:
-
-```text
-dynamic_event_step_t =
-  dynamic_visible_t
-  OR dynamic_risk_t1 >= dynamic_risk_positive_threshold
-  OR dynamic_collision_within_3
-  OR dynamic_collision_within_5
-```
-
-The simulator, acceptance filter, inspector, and report use this same definition.
-
-## Optional Action-Conditional Labels
-
-V4 v1 does not implement privileged per-action labels such as `dynamic_collision_next_if_action` or `dynamic_risk_if_action`. The schema is intentionally focused on the main fixed-ID state pipeline; per-action rollout labels can be added later without changing the primary obstacle-state fields.
+- training: [README_v4_training.md](./README_v4_training.md)
+- evaluation: [README_v4_evaluation.md](./README_v4_evaluation.md)
+- policy comparison: [README_v4_policy_comparison.md](./README_v4_policy_comparison.md)
