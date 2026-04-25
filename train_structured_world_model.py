@@ -617,9 +617,27 @@ def main() -> None:
             f"Checkpoint is already at or beyond configured epochs={total_epochs}; nothing to train.",
             flush=True,
         )
+<<<<<<< Updated upstream
         return
 
     for epoch in range(start_epoch, total_epochs + 1):
+=======
+        print("TRAINING_COMPLETE", flush=True)
+        sys.exit(0)
+
+    end_epoch = total_epochs
+    if args.epochs_per_run is not None:
+        if int(args.epochs_per_run) <= 0:
+            raise ValueError("--epochs-per-run must be positive")
+        end_epoch = min(total_epochs, start_epoch + int(args.epochs_per_run) - 1)
+
+    print(
+        f"Training epochs {start_epoch} through {end_epoch} of {total_epochs}.",
+        flush=True,
+    )
+
+    for epoch in range(start_epoch, end_epoch + 1):
+>>>>>>> Stashed changes
         active_rollout_horizon = active_rollout_horizon_for_epoch(
             rollout_curriculum,
             epoch,
@@ -679,6 +697,15 @@ def main() -> None:
         save_checkpoint(output_dir / "latest.pt", model, optimizer, epoch, config, val_metrics, best_val_loss, active_rollout_horizon)
         previous_rollout_horizon = active_rollout_horizon
 
+<<<<<<< Updated upstream
 
+=======
+    if end_epoch < total_epochs:
+        print("CHUNK_COMPLETE_MORE_REMAINING", flush=True)
+        sys.exit(10)
+
+    print("TRAINING_COMPLETE", flush=True)
+    sys.exit(0)
+>>>>>>> Stashed changes
 if __name__ == "__main__":
     main()
