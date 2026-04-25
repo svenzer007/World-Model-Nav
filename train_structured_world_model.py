@@ -1,4 +1,4 @@
-"""Train the V4 structured recurrent dynamic-obstacle model."""
+"""Train structured dynamic-obstacle world models."""
 
 from __future__ import annotations
 
@@ -6,18 +6,25 @@ import argparse
 from datetime import datetime, timezone
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, _load_episode_cached, list_episode_paths, split_episode_paths
 from data.weighted_sampler import build_weighted_sampler
-from models import StructuredDynamicsConfig, StructuredDynamicsModel
+from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, build_model, resolve_model_type
+
+
+def resolve_model_version(model_type: str, model_config: Mapping[str, Any]) -> str:
+    default_version = "v4_baseline" if model_type == BASELINE_MODEL_TYPE else model_type
+    return str(model_config.get("model_version", default_version))
 
 
 def load_yaml_config(path: str | Path) -> dict[str, Any]:
@@ -56,11 +63,23 @@ def move_batch_to_device(batch: Mapping[str, Any], device: torch.device) -> dict
     return {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
 
 
+def detach_recurrent_state(state: Any) -> Any:
+    if state is None:
+        return None
+    if torch.is_tensor(state):
+        return state.detach()
+    if isinstance(state, dict):
+        return {key: detach_recurrent_state(value) for key, value in state.items()}
+    if isinstance(state, (tuple, list)):
+        return type(state)(detach_recurrent_state(value) for value in state)
+    raise TypeError(f"Unsupported recurrent state type: {type(state)!r}")
+
+
 def masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     while mask.ndim < values.ndim:
         mask = mask.unsqueeze(-1)
     mask = mask.to(dtype=values.dtype)
-    return torch.sum(values * mask) / torch.clamp(torch.sum(mask) * values.shape[-1] if values.ndim > mask.ndim else torch.sum(mask), min=1.0)
+    return torch.sum(values * mask) / torch.clamp(torch.sum(mask) * (values.numel() / max(mask.numel(), 1)), min=1.0)
 
 
 def masked_huber(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -73,7 +92,7 @@ def masked_huber(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -
 
 def masked_mse(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     loss = (pred - target) ** 2
-    return torch.sum(loss * mask.to(loss.dtype)) / torch.clamp(torch.sum(mask), min=1.0)
+    return masked_mean(loss, mask)
 
 
 def masked_bce(
@@ -124,7 +143,24 @@ def configured_pos_weights(config: Mapping[str, Any], train_dataset: StructuredS
     return estimate_pos_weights(train_dataset, loss_cfg)
 
 
-def compute_one_step_loss(
+def model_supports_risk(outputs: Mapping[str, torch.Tensor]) -> bool:
+    return "pred_risk" in outputs
+
+
+def version_c_prev_context(
+    model: nn.Module,
+    batch: Mapping[str, torch.Tensor],
+    step_index: int,
+) -> torch.Tensor:
+    goal = batch.get("goal")
+    return model.encode_context(
+        action_index=batch["action_index"][:, step_index],
+        action_cont=batch["action_cont"][:, step_index],
+        goal=goal[:, step_index] if goal is not None else None,
+    )
+
+
+def compute_one_step_loss_baseline(
     outputs: Mapping[str, torch.Tensor],
     batch: Mapping[str, torch.Tensor],
     config: Mapping[str, Any],
@@ -176,8 +212,73 @@ def compute_one_step_loss(
     }
 
 
-def compute_rollout_loss(
-    model: StructuredDynamicsModel,
+def compute_one_step_loss_version_c(
+    outputs: Mapping[str, torch.Tensor],
+    batch: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    pos_weights: Mapping[str, torch.Tensor],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    loss_cfg = config["loss_weights"]
+    delta_scale = float(config["model"].get("delta_scale", 0.05))
+    mask = batch["valid_mask"]
+    target_delta_scaled = batch["delta_rel"] / delta_scale
+
+    loss_delta = masked_huber(outputs["pred_delta_rel_scaled"], target_delta_scaled, mask)
+    loss_latent = masked_mse(outputs["prior_latent"], outputs["posterior_latent"].detach(), mask)
+    loss_collision_next = masked_bce(
+        outputs["collision_next_logits"], batch["collision_next"], mask, pos_weights.get("collision_next")
+    )
+    loss_collision_within_3 = masked_bce(
+        outputs["collision_within_3_logits"],
+        batch["collision_within_3"],
+        mask,
+        pos_weights.get("collision_within_3"),
+    )
+    loss_collision_within_5 = masked_bce(
+        outputs["collision_within_5_logits"],
+        batch["collision_within_5"],
+        mask,
+        pos_weights.get("collision_within_5"),
+    )
+    total = (
+        float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
+        + float(loss_cfg.get("lambda_latent", 0.25)) * loss_latent
+        + float(loss_cfg.get("lambda_collision_next", 0.1)) * loss_collision_next
+        + float(loss_cfg.get("lambda_collision_within_3", 0.1)) * loss_collision_within_3
+        + float(loss_cfg.get("lambda_collision_within_5", 0.05)) * loss_collision_within_5
+    )
+    if model_supports_risk(outputs):
+        loss_risk = masked_mse(outputs["pred_risk"], batch["risk"], mask)
+        total = total + float(loss_cfg.get("lambda_risk", 0.0)) * loss_risk
+    else:
+        loss_risk = None
+    components = {
+        "loss_delta": loss_delta.detach(),
+        "loss_latent": loss_latent.detach(),
+        "loss_collision_next": loss_collision_next.detach(),
+        "loss_collision_within_3": loss_collision_within_3.detach(),
+        "loss_collision_within_5": loss_collision_within_5.detach(),
+        "loss_total_one_step": total.detach(),
+    }
+    if loss_risk is not None:
+        components["loss_risk"] = loss_risk.detach()
+    return total, components
+
+
+def compute_one_step_loss(
+    model_type: str,
+    outputs: Mapping[str, torch.Tensor],
+    batch: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    pos_weights: Mapping[str, torch.Tensor],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    if model_type == VERSION_C_MODEL_TYPE:
+        return compute_one_step_loss_version_c(outputs, batch, config, pos_weights)
+    return compute_one_step_loss_baseline(outputs, batch, config, pos_weights)
+
+
+def compute_rollout_loss_baseline(
+    model: nn.Module,
     batch: Mapping[str, torch.Tensor],
     config: Mapping[str, Any],
     pos_weights: Mapping[str, torch.Tensor],
@@ -215,17 +316,12 @@ def compute_rollout_loss(
         x_new = x_prev + pred_delta
         v_pred = (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
 
-        # Row-local targets are t -> t1 supervision. In contiguous sequence windows,
-        # row i's t1 state corresponds to row i+1's t state, so rollout can
-        # recursively feed predicted states while supervising against row-local targets.
         target_index = step_index
         mask = batch["valid_mask"][:, target_index]
         target_delta_scaled = batch["delta_rel"][:, target_index] / delta_scale
         step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
             outputs["pred_delta_rel_scaled"][:, None], target_delta_scaled[:, None], mask[:, None]
         )
-        # Rollout velocity targets must use the same finite-difference robot-frame
-        # convention as the predicted rollout velocity, especially during turning.
         target_vel = (batch["obstacle_pos"][:, target_index + 1] - batch["obstacle_pos"][:, target_index]) / (
             batch["dt"][:, None, None] + 1e-6
         )
@@ -245,8 +341,7 @@ def compute_rollout_loss(
 
         x_prev = x_new.detach()
         v_prev = v_pred.detach()
-        if hidden is not None:
-            hidden = hidden.detach()
+        hidden = detach_recurrent_state(hidden)
 
     if not losses:
         zero = batch["obstacle_pos"].sum() * 0.0
@@ -255,7 +350,141 @@ def compute_rollout_loss(
     return loss_rollout, {"loss_rollout": loss_rollout.detach()}
 
 
-def compute_metrics(outputs: Mapping[str, torch.Tensor], batch: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+def compute_rollout_loss_version_c(
+    model: nn.Module,
+    batch: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    pos_weights: Mapping[str, torch.Tensor],
+    *,
+    active_rollout_horizon: int | None = None,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    rollout_cfg = config.get("rollout", {})
+    horizon = int(active_rollout_horizon if active_rollout_horizon is not None else rollout_cfg.get("horizon", 3))
+    if horizon <= 0 or batch["obstacle_pos"].shape[1] <= 2:
+        zero = batch["obstacle_pos"].sum() * 0.0
+        return zero, {"loss_rollout": zero.detach(), "loss_rollout_latent": zero.detach()}
+
+    loss_cfg = config["loss_weights"]
+    max_rollout_index = min(horizon, batch["obstacle_pos"].shape[1] - 1)
+    goal = batch.get("goal")
+
+    seed_outputs, rollout_state = model.forward_step(
+        obstacle_pos=batch["obstacle_pos"][:, 0],
+        obstacle_vel=batch["obstacle_vel"][:, 0],
+        radii=batch["radii"],
+        action_index=batch["action_index"][:, 0],
+        action_cont=batch["action_cont"][:, 0],
+        goal=goal[:, 0] if goal is not None else None,
+        lidar=None,
+        hidden=None,
+        use_posterior=True,
+    )
+    prev_context = version_c_prev_context(model, batch, 0)
+
+    grounded_losses: list[torch.Tensor] = []
+    latent_losses: list[torch.Tensor] = [
+        masked_mse(seed_outputs["prior_latent"], seed_outputs["posterior_latent"].detach(), batch["valid_mask"][:, 0])
+    ]
+
+    for step_index in range(1, max_rollout_index + 1):
+        state_before_step = detach_recurrent_state(rollout_state)
+        outputs, rollout_state = model.forward_step(
+            obstacle_pos=None,
+            obstacle_vel=None,
+            radii=batch["radii"],
+            action_index=batch["action_index"][:, step_index],
+            action_cont=batch["action_cont"][:, step_index],
+            goal=goal[:, step_index] if goal is not None else None,
+            lidar=None,
+            hidden=rollout_state,
+            prev_context=prev_context,
+            use_posterior=False,
+        )
+        # Stage 2 keeps the rollout on the prior chain; posterior targets are
+        # used only as detached anchors for one-way latent consistency.
+        target_outputs, _ = model.forward_step(
+            obstacle_pos=batch["obstacle_pos"][:, step_index],
+            obstacle_vel=batch["obstacle_vel"][:, step_index],
+            radii=batch["radii"],
+            action_index=batch["action_index"][:, step_index],
+            action_cont=batch["action_cont"][:, step_index],
+            goal=goal[:, step_index] if goal is not None else None,
+            lidar=None,
+            hidden=state_before_step,
+            prev_context=prev_context,
+            use_posterior=True,
+        )
+        mask = batch["valid_mask"][:, step_index]
+        step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
+            outputs["pred_delta_rel_scaled"][:, None],
+            (batch["delta_rel"][:, step_index] / float(config["model"].get("delta_scale", 0.05)))[:, None],
+            mask[:, None],
+        )
+        step_loss = step_loss + float(loss_cfg.get("lambda_collision_next", 0.1)) * masked_bce(
+            outputs["collision_next_logits"],
+            batch["collision_next"][:, step_index],
+            mask,
+            pos_weights.get("collision_next"),
+        )
+        step_loss = step_loss + float(loss_cfg.get("lambda_collision_within_3", 0.1)) * masked_bce(
+            outputs["collision_within_3_logits"],
+            batch["collision_within_3"][:, step_index],
+            mask,
+            pos_weights.get("collision_within_3"),
+        )
+        step_loss = step_loss + float(loss_cfg.get("lambda_collision_within_5", 0.05)) * masked_bce(
+            outputs["collision_within_5_logits"],
+            batch["collision_within_5"][:, step_index],
+            mask,
+            pos_weights.get("collision_within_5"),
+        )
+        grounded_losses.append(step_loss)
+        latent_losses.append(masked_mse(outputs["prior_latent"], target_outputs["posterior_latent"].detach(), mask))
+        prev_context = version_c_prev_context(model, batch, step_index)
+        rollout_state = detach_recurrent_state(rollout_state)
+
+    zero = batch["obstacle_pos"].sum() * 0.0
+    grounded_loss = torch.stack(grounded_losses).mean() if grounded_losses else zero
+    latent_rollout_loss = torch.stack(latent_losses).mean() if latent_losses else zero
+    total_rollout = grounded_loss + float(loss_cfg.get("lambda_latent", 0.25)) * latent_rollout_loss
+    return total_rollout, {
+        "loss_rollout": total_rollout.detach(),
+        "loss_rollout_grounded": grounded_loss.detach(),
+        "loss_rollout_latent": latent_rollout_loss.detach(),
+    }
+
+
+def compute_rollout_loss(
+    model_type: str,
+    model: nn.Module,
+    batch: Mapping[str, torch.Tensor],
+    config: Mapping[str, Any],
+    pos_weights: Mapping[str, torch.Tensor],
+    *,
+    active_rollout_horizon: int | None = None,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    if model_type == VERSION_C_MODEL_TYPE:
+        return compute_rollout_loss_version_c(
+            model,
+            batch,
+            config,
+            pos_weights,
+            active_rollout_horizon=active_rollout_horizon,
+        )
+    return compute_rollout_loss_baseline(
+        model,
+        batch,
+        config,
+        pos_weights,
+        active_rollout_horizon=active_rollout_horizon,
+    )
+
+
+def compute_metrics(
+    model_type: str,
+    outputs: Mapping[str, torch.Tensor],
+    batch: Mapping[str, torch.Tensor],
+) -> dict[str, torch.Tensor]:
     mask = batch["valid_mask"]
     delta_error = outputs["pred_delta_rel"] - batch["delta_rel"]
     while mask.ndim < delta_error.ndim:
@@ -264,20 +493,25 @@ def compute_metrics(outputs: Mapping[str, torch.Tensor], batch: Mapping[str, tor
     denom = torch.clamp(torch.sum(mask_float) * delta_error.shape[-2] * delta_error.shape[-1], min=1.0)
     delta_mae = torch.sum(torch.abs(delta_error) * mask_float) / denom
     delta_rmse = torch.sqrt(torch.sum((delta_error**2) * mask_float) / denom)
-    risk_error = outputs["pred_risk"] - batch["risk"]
-    risk_mask = batch["valid_mask"].to(risk_error.dtype)
-    risk_mae = torch.sum(torch.abs(risk_error) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
-    risk_mse = torch.sum((risk_error**2) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
-    return {
+    metrics = {
         "delta_mae": delta_mae.detach(),
         "delta_rmse": delta_rmse.detach(),
-        "risk_mae": risk_mae.detach(),
-        "risk_mse": risk_mse.detach(),
     }
+    if model_type == VERSION_C_MODEL_TYPE and "prior_latent" in outputs:
+        metrics["latent_mae"] = torch.mean(torch.abs(outputs["prior_latent"] - outputs["posterior_latent"].detach())).detach()
+    if model_supports_risk(outputs):
+        risk_error = outputs["pred_risk"] - batch["risk"]
+        risk_mask = batch["valid_mask"].to(risk_error.dtype)
+        risk_mae = torch.sum(torch.abs(risk_error) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
+        risk_mse = torch.sum((risk_error**2) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
+        metrics["risk_mae"] = risk_mae.detach()
+        metrics["risk_mse"] = risk_mse.detach()
+    return metrics
 
 
 def run_epoch(
-    model: StructuredDynamicsModel,
+    model_type: str,
+    model: nn.Module,
     loader: DataLoader,
     device: torch.device,
     config: Mapping[str, Any],
@@ -292,6 +526,9 @@ def run_epoch(
     totals: dict[str, float] = {}
     total_batches = 0
     iterator = tqdm(loader, desc=progress_label, leave=False, dynamic_ncols=True) if progress_label else loader
+    training_stage = str(config.get("training", {}).get("stage", "baseline"))
+    rollout_enabled = bool(config.get("rollout", {}).get("enabled", False))
+    should_add_rollout = rollout_enabled and (model_type != VERSION_C_MODEL_TYPE or training_stage == "stage2")
     for batch in iterator:
         batch = move_batch_to_device(batch, device)
         with torch.set_grad_enabled(training):
@@ -304,9 +541,10 @@ def run_epoch(
                 goal=batch.get("goal"),
                 lidar=batch.get("lidar"),
             )
-            loss, components = compute_one_step_loss(outputs, batch, config, pos_weights)
-            if bool(config.get("rollout", {}).get("enabled", False)):
+            loss, components = compute_one_step_loss(model_type, outputs, batch, config, pos_weights)
+            if should_add_rollout:
                 rollout_loss, rollout_components = compute_rollout_loss(
+                    model_type,
                     model,
                     batch,
                     config,
@@ -315,7 +553,7 @@ def run_epoch(
                 )
                 loss = loss + float(config["loss_weights"].get("lambda_rollout", 0.5)) * rollout_loss
                 components.update(rollout_components)
-            metrics = compute_metrics(outputs, batch)
+            metrics = compute_metrics(model_type, outputs, batch)
             if training:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
@@ -338,7 +576,7 @@ def run_epoch(
 
 def save_checkpoint(
     path: str | Path,
-    model: StructuredDynamicsModel,
+    model: nn.Module,
     optimizer: torch.optim.Optimizer,
     epoch: int,
     config: Mapping[str, Any],
@@ -349,6 +587,9 @@ def save_checkpoint(
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     weights_output = output.with_name(f"{output.stem}_weights{output.suffix}")
+    model_type = resolve_model_type(config.get("model", {}))
+    model_version = resolve_model_version(model_type, config.get("model", {}))
+    training_stage = str(config.get("training", {}).get("stage", "baseline"))
     torch.save(
         {
             "epoch": int(epoch),
@@ -358,6 +599,9 @@ def save_checkpoint(
             "metrics": dict(metrics),
             "best_val_loss": float(best_val_loss),
             "active_rollout_horizon": int(active_rollout_horizon),
+            "model_type": model_type,
+            "model_version": model_version,
+            "training_stage": training_stage,
         },
         output,
     )
@@ -402,14 +646,30 @@ def active_rollout_horizon_for_epoch(curriculum: list[dict[str, int]], epoch: in
 
 def load_checkpoint(
     path: str | Path,
-    model: StructuredDynamicsModel,
+    model: nn.Module,
     optimizer: torch.optim.Optimizer | None,
     device: torch.device,
     load_optimizer: bool = True,
+    expected_model_type: str | None = None,
+    expected_training_stage: str | None = None,
 ) -> dict[str, Any]:
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     if "model_state_dict" not in checkpoint:
         raise KeyError(f"{path} does not look like a full training checkpoint")
+    checkpoint_config = checkpoint.get("config", {})
+    checkpoint_model_cfg = checkpoint_config.get("model", {}) if isinstance(checkpoint_config, Mapping) else {}
+    checkpoint_model_type = str(checkpoint.get("model_type") or resolve_model_type(checkpoint_model_cfg))
+    if expected_model_type is not None and checkpoint_model_type != expected_model_type:
+        raise ValueError(
+            f"Checkpoint {path} has model_type={checkpoint_model_type}, expected {expected_model_type}"
+        )
+    checkpoint_stage = checkpoint.get("training_stage")
+    if expected_training_stage == "stage2" and checkpoint_model_type == VERSION_C_MODEL_TYPE:
+        if str(checkpoint_stage) not in {"stage1", "stage2"}:
+            raise ValueError(
+                "Version C stage2 initialization expects a Version C stage1/stage2 checkpoint, "
+                f"got training_stage={checkpoint_stage!r}"
+            )
     model.load_state_dict(checkpoint["model_state_dict"])
     if load_optimizer and optimizer is not None and "optimizer_state_dict" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -444,6 +704,10 @@ def save_init_source(
             "new_output_dir": str(Path(new_output_dir)),
             "optimizer_state_loaded": bool(optimizer_state_loaded),
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "model_type": checkpoint.get("model_type"),
+            "model_version": checkpoint.get("model_version"),
+            "training_stage": checkpoint.get("training_stage"),
+            "active_rollout_horizon": checkpoint.get("active_rollout_horizon"),
         },
     )
 
@@ -458,6 +722,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="When resuming, load model weights but start with a fresh optimizer state",
     )
+    parser.add_argument(
+        "--epochs-per-run",
+        type=int,
+        default=None,
+        help="Maximum number of epochs to run in this invocation before exiting with code 10 if more remain.",
+    )
     return parser
 
 
@@ -469,16 +739,18 @@ def main() -> None:
     data_cfg = config["data"]
     model_cfg = config["model"]
     training_cfg = config["training"]
+    model_type = resolve_model_type(model_cfg)
+    training_stage = str(training_cfg.get("stage", "baseline" if model_type == BASELINE_MODEL_TYPE else "stage1"))
     rollout_cfg = dict(config.get("rollout", {}))
     rollout_enabled = bool(rollout_cfg.get("enabled", False))
+    if model_type == VERSION_C_MODEL_TYPE and training_stage == "stage2" and not rollout_enabled:
+        raise ValueError("Version C stage2 requires rollout.enabled=true")
     fallback_rollout_horizon = int(rollout_cfg.get("horizon", 0)) if rollout_enabled else 0
     rollout_curriculum, curriculum_total_epochs = resolve_rollout_curriculum(config) if rollout_enabled else ([], 0)
     total_epochs = int(curriculum_total_epochs if rollout_curriculum else training_cfg.get("epochs", 40))
-    active_rollout_horizon = active_rollout_horizon_for_epoch(
-        rollout_curriculum,
-        1,
-        fallback_rollout_horizon,
-    ) if rollout_enabled else 0
+    active_rollout_horizon = (
+        active_rollout_horizon_for_epoch(rollout_curriculum, 1, fallback_rollout_horizon) if rollout_enabled else 0
+    )
 
     episode_paths = list_episode_paths(data_cfg["data_dir"])
     train_paths, val_paths = split_episode_paths(episode_paths, float(data_cfg.get("train_fraction", 0.9)))
@@ -522,7 +794,7 @@ def main() -> None:
     )
 
     device = resolve_device(str(training_cfg.get("device", "auto")))
-    model = StructuredDynamicsModel(StructuredDynamicsConfig(**model_cfg)).to(device)
+    model = build_model(model_cfg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg.get("learning_rate", 3e-4)))
     pos_weights_float = configured_pos_weights(config, train_dataset)
     pos_weights = {key: torch.tensor(value, dtype=torch.float32, device=device) for key, value in pos_weights_float.items()}
@@ -541,6 +813,9 @@ def main() -> None:
         output_dir / "config_snapshot.json",
         {
             "config": config,
+            "resolved_model_type": model_type,
+            "resolved_model_version": resolve_model_version(model_type, model_cfg),
+            "resolved_training_stage": training_stage,
             "resolved_rollout_curriculum": rollout_curriculum,
             "num_train_episodes": len(train_paths),
             "num_val_episodes": len(val_paths),
@@ -565,14 +840,16 @@ def main() -> None:
             optimizer=optimizer,
             device=device,
             load_optimizer=not bool(args.fresh_optimizer),
+            expected_model_type=model_type,
+            expected_training_stage=training_stage,
         )
         start_epoch = int(checkpoint.get("epoch", 0)) + 1
         best_val_loss = float(checkpoint.get("best_val_loss", checkpoint.get("metrics", {}).get("loss_total", float("inf"))))
-        resumed_horizon = active_rollout_horizon_for_epoch(
-            rollout_curriculum,
-            start_epoch,
-            fallback_rollout_horizon,
-        ) if rollout_enabled else 0
+        resumed_horizon = (
+            active_rollout_horizon_for_epoch(rollout_curriculum, start_epoch, fallback_rollout_horizon)
+            if rollout_enabled
+            else 0
+        )
         print(
             f"Resuming from {checkpoint_path} at epoch {start_epoch} "
             f"({'fresh optimizer' if args.fresh_optimizer else 'optimizer restored'}); "
@@ -588,6 +865,8 @@ def main() -> None:
             optimizer=optimizer,
             device=device,
             load_optimizer=init_load_optimizer_state,
+            expected_model_type=model_type,
+            expected_training_stage=training_stage,
         )
         save_init_source(
             output_dir / "init_source.json",
@@ -604,27 +883,29 @@ def main() -> None:
         )
 
     previous_rollout_horizon: int | None = (
-        active_rollout_horizon_for_epoch(
-            rollout_curriculum,
-            start_epoch - 1,
-            fallback_rollout_horizon,
-        )
+        active_rollout_horizon_for_epoch(rollout_curriculum, start_epoch - 1, fallback_rollout_horizon)
         if rollout_enabled and start_epoch > 1
         else None
     )
     if start_epoch > total_epochs:
-        print(
-            f"Checkpoint is already at or beyond configured epochs={total_epochs}; nothing to train.",
-            flush=True,
-        )
-        return
+        print(f"Checkpoint is already at or beyond configured epochs={total_epochs}; nothing to train.", flush=True)
+        print("TRAINING_COMPLETE", flush=True)
+        sys.exit(0)
 
-    for epoch in range(start_epoch, total_epochs + 1):
-        active_rollout_horizon = active_rollout_horizon_for_epoch(
-            rollout_curriculum,
-            epoch,
-            fallback_rollout_horizon,
-        ) if rollout_enabled else 0
+    end_epoch = total_epochs
+    if args.epochs_per_run is not None:
+        if int(args.epochs_per_run) <= 0:
+            raise ValueError("--epochs-per-run must be positive")
+        end_epoch = min(total_epochs, start_epoch + int(args.epochs_per_run) - 1)
+
+    print(f"Training epochs {start_epoch} through {end_epoch} of {total_epochs}.", flush=True)
+
+    for epoch in range(start_epoch, end_epoch + 1):
+        active_rollout_horizon = (
+            active_rollout_horizon_for_epoch(rollout_curriculum, epoch, fallback_rollout_horizon)
+            if rollout_enabled
+            else 0
+        )
         if previous_rollout_horizon is not None and active_rollout_horizon != previous_rollout_horizon:
             print(
                 f"Switching rollout horizon from {previous_rollout_horizon} to {active_rollout_horizon} at epoch {epoch}",
@@ -632,6 +913,7 @@ def main() -> None:
             )
         learning_rate = float(optimizer.param_groups[0]["lr"])
         train_metrics = run_epoch(
+            model_type,
             model,
             train_loader,
             device,
@@ -643,6 +925,7 @@ def main() -> None:
         )
         with torch.no_grad():
             val_metrics = run_epoch(
+                model_type,
                 model,
                 val_loader,
                 device,
@@ -654,6 +937,9 @@ def main() -> None:
             )
         summary = {
             "epoch": epoch,
+            "model_type": model_type,
+            "model_version": resolve_model_version(model_type, model_cfg),
+            "training_stage": training_stage,
             "active_rollout_horizon": int(active_rollout_horizon),
             "learning_rate": learning_rate,
             "train": train_metrics,
@@ -678,6 +964,13 @@ def main() -> None:
         )
         save_checkpoint(output_dir / "latest.pt", model, optimizer, epoch, config, val_metrics, best_val_loss, active_rollout_horizon)
         previous_rollout_horizon = active_rollout_horizon
+
+    if end_epoch < total_epochs:
+        print("CHUNK_COMPLETE_MORE_REMAINING", flush=True)
+        sys.exit(10)
+
+    print("TRAINING_COMPLETE", flush=True)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

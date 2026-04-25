@@ -1,4 +1,4 @@
-"""Evaluate a trained V4 structured dynamics model."""
+"""Evaluate trained structured world models."""
 
 from __future__ import annotations
 
@@ -8,12 +8,21 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import torch
+from torch import nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths, split_episode_paths
-from models import StructuredDynamicsConfig, StructuredDynamicsModel
-from train_structured_world_model import load_yaml_config, move_batch_to_device, resolve_device, save_json
+from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, build_model, resolve_model_type
+from train_structured_world_model import (
+    detach_recurrent_state,
+    load_yaml_config,
+    move_batch_to_device,
+    resolve_device,
+    resolve_model_version,
+    save_json,
+    version_c_prev_context,
+)
 
 
 def binary_counts(logits: torch.Tensor, target: torch.Tensor, mask: torch.Tensor, threshold: float) -> dict[str, float]:
@@ -52,7 +61,7 @@ def accumulate_count_totals(total: dict[str, dict[str, float]], name: str, count
 
 
 def compute_action_sensitivity(
-    model: StructuredDynamicsModel,
+    model: nn.Module,
     batch: Mapping[str, torch.Tensor],
     action_vocab_size: int,
     action_cont_values: list[list[float]] | None = None,
@@ -86,8 +95,8 @@ def compute_action_sensitivity(
     return torch.sum(normalized * valid) / torch.clamp(torch.sum(valid), min=1.0)
 
 
-def compute_rollout_delta_metrics(
-    model: StructuredDynamicsModel,
+def compute_rollout_delta_metrics_baseline(
+    model: nn.Module,
     batch: Mapping[str, torch.Tensor],
     horizon: int,
 ) -> dict[str, float]:
@@ -123,12 +132,72 @@ def compute_rollout_delta_metrics(
         count += float(torch.sum(mask).detach().cpu()) * error.shape[-2] * error.shape[-1]
         x_prev = x_new.detach()
         v_prev = v_pred.detach()
-        if hidden is not None:
-            hidden = hidden.detach()
+        hidden = detach_recurrent_state(hidden)
     return {
         "rollout_delta_mae": abs_sum / max(count, 1.0),
         "rollout_delta_rmse": (sq_sum / max(count, 1.0)) ** 0.5,
     }
+
+
+def compute_rollout_delta_metrics_version_c(
+    model: nn.Module,
+    batch: Mapping[str, torch.Tensor],
+    horizon: int,
+) -> dict[str, float]:
+    max_rollout_index = min(int(horizon), batch["obstacle_pos"].shape[1] - 1)
+    if max_rollout_index <= 0:
+        return {"rollout_delta_mae": 0.0, "rollout_delta_rmse": 0.0}
+    goal = batch.get("goal")
+    _, rollout_state = model.forward_step(
+        obstacle_pos=batch["obstacle_pos"][:, 0],
+        obstacle_vel=batch["obstacle_vel"][:, 0],
+        radii=batch["radii"],
+        action_index=batch["action_index"][:, 0],
+        action_cont=batch["action_cont"][:, 0],
+        goal=goal[:, 0] if goal is not None else None,
+        lidar=None,
+        hidden=None,
+        use_posterior=True,
+    )
+    prev_context = version_c_prev_context(model, batch, 0)
+    abs_sum = 0.0
+    sq_sum = 0.0
+    count = 0.0
+    for step_index in range(1, max_rollout_index + 1):
+        outputs, rollout_state = model.forward_step(
+            obstacle_pos=None,
+            obstacle_vel=None,
+            radii=batch["radii"],
+            action_index=batch["action_index"][:, step_index],
+            action_cont=batch["action_cont"][:, step_index],
+            goal=goal[:, step_index] if goal is not None else None,
+            lidar=None,
+            hidden=rollout_state,
+            prev_context=prev_context,
+            use_posterior=False,
+        )
+        error = outputs["pred_delta_rel"] - batch["delta_rel"][:, step_index]
+        mask = batch["valid_mask"][:, step_index].to(error.dtype)[:, None, None]
+        abs_sum += float(torch.sum(torch.abs(error) * mask).detach().cpu())
+        sq_sum += float(torch.sum((error**2) * mask).detach().cpu())
+        count += float(torch.sum(mask).detach().cpu()) * error.shape[-2] * error.shape[-1]
+        prev_context = version_c_prev_context(model, batch, step_index)
+        rollout_state = detach_recurrent_state(rollout_state)
+    return {
+        "rollout_delta_mae": abs_sum / max(count, 1.0),
+        "rollout_delta_rmse": (sq_sum / max(count, 1.0)) ** 0.5,
+    }
+
+
+def compute_rollout_delta_metrics(
+    model_type: str,
+    model: nn.Module,
+    batch: Mapping[str, torch.Tensor],
+    horizon: int,
+) -> dict[str, float]:
+    if model_type == VERSION_C_MODEL_TYPE:
+        return compute_rollout_delta_metrics_version_c(model, batch, horizon)
+    return compute_rollout_delta_metrics_baseline(model, batch, horizon)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -144,11 +213,17 @@ def main() -> None:
     args = build_arg_parser().parse_args()
     config = load_yaml_config(args.config)
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
-    model_config = checkpoint.get("config", config)["model"]
+    if "model_state_dict" not in checkpoint:
+        raise KeyError(f"{args.checkpoint} does not look like a full training checkpoint")
+    model_config = dict(checkpoint.get("config", config).get("model", {}))
+    model_type = str(checkpoint.get("model_type") or resolve_model_type(model_config))
+    if resolve_model_type(model_config) != model_type:
+        model_config["model_type"] = model_type
     data_cfg = config["data"]
     training_cfg = config["training"]
     eval_cfg = config.get("evaluation", {})
     threshold = float(args.threshold if args.threshold is not None else eval_cfg.get("threshold", 0.5))
+    rollout_horizon = int(checkpoint.get("active_rollout_horizon", config.get("rollout", {}).get("horizon", 3)))
 
     paths = list_episode_paths(data_cfg["data_dir"])
     _, val_paths = split_episode_paths(paths, float(data_cfg.get("train_fraction", 0.9)))
@@ -169,7 +244,7 @@ def main() -> None:
     )
 
     device = resolve_device(str(training_cfg.get("device", "auto")))
-    model = StructuredDynamicsModel(StructuredDynamicsConfig(**model_config)).to(device)
+    model = build_model(model_config).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
@@ -184,6 +259,7 @@ def main() -> None:
     sensitivity_batches = 0
     rollout_totals: dict[str, float] = {}
     rollout_batches = 0
+    saw_risk = False
 
     with torch.no_grad():
         for batch in tqdm(loader, desc="eval", leave=False, dynamic_ncols=True):
@@ -203,11 +279,13 @@ def main() -> None:
             delta_sq += float(torch.sum((delta_error**2) * delta_mask).detach().cpu())
             delta_count += float(torch.sum(delta_mask).detach().cpu()) * delta_error.shape[-2] * delta_error.shape[-1]
 
-            risk_error = outputs["pred_risk"] - batch["risk"]
-            risk_mask = batch["valid_mask"].to(risk_error.dtype)
-            risk_abs += float(torch.sum(torch.abs(risk_error) * risk_mask).detach().cpu())
-            risk_sq += float(torch.sum((risk_error**2) * risk_mask).detach().cpu())
-            risk_count += float(torch.sum(risk_mask).detach().cpu())
+            if "pred_risk" in outputs:
+                saw_risk = True
+                risk_error = outputs["pred_risk"] - batch["risk"]
+                risk_mask = batch["valid_mask"].to(risk_error.dtype)
+                risk_abs += float(torch.sum(torch.abs(risk_error) * risk_mask).detach().cpu())
+                risk_sq += float(torch.sum((risk_error**2) * risk_mask).detach().cpu())
+                risk_count += float(torch.sum(risk_mask).detach().cpu())
 
             accumulate_count_totals(
                 count_totals,
@@ -242,22 +320,26 @@ def main() -> None:
             sensitivity_batches += 1
 
             if bool(config.get("rollout", {}).get("eval_enabled", True)):
-                rollout = compute_rollout_delta_metrics(model, batch, int(config.get("rollout", {}).get("horizon", 3)))
+                rollout = compute_rollout_delta_metrics(model_type, model, batch, rollout_horizon)
                 for key, value in rollout.items():
                     rollout_totals[key] = rollout_totals.get(key, 0.0) + float(value)
                 rollout_batches += 1
 
     metrics: dict[str, Any] = {
         "checkpoint": str(args.checkpoint),
+        "model_type": model_type,
+        "model_version": checkpoint.get("model_version", resolve_model_version(model_type, model_config)),
+        "active_rollout_horizon": rollout_horizon,
         "num_val_sequences": len(dataset),
         "threshold": threshold,
         "delta_mae": delta_abs / max(delta_count, 1.0),
         "delta_rmse": (delta_sq / max(delta_count, 1.0)) ** 0.5,
-        "risk_mae": risk_abs / max(risk_count, 1.0),
-        "risk_mse": risk_sq / max(risk_count, 1.0),
         "normalized_action_sensitivity": sensitivity_sum / max(sensitivity_batches, 1),
         "action_sensitivity_eps": 1e-6,
     }
+    if saw_risk:
+        metrics["risk_mae"] = risk_abs / max(risk_count, 1.0)
+        metrics["risk_mse"] = risk_sq / max(risk_count, 1.0)
     for name, counts in count_totals.items():
         metrics.update(metrics_from_counts(counts, name))
     if rollout_batches:

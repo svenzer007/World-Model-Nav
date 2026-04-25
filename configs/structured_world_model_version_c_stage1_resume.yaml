@@ -1,0 +1,80 @@
+seed: 7
+
+data:
+  data_dir: ./dataset
+  train_fraction: 0.9
+  sequence_length: 20
+  stride: 1
+
+model:
+  model_type: structured_obstacle_rssm_vc
+  model_version: version_c
+  num_dynamic_obstacles: 4
+  obstacle_feature_dim: 5
+  obstacle_embed_dim: 48
+  action_vocab_size: 6
+  action_embed_dim: 16
+  action_cont_dim: 2
+  goal_dim: 5
+  use_goal: true
+  use_lidar: false
+  goal_embed_dim: 32
+  hidden_dim: 128
+  latent_dim: 64
+  head_hidden_dim: 128
+  dropout: 0.0
+  delta_scale: 0.05
+  risk_head_enabled: false
+
+training:
+  stage: stage1
+  batch_size: 64
+  epochs: 12
+  learning_rate: 0.00007
+  grad_clip_norm: 5.0
+  num_workers: 0
+  device: auto
+  output_dir: ./artifacts/structured_world_model_version_c_stage1
+  init_checkpoint: null
+  init_load_optimizer_state: false
+
+rollout:
+  enabled: false
+  eval_enabled: true
+  horizon: 3
+
+loss_weights:
+  lambda_delta: 1.0
+  lambda_latent: 0.25
+  lambda_collision_next: 0.08
+  lambda_collision_within_3: 0.06
+  lambda_collision_within_5: 0.03
+  lambda_rollout: 0.5
+  lambda_risk: 0.0
+  auto_pos_weight: true
+  collision_next_pos_weight_cap: 100.0
+  collision_within_3_pos_weight_cap: 100.0
+  collision_within_5_pos_weight_cap: 100.0
+
+sampler:
+  enabled: true
+  base_weight: 1.0
+  event_bonus: 2.0
+  risk_bonus: 2.0
+  low_clearance_bonus: 1.5
+  collision_bonus: 3.0
+  stop_downweight: 0.7
+  clearance_scale: 1.0
+  min_weight: 0.05
+  max_weight: 20.0
+
+evaluation:
+  threshold: 0.5
+  output_path: ./artifacts/structured_world_model_version_c_stage1/eval_metrics.json
+  action_cont_values:
+    - [0.0, 0.0]
+    - [0.4, 0.0]
+    - [0.4, 1.0]
+    - [0.4, -1.0]
+    - [0.15, 1.0]
+    - [0.15, -1.0]

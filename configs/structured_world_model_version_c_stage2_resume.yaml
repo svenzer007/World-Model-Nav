@@ -7,33 +7,35 @@ data:
   stride: 1
 
 model:
+  model_type: structured_obstacle_rssm_vc
+  model_version: version_c
   num_dynamic_obstacles: 4
   obstacle_feature_dim: 5
-  obstacle_embed_dim: 32
+  obstacle_embed_dim: 48
   action_vocab_size: 6
   action_embed_dim: 16
   action_cont_dim: 2
   goal_dim: 5
-  lidar_dim: 241
   use_goal: true
   use_lidar: false
   goal_embed_dim: 32
-  lidar_embed_dim: 64
-  gru_hidden_dim: 128
-  gru_layers: 1
+  hidden_dim: 128
+  latent_dim: 64
   head_hidden_dim: 128
   dropout: 0.0
   delta_scale: 0.05
+  risk_head_enabled: false
 
 training:
+  stage: stage2
   batch_size: 64
-  epochs: 17
+  epochs: 16
   learning_rate: 0.00007
   grad_clip_norm: 5.0
   num_workers: 0
   device: auto
-  output_dir: ./artifacts/structured_world_model_rollout_from_epoch_10
-  init_checkpoint: /home/stavan/s4/rnl/4proj/artifacts/structured_world_model/epoch_010.pt
+  output_dir: ./artifacts/structured_world_model_version_c_stage2
+  init_checkpoint: null
   init_load_optimizer_state: false
 
 rollout:
@@ -41,19 +43,19 @@ rollout:
   eval_enabled: true
   horizon: 3
   curriculum:
-    - {horizon: 3, epochs: 5}
-    - {horizon: 6, epochs: 5}
-    - {horizon: 8, epochs: 3}
-    - {horizon: 10, epochs: 4}
+    - {horizon: 3, epochs: 4}
+    - {horizon: 5, epochs: 4}
+    - {horizon: 7, epochs: 4}
+    - {horizon: 9, epochs: 4}
 
 loss_weights:
   lambda_delta: 1.0
-  lambda_risk: 0.2
-  lambda_collision_next: 0.1
-  lambda_collision_within_3: 0.1
-  lambda_collision_within_5: 0.05
+  lambda_latent: 0.25
+  lambda_collision_next: 0.08
+  lambda_collision_within_3: 0.06
+  lambda_collision_within_5: 0.03
   lambda_rollout: 0.5
-  lambda_vel: 0.1
+  lambda_risk: 0.0
   auto_pos_weight: true
   collision_next_pos_weight_cap: 100.0
   collision_within_3_pos_weight_cap: 100.0
@@ -73,7 +75,7 @@ sampler:
 
 evaluation:
   threshold: 0.5
-  output_path: ./artifacts/structured_world_model/eval_metrics.json
+  output_path: ./artifacts/structured_world_model_version_c_stage2/eval_metrics.json
   action_cont_values:
     - [0.0, 0.0]
     - [0.4, 0.0]
