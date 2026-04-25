@@ -114,7 +114,7 @@
       "device": "auto",
       "epochs": 17,
       "grad_clip_norm": 5.0,
-      "init_checkpoint": "/home/stavan/s4/rnl/4proj/artifacts/structured_world_model/epoch_010.pt",
+      "init_checkpoint": null,
       "init_load_optimizer_state": false,
       "learning_rate": 7e-05,
       "num_workers": 0,

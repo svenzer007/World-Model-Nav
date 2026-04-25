@@ -33,7 +33,7 @@ training:
   num_workers: 0
   device: auto
   output_dir: ./artifacts/structured_world_model_rollout_from_epoch_10
-  init_checkpoint: /home/stavan/s4/rnl/4proj/artifacts/structured_world_model/epoch_010.pt
+  init_checkpoint: null
   init_load_optimizer_state: false
 
 rollout:
