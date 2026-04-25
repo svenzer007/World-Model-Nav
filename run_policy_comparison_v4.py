@@ -274,6 +274,260 @@ def _false_negative_rate_growth_from_steps(step_stats: dict[str, dict[str, objec
     ]
 
 
+def _sorted_step_names(step_stats: dict[str, dict[str, object]]) -> list[str]:
+    return sorted(step_stats.keys(), key=lambda name: int(name.split("_")[1]))
+
+
+def _enrich_scalar_stats_block(stats_block: dict[str, object]) -> dict[str, object]:
+    stats = dict(stats_block)
+    mean_error = float(stats.get("mean_error", float("nan")))
+    variance = float(stats.get("variance", float("nan")))
+    if np.isfinite(mean_error) and np.isfinite(variance):
+        bias_squared = float(mean_error**2)
+        mse_approx = float(bias_squared + variance)
+    else:
+        bias_squared = float("nan")
+        mse_approx = float("nan")
+    stats["bias_squared"] = bias_squared
+    stats["mse_approx"] = mse_approx
+    return stats
+
+
+def _pooled_scalar_stats_from_blocks(blocks: list[dict[str, object]]) -> dict[str, object]:
+    total_samples = 0
+    weighted_mean = 0.0
+    weighted_mae = 0.0
+    weighted_second_moment = 0.0
+    weighted_mse = 0.0
+    for block in blocks:
+        num_samples = int(dict(block).get("num_samples", 0))
+        if num_samples <= 0:
+            continue
+        mean_error = float(dict(block).get("mean_error", float("nan")))
+        variance = float(dict(block).get("variance", float("nan")))
+        mae = float(dict(block).get("mae", float("nan")))
+        rmse = float(dict(block).get("rmse", float("nan")))
+        if not (np.isfinite(mean_error) and np.isfinite(variance) and np.isfinite(mae) and np.isfinite(rmse)):
+            continue
+        total_samples += num_samples
+        weighted_mean += num_samples * mean_error
+        weighted_mae += num_samples * mae
+        weighted_second_moment += num_samples * (variance + mean_error**2)
+        weighted_mse += num_samples * (rmse**2)
+    if total_samples <= 0:
+        return _enrich_scalar_stats_block(_scalar_error_stats([]))
+    pooled_mean = float(weighted_mean / total_samples)
+    pooled_variance = float(max(0.0, (weighted_second_moment / total_samples) - pooled_mean**2))
+    pooled_rmse = float(np.sqrt(max(0.0, weighted_mse / total_samples)))
+    pooled_stats = {
+        "num_samples": int(total_samples),
+        "mean_error": pooled_mean,
+        "variance": pooled_variance,
+        "mae": float(weighted_mae / total_samples),
+        "rmse": pooled_rmse,
+    }
+    return _enrich_scalar_stats_block(pooled_stats)
+
+
+def _pooled_confusion_stats_from_blocks(blocks: list[dict[str, object]]) -> dict[str, float | int]:
+    summed = {
+        "num_samples": 0,
+        "predicted_collision_count": 0,
+        "true_collision_count": 0,
+        "true_positive_count": 0,
+        "true_negative_count": 0,
+        "false_positive_count": 0,
+        "false_negative_count": 0,
+    }
+    for block in blocks:
+        for key in summed:
+            summed[key] += int(dict(block).get(key, 0))
+    num_samples = int(summed["num_samples"])
+    if num_samples <= 0:
+        return {
+            **summed,
+            "predicted_collision_rate": float("nan"),
+            "true_collision_rate": float("nan"),
+            "false_positive_rate": float("nan"),
+            "false_negative_rate": float("nan"),
+            "accuracy": float("nan"),
+        }
+    return {
+        **summed,
+        "predicted_collision_rate": float(summed["predicted_collision_count"] / num_samples),
+        "true_collision_rate": float(summed["true_collision_count"] / num_samples),
+        "false_positive_rate": float(summed["false_positive_count"] / num_samples),
+        "false_negative_rate": float(summed["false_negative_count"] / num_samples),
+        "accuracy": float((summed["true_positive_count"] + summed["true_negative_count"]) / num_samples),
+    }
+
+
+def _metric_series_from_steps(
+    step_stats: dict[str, dict[str, object]],
+    metric_name: str,
+    field_name: str,
+) -> list[float]:
+    values: list[float] = []
+    for step_name in _sorted_step_names(step_stats):
+        metric_block = dict(dict(step_stats[step_name]).get(metric_name, {}))
+        values.append(float(metric_block.get(field_name, float("nan"))))
+    return values
+
+
+def _fraction_of_action_horizon_cells_with_bias(
+    aggregate_by_action_family: dict[str, dict[str, object]],
+    metric_name: str,
+    *,
+    positive: bool,
+    eps: float = 1e-12,
+) -> float:
+    matching = 0
+    total = 0
+    for payload in aggregate_by_action_family.values():
+        for step_payload in dict(payload.get("per_horizon_step", {})).values():
+            metric_block = dict(dict(step_payload).get(metric_name, {}))
+            num_samples = int(metric_block.get("num_samples", 0))
+            mean_error = float(metric_block.get("mean_error", float("nan")))
+            if num_samples <= 0 or not np.isfinite(mean_error):
+                continue
+            total += 1
+            if positive and mean_error > eps:
+                matching += 1
+            if (not positive) and mean_error < -eps:
+                matching += 1
+    if total <= 0:
+        return float("nan")
+    return float(matching / total)
+
+
+def _enrich_rollout_stats_payload(
+    payload: dict[str, object],
+    *,
+    include_episode_pooled_fields: bool,
+) -> dict[str, object]:
+    aggregate_per_horizon_step = dict(payload.get("aggregate_per_horizon_step", {}))
+    aggregate_by_action_family = dict(payload.get("aggregate_by_action_family", {}))
+    if not aggregate_per_horizon_step:
+        return payload
+
+    step_names = _sorted_step_names(aggregate_per_horizon_step)
+    clearance_bias_by_horizon = _metric_series_from_steps(aggregate_per_horizon_step, "clearance_error", "mean_error")
+    radial_distance_bias_by_horizon = _metric_series_from_steps(aggregate_per_horizon_step, "radial_distance", "mean_error")
+    radial_closing_bias_by_horizon = _metric_series_from_steps(
+        aggregate_per_horizon_step, "radial_closing_speed", "mean_error"
+    )
+
+    if include_episode_pooled_fields:
+        payload["pooled_clearance_bias_by_horizon"] = clearance_bias_by_horizon
+        payload["pooled_clearance_mae_by_horizon"] = _metric_series_from_steps(
+            aggregate_per_horizon_step, "clearance_error", "mae"
+        )
+        payload["pooled_false_negative_rate_by_horizon"] = [
+            float(dict(aggregate_per_horizon_step[step_name]["dynamic_collision_confusion"]).get("false_negative_rate", float("nan")))
+            for step_name in step_names
+        ]
+
+    payload["mean_signed_clearance_bias_by_horizon"] = clearance_bias_by_horizon
+    payload["mean_signed_radial_distance_bias_by_horizon"] = radial_distance_bias_by_horizon
+    payload["mean_signed_radial_closing_speed_bias_by_horizon"] = radial_closing_bias_by_horizon
+    payload["optimistic_bias_horizons"] = [
+        bool(np.isfinite(value) and value > 1e-12) for value in clearance_bias_by_horizon
+    ]
+    payload["conservative_bias_horizons"] = [
+        bool(np.isfinite(value) and value < -1e-12) for value in clearance_bias_by_horizon
+    ]
+    payload["fraction_of_action_horizon_cells_with_positive_clearance_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "clearance_error", positive=True
+    )
+    payload["fraction_of_action_horizon_cells_with_negative_clearance_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "clearance_error", positive=False
+    )
+    payload["fraction_of_action_horizon_cells_with_positive_radial_distance_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "radial_distance", positive=True
+    )
+    payload["fraction_of_action_horizon_cells_with_negative_radial_distance_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "radial_distance", positive=False
+    )
+    payload["fraction_of_action_horizon_cells_with_positive_radial_closing_speed_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "radial_closing_speed", positive=True
+    )
+    payload["fraction_of_action_horizon_cells_with_negative_radial_closing_speed_bias"] = _fraction_of_action_horizon_cells_with_bias(
+        aggregate_by_action_family, "radial_closing_speed", positive=False
+    )
+
+    metric_names = ["clearance_error", "radial_distance", "radial_closing_speed", "x_rel", "y_rel"]
+    payload["bias_variance_by_horizon"] = {
+        metric_name: {
+            "mean_error": _metric_series_from_steps(aggregate_per_horizon_step, metric_name, "mean_error"),
+            "variance": _metric_series_from_steps(aggregate_per_horizon_step, metric_name, "variance"),
+            "bias_squared": _metric_series_from_steps(
+                {
+                    step_name: {
+                        **aggregate_per_horizon_step[step_name],
+                        metric_name: _enrich_scalar_stats_block(
+                            dict(dict(aggregate_per_horizon_step[step_name]).get(metric_name, {}))
+                        ),
+                    }
+                    for step_name in step_names
+                },
+                metric_name,
+                "bias_squared",
+            ),
+            "mse_approx": _metric_series_from_steps(
+                {
+                    step_name: {
+                        **aggregate_per_horizon_step[step_name],
+                        metric_name: _enrich_scalar_stats_block(
+                            dict(dict(aggregate_per_horizon_step[step_name]).get(metric_name, {}))
+                        ),
+                    }
+                    for step_name in step_names
+                },
+                metric_name,
+                "mse_approx",
+            ),
+        }
+        for metric_name in metric_names
+    }
+
+    pooled_metrics = {
+        "clearance_error": _pooled_scalar_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["clearance_error"]) for step_name in step_names]
+        ),
+        "radial_distance": _pooled_scalar_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["radial_distance"]) for step_name in step_names]
+        ),
+        "radial_closing_speed": _pooled_scalar_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["radial_closing_speed"]) for step_name in step_names]
+        ),
+        "x_rel": _pooled_scalar_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["x_rel"]) for step_name in step_names]
+        ),
+        "y_rel": _pooled_scalar_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["y_rel"]) for step_name in step_names]
+        ),
+        "dynamic_collision_confusion": _pooled_confusion_stats_from_blocks(
+            [dict(aggregate_per_horizon_step[step_name]["dynamic_collision_confusion"]) for step_name in step_names]
+        ),
+    }
+    payload["global_pooled_summaries"] = pooled_metrics
+    payload["global_clearance_mae"] = float(dict(pooled_metrics["clearance_error"]).get("mae", float("nan")))
+    payload["global_signed_clearance_bias"] = float(dict(pooled_metrics["clearance_error"]).get("mean_error", float("nan")))
+    payload["global_false_negative_rate"] = float(
+        dict(pooled_metrics["dynamic_collision_confusion"]).get("false_negative_rate", float("nan"))
+    )
+    payload["global_false_positive_rate"] = float(
+        dict(pooled_metrics["dynamic_collision_confusion"]).get("false_positive_rate", float("nan"))
+    )
+    payload["global_radial_distance_signed_bias"] = float(
+        dict(pooled_metrics["radial_distance"]).get("mean_error", float("nan"))
+    )
+    payload["global_radial_closing_speed_signed_bias"] = float(
+        dict(pooled_metrics["radial_closing_speed"]).get("mean_error", float("nan"))
+    )
+    return payload
+
+
 def _build_rollout_error_stats_from_episodes(episodes: list[dict[str, object]]) -> dict[str, object]:
     per_step_errors: defaultdict[int, dict[str, list[float]]] = defaultdict(_empty_metric_error_lists)
     per_step_clearance_errors: defaultdict[int, list[float]] = defaultdict(list)
@@ -388,7 +642,7 @@ def _build_rollout_error_stats_from_episodes(episodes: list[dict[str, object]]) 
             action_family: _false_negative_rate_growth_from_steps(dict(payload["per_horizon_step"]))
             for action_family, payload in aggregate_by_action_family.items()
         }
-    return summary
+    return _enrich_rollout_stats_payload(summary, include_episode_pooled_fields=False)
 
 
 def _build_learned_rollout_error_stats(episode: dict[str, object]) -> dict[str, object]:
@@ -554,7 +808,7 @@ def _build_learned_rollout_error_stats(episode: dict[str, object]) -> dict[str, 
             action_family: _false_negative_rate_growth_from_steps(dict(payload["per_horizon_step"]))
             for action_family, payload in aggregate_by_action_family.items()
         }
-    return stats
+    return _enrich_rollout_stats_payload(stats, include_episode_pooled_fields=True)
 
 
 def _run_controller_episode(
