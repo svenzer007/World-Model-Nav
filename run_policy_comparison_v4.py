@@ -10,7 +10,11 @@ from typing import Any
 import numpy as np
 from tqdm import tqdm
 
-from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
+from controllers.baseline_structured_controller import (
+    BaselineStructuredController,
+    LearnedClearanceCalibrationConfig,
+    StructuredControllerConfig,
+)
 from controllers.learned_structured_controller import LearnedStructuredController
 from sim2d.config import DatasetConfig
 from sim2d.dataset import save_episode_pickle
@@ -22,14 +26,21 @@ from sim2d.utils import euclidean, json_safe, path_length, save_json, seed_seque
 from sim2d.visualize import save_episode_gif, save_episode_preview_png, save_episode_video
 from sim2d.waypoint import compute_local_subgoal
 
-
+    # horizon_seconds: float = 1.0
+    # goal_progress_weight: float = 2.0
+    # heading_weight: float = 0.8
+    # clearance_weight: float = 1.4
+    # path_adherence_weight: float = 1.1
+    # velocity_weight: float = 0.3
+    # collision_penalty: float = 1e6
+    # min_clearance_clip: float = 0.05
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_rollout_from_epoch_10/best.pt")
     parser.add_argument("--output_dir", type=str, default="artifacts/policy_comparison_v4_h10")
-    parser.add_argument("--num_episodes", type=int, default=10)
+    parser.add_argument("--num_episodes", type=int, default=50)
     parser.add_argument("--seed", type=int, default=1000)
-    parser.add_argument("--max_steps", type=int, default=200)
+    parser.add_argument("--max_steps", type=int, default=250)
     parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--horizon", type=int, default=10)
@@ -37,12 +48,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--w_heading", type=float, default=0.8)
     parser.add_argument("--w_path", type=float, default=1.1)
     parser.add_argument("--w_velocity", type=float, default=0.3)
-    parser.add_argument("--w_static", type=float, default=0.5)
+    parser.add_argument("--w_static", type=float, default=1.0)
     parser.add_argument("--w_dynamic", type=float, default=2.0)
     parser.add_argument("--static_collision_penalty", type=float, default=1e6)
     parser.add_argument("--dynamic_collision_penalty", type=float, default=1e6)
     parser.add_argument("--dynamic_risk_tau", type=float, default=0.5)
     parser.add_argument("--min_clearance_clip", type=float, default=0.05)
+    parser.add_argument("--learned_clearance_calibration", action="store_true")
+    parser.add_argument("--learned_clearance_calibration_summary_json", type=str, default=None)
+    parser.add_argument("--learned_clearance_calibration_alpha_bias", type=float, default=1.0)
+    parser.add_argument("--learned_clearance_calibration_alpha_std", type=float, default=0.5)
+    parser.add_argument("--learned_clearance_calibration_global_only", action="store_true")
+    parser.add_argument("--learned_clearance_calibration_no_global_fallback", action="store_true")
+    parser.add_argument("--learned_clearance_calibration_clamp_min_adjustment", type=float, default=None)
+    parser.add_argument("--learned_clearance_calibration_clamp_max_adjustment", type=float, default=None)
     parser.add_argument("--save_episodes", action="store_true")
     parser.add_argument("--save_previews", action="store_true")
     parser.add_argument("--save_gifs", action="store_true")
@@ -1157,6 +1176,16 @@ def main() -> None:
         dynamic_collision_penalty=float(args.dynamic_collision_penalty),
         dynamic_risk_tau=float(args.dynamic_risk_tau),
         min_clearance_clip=float(args.min_clearance_clip),
+        learned_clearance_calibration=LearnedClearanceCalibrationConfig(
+            enabled=bool(args.learned_clearance_calibration),
+            summary_json_path=args.learned_clearance_calibration_summary_json,
+            alpha_bias=float(args.learned_clearance_calibration_alpha_bias),
+            alpha_std=float(args.learned_clearance_calibration_alpha_std),
+            use_action_family_specific=not bool(args.learned_clearance_calibration_global_only),
+            fallback_to_global=not bool(args.learned_clearance_calibration_no_global_fallback),
+            clamp_min_clearance_adjustment=args.learned_clearance_calibration_clamp_min_adjustment,
+            clamp_max_clearance_adjustment=args.learned_clearance_calibration_clamp_max_adjustment,
+        ),
     )
     controllers = [
         BaselineStructuredController(config, controller_cfg),

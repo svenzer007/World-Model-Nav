@@ -147,3 +147,6 @@ The script still ships with generic defaults such as:
 - `--output_dir artifacts/policy_comparison_v4_h10`
 
 For this branch’s documented workflow, prefer explicitly passing the checkpoint path and output directory you want, as shown above.
+
+
+<!-- ython run_policy_comparison_v4.py   --checkpoint artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt   --output_dir artifacts/policy_comparison_v4_calibrated   --horizon 10   --learned_clearance_calibration   --learned_clearance_calibration_summary_json artifacts/policy_comparison_v4_smoke/learned_structured/rollout_error_stats_summary.json   --learned_clearance_calibration_alpha_bias 1.0   --learned_clearance_calibration_alpha_std 0.5 --save_previews --save_gifs -->

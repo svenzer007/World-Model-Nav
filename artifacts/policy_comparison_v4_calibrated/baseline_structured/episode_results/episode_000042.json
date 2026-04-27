@@ -1,0 +1,16 @@
+{
+  "controller": "baseline_structured",
+  "done_reason": "goal_reached",
+  "dynamic_collision": false,
+  "episode_id": 42,
+  "min_dynamic_clearance": 0.16833631300407548,
+  "min_static_clearance": 0.20463122754886537,
+  "num_steps": 214,
+  "robot_path_length": 8.410000000000009,
+  "seed": 1734643117,
+  "static_collision": false,
+  "stop_fraction": 0.0,
+  "success": true,
+  "timeout": false,
+  "total_progress": 0.6633697152137756
+}

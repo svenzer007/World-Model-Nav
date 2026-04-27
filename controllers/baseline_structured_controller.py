@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 import math
@@ -12,6 +12,18 @@ from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_static_clearance, unicycle_step
 from sim2d.obstacles import DynamicObstacle
 from sim2d.utils import distance_point_to_polyline, nearest_point_index, world_to_grid, wrap_angle
+
+
+@dataclass
+class LearnedClearanceCalibrationConfig:
+    enabled: bool = False
+    summary_json_path: str | None = None
+    alpha_bias: float = 1.0
+    alpha_std: float = 0.5
+    use_action_family_specific: bool = True
+    fallback_to_global: bool = True
+    clamp_min_clearance_adjustment: float | None = None
+    clamp_max_clearance_adjustment: float | None = None
 
 
 @dataclass
@@ -27,6 +39,9 @@ class StructuredControllerConfig:
     dynamic_collision_penalty: float = 1e6
     dynamic_risk_tau: float = 0.5
     min_clearance_clip: float = 0.05
+    learned_clearance_calibration: LearnedClearanceCalibrationConfig = field(
+        default_factory=LearnedClearanceCalibrationConfig
+    )
 
 
 def robot_frame_points(robot_pose: np.ndarray, points_world: np.ndarray) -> np.ndarray:
@@ -109,7 +124,7 @@ def expert_style_rollout_cost(
         + float(controller_cfg.w_heading) * heading_cost
         + float(controller_cfg.w_path) * path_cost
         + float(controller_cfg.w_velocity) * float(velocity_penalty)
-        + float(clearance_cost)
+        + float(controller_cfg.w_static) * float(clearance_cost)
         + float(infeasibility_penalty)
     )
     return {

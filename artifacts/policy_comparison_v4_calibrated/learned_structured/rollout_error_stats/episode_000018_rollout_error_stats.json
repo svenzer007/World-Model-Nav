@@ -1,0 +1,5039 @@
+{
+  "action_conditioned_horizon_clearance_error_mae": {
+    "forward": [
+      0.014703233540466636,
+      0.0373021069339141,
+      0.06613726358996479,
+      0.09965609992658216,
+      0.13603757065294783,
+      0.1739004115355582,
+      0.21264266801818485,
+      0.251976631545113,
+      0.29173372870527775,
+      0.331789954554713
+    ],
+    "forward_right": [
+      0.010886076017804447,
+      0.029114293513851815,
+      0.05626407638725474,
+      0.07857254000820259,
+      0.0989986844147875,
+      0.11907617150669465,
+      0.14072123970363762,
+      0.1641494575872125,
+      0.1896825040875676,
+      0.21639124911681368
+    ]
+  },
+  "action_conditioned_horizon_error_growth": {
+    "forward": {
+      "radial_closing_speed": [
+        0.08208614305034805,
+        0.12258463730371247,
+        0.1533390350620319,
+        0.17650446697699754,
+        0.19208001495967697,
+        0.20175318177770152,
+        0.20813984170171992,
+        0.21252036593049312,
+        0.2160708164828351,
+        0.21935712811388114
+      ],
+      "radial_distance": [
+        0.008203795030242501,
+        0.020351542842509996,
+        0.03543455888414655,
+        0.05283296647980632,
+        0.0717667398705113,
+        0.09158850392282379,
+        0.11198900848286086,
+        0.13269241643325472,
+        0.15360099663800034,
+        0.1747524208932217
+      ],
+      "vx_rel": [
+        0.08636034954831286,
+        0.13103138163404646,
+        0.1653645194645198,
+        0.19138764126120872,
+        0.21068417716701077,
+        0.2243235614502205,
+        0.23389551647991505,
+        0.2406769133401367,
+        0.2452832728905498,
+        0.24825973429207532
+      ],
+      "vy_rel": [
+        0.10509041682729181,
+        0.14807180413660012,
+        0.17300099977907143,
+        0.1884183871015063,
+        0.1981237530708313,
+        0.20415428112137993,
+        0.2086006709427204,
+        0.2118283214996446,
+        0.21418826478832173,
+        0.2157478709265871
+      ],
+      "x_rel": [
+        0.008636038906497364,
+        0.021697967009304923,
+        0.038117758405819616,
+        0.05705240663788019,
+        0.07792763926948415,
+        0.10004880956743972,
+        0.1230045976753802,
+        0.1465381599153259,
+        0.17037985849231693,
+        0.1945190171356564
+      ],
+      "y_rel": [
+        0.010509042292332193,
+        0.0251812449733215,
+        0.04233165337496396,
+        0.06088697130211046,
+        0.0803061526229207,
+        0.10023555966902015,
+        0.12065403612234298,
+        0.14138213358964732,
+        0.16227582606185384,
+        0.1833298555827244
+      ]
+    },
+    "forward_right": {
+      "radial_closing_speed": [
+        0.13046901829237717,
+        0.2615358947307958,
+        0.25150372648399116,
+        0.20458838636411694,
+        0.1671238589897061,
+        0.14001460212405167,
+        0.1274843417277986,
+        0.12322947165883978,
+        0.12338463601831413,
+        0.1298440229455925
+      ],
+      "radial_distance": [
+        0.011680712503817121,
+        0.03364712937499227,
+        0.05696775109523312,
+        0.0758320842556398,
+        0.09029798538755555,
+        0.10116382249206894,
+        0.10904278182169701,
+        0.11518575814770847,
+        0.12201774483466883,
+        0.12871984687734006
+      ],
+      "vx_rel": [
+        0.15401982835360936,
+        0.29352313705853056,
+        0.27924043791634695,
+        0.25275613580431255,
+        0.25697018418993267,
+        0.30060355152402607,
+        0.37511949028287617,
+        0.46130853039877756,
+        0.5534086908612933,
+        0.6483900972775051
+      ],
+      "vy_rel": [
+        0.16538446715899877,
+        0.32001499618802753,
+        0.3293378140245165,
+        0.3558308184146881,
+        0.3814422530787332,
+        0.4051369684083121,
+        0.419487680707659,
+        0.42420628666877747,
+        0.41258481996400015,
+        0.3883144770349775
+      ],
+      "x_rel": [
+        0.015401954724012972,
+        0.042474921253404574,
+        0.06955055826445021,
+        0.09057896880267828,
+        0.1102922637961151,
+        0.1289226570822236,
+        0.15058471453192218,
+        0.17890746052596757,
+        0.21414095406605874,
+        0.2584223878304827
+      ],
+      "y_rel": [
+        0.01653845249418813,
+        0.04667162046254516,
+        0.07829801740170082,
+        0.11333476063114248,
+        0.15147897880752897,
+        0.1919926791704241,
+        0.23394143636479042,
+        0.2763620743452653,
+        0.31746917484360465,
+        0.35567943002193975
+      ]
+    }
+  },
+  "action_conditioned_horizon_false_negative_rate": {
+    "forward": [
+      0.018867924528301886,
+      0.03773584905660377,
+      0.05660377358490566,
+      0.07547169811320754,
+      0.09433962264150944,
+      0.11320754716981132,
+      0.1320754716981132,
+      0.1509433962264151,
+      0.16981132075471697,
+      0.18867924528301888
+    ],
+    "forward_right": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "aggregate_by_action_family": {
+    "forward": {
+      "num_contributing_timesteps": 53,
+      "per_horizon_step": {
+        "step_1": {
+          "clearance_error": {
+            "mae": 0.014703233540466636,
+            "mean_error": 0.014703233540466636,
+            "num_samples": 53,
+            "rmse": 0.017891684106647723,
+            "variance": 0.00010392728362656758
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.9811320754716981,
+            "false_negative_count": 1,
+            "false_negative_rate": 0.018867924528301886,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 1,
+            "true_collision_rate": 0.018867924528301886,
+            "true_negative_count": 52,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.08208614305034805,
+            "mean_error": 0.0178941280612445,
+            "num_samples": 212,
+            "rmse": 0.11036174125948385,
+            "variance": 0.011859514114753042
+          },
+          "radial_distance": {
+            "mae": 0.008203795030242501,
+            "mean_error": 0.001770280521532106,
+            "num_samples": 212,
+            "rmse": 0.011020535748059182,
+            "variance": 0.00011831831504933439
+          },
+          "speed_rel": {
+            "mae": 0.10032044495745993,
+            "mean_error": 0.0078110356876050155,
+            "num_samples": 212,
+            "rmse": 0.1227894362299613,
+            "variance": 0.015016233371158696
+          },
+          "vx_rel": {
+            "mae": 0.08636034954831286,
+            "mean_error": -0.016330558595792303,
+            "num_samples": 212,
+            "rmse": 0.09610276280842442,
+            "variance": 0.008969053875361678
+          },
+          "vy_rel": {
+            "mae": 0.10509041682729181,
+            "mean_error": -0.05095429015609453,
+            "num_samples": 212,
+            "rmse": 0.12805431057083283,
+            "variance": 0.013801566770459838
+          },
+          "x_rel": {
+            "mae": 0.008636038906497364,
+            "mean_error": -0.0016330595290756783,
+            "num_samples": 212,
+            "rmse": 0.009610280911297635,
+            "variance": 8.96906157685468e-05
+          },
+          "y_rel": {
+            "mae": 0.010509042292332193,
+            "mean_error": -0.005095430245000379,
+            "num_samples": 212,
+            "rmse": 0.012805431724951296,
+            "variance": 0.00013801567228072454
+          }
+        },
+        "step_10": {
+          "clearance_error": {
+            "mae": 0.331789954554713,
+            "mean_error": 0.331789954554713,
+            "num_samples": 53,
+            "rmse": 0.36580837808475314,
+            "variance": 0.023731195533579195
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.8113207547169812,
+            "false_negative_count": 10,
+            "false_negative_rate": 0.18867924528301888,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 10,
+            "true_collision_rate": 0.18867924528301888,
+            "true_negative_count": 43,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.21935712811388114,
+            "mean_error": 0.08589381372273601,
+            "num_samples": 212,
+            "rmse": 0.2898961272194076,
+            "variance": 0.07666201734097489
+          },
+          "radial_distance": {
+            "mae": 0.1747524208932217,
+            "mean_error": 0.05830139086492938,
+            "num_samples": 212,
+            "rmse": 0.22819093299972731,
+            "variance": 0.048672049726500764
+          },
+          "speed_rel": {
+            "mae": 0.2249168412335813,
+            "mean_error": 0.08160610800639391,
+            "num_samples": 212,
+            "rmse": 0.2796357378041893,
+            "variance": 0.07153658899334209
+          },
+          "vx_rel": {
+            "mae": 0.24825973429207532,
+            "mean_error": -0.0043002829517958295,
+            "num_samples": 212,
+            "rmse": 0.27734576764720914,
+            "variance": 0.07690218239835421
+          },
+          "vy_rel": {
+            "mae": 0.2157478709265871,
+            "mean_error": -0.15161754950037543,
+            "num_samples": 212,
+            "rmse": 0.2736197727381782,
+            "variance": 0.05187989871679352
+          },
+          "x_rel": {
+            "mae": 0.1945190171356564,
+            "mean_error": -0.013875453689819682,
+            "num_samples": 212,
+            "rmse": 0.21504620675446537,
+            "variance": 0.046052342824385945
+          },
+          "y_rel": {
+            "mae": 0.1833298555827244,
+            "mean_error": -0.1175003264780024,
+            "num_samples": 212,
+            "rmse": 0.2296277481081343,
+            "variance": 0.03892257597877562
+          }
+        },
+        "step_2": {
+          "clearance_error": {
+            "mae": 0.0373021069339141,
+            "mean_error": 0.0373021069339141,
+            "num_samples": 53,
+            "rmse": 0.044119013297259174,
+            "variance": 0.000555040152614569
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.9622641509433962,
+            "false_negative_count": 2,
+            "false_negative_rate": 0.03773584905660377,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 2,
+            "true_collision_rate": 0.03773584905660377,
+            "true_negative_count": 51,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.12258463730371247,
+            "mean_error": 0.0329111121185531,
+            "num_samples": 212,
+            "rmse": 0.16355942014560662,
+            "variance": 0.025668542617487102
+          },
+          "radial_distance": {
+            "mae": 0.020351542842509996,
+            "mean_error": 0.005021576502673907,
+            "num_samples": 212,
+            "rmse": 0.027212510440269642,
+            "variance": 0.0007153044938895775
+          },
+          "speed_rel": {
+            "mae": 0.14882544583860313,
+            "mean_error": 0.02363822799272365,
+            "num_samples": 212,
+            "rmse": 0.17868917200047818,
+            "variance": 0.03137105436758049
+          },
+          "vx_rel": {
+            "mae": 0.13103138163404646,
+            "mean_error": -0.01929580603005751,
+            "num_samples": 212,
+            "rmse": 0.14543980474883825,
+            "variance": 0.020780408675030587
+          },
+          "vy_rel": {
+            "mae": 0.14807180413660012,
+            "mean_error": -0.08094491261356282,
+            "num_samples": 212,
+            "rmse": 0.1848340894539032,
+            "variance": 0.027611561746236166
+          },
+          "x_rel": {
+            "mae": 0.021697967009304923,
+            "mean_error": -0.003562638761405015,
+            "num_samples": 212,
+            "rmse": 0.02404895453627734,
+            "variance": 0.000565659819343669
+          },
+          "y_rel": {
+            "mae": 0.0251812449733215,
+            "mean_error": -0.013189920462982256,
+            "num_samples": 212,
+            "rmse": 0.03117488114831946,
+            "variance": 0.000797899212792046
+          }
+        },
+        "step_3": {
+          "clearance_error": {
+            "mae": 0.06613726358996479,
+            "mean_error": 0.06613726358996479,
+            "num_samples": 53,
+            "rmse": 0.07686829321522509,
+            "variance": 0.0015345968666533405
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.9433962264150944,
+            "false_negative_count": 3,
+            "false_negative_rate": 0.05660377358490566,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 3,
+            "true_collision_rate": 0.05660377358490566,
+            "true_negative_count": 50,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.1533390350620319,
+            "mean_error": 0.045915510222935996,
+            "num_samples": 212,
+            "rmse": 0.20295788340986723,
+            "variance": 0.03908366835918072
+          },
+          "radial_distance": {
+            "mae": 0.03543455888414655,
+            "mean_error": 0.00956076154069162,
+            "num_samples": 212,
+            "rmse": 0.04723614950434368,
+            "variance": 0.00213984565875874
+          },
+          "speed_rel": {
+            "mae": 0.17679340780390188,
+            "mean_error": 0.037650316705954805,
+            "num_samples": 212,
+            "rmse": 0.21045496607927813,
+            "variance": 0.0428737463993714
+          },
+          "vx_rel": {
+            "mae": 0.1653645194645198,
+            "mean_error": -0.01724283439370821,
+            "num_samples": 212,
+            "rmse": 0.18321969310042535,
+            "variance": 0.03327214060188522
+          },
+          "vy_rel": {
+            "mae": 0.17300099977907143,
+            "mean_error": -0.09970878092747815,
+            "num_samples": 212,
+            "rmse": 0.21726637285910333,
+            "variance": 0.03726283578130708
+          },
+          "x_rel": {
+            "mae": 0.038117758405819616,
+            "mean_error": -0.00528692356570379,
+            "num_samples": 212,
+            "rmse": 0.042170811507490434,
+            "variance": 0.0017504257824106939
+          },
+          "y_rel": {
+            "mae": 0.04233165337496396,
+            "mean_error": -0.023160798247366922,
+            "num_samples": 212,
+            "rmse": 0.052699984079418984,
+            "variance": 0.002240865746515779
+          }
+        },
+        "step_4": {
+          "clearance_error": {
+            "mae": 0.09965609992658216,
+            "mean_error": 0.09965609992658216,
+            "num_samples": 53,
+            "rmse": 0.11448294430745172,
+            "variance": 0.0031750062847261612
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.9245283018867925,
+            "false_negative_count": 4,
+            "false_negative_rate": 0.07547169811320754,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 4,
+            "true_collision_rate": 0.07547169811320754,
+            "true_negative_count": 49,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.17650446697699754,
+            "mean_error": 0.05565260177087518,
+            "num_samples": 212,
+            "rmse": 0.232507381459416,
+            "variance": 0.05096247034924675
+          },
+          "radial_distance": {
+            "mae": 0.05283296647980632,
+            "mean_error": 0.015065073977636428,
+            "num_samples": 212,
+            "rmse": 0.07012715393937814,
+            "variance": 0.004690861265685581
+          },
+          "speed_rel": {
+            "mae": 0.19255549051335336,
+            "mean_error": 0.051914183052726326,
+            "num_samples": 212,
+            "rmse": 0.2290119965977153,
+            "variance": 0.049751412183639994
+          },
+          "vx_rel": {
+            "mae": 0.19138764126120872,
+            "mean_error": -0.0155911071682876,
+            "num_samples": 212,
+            "rmse": 0.21163233157057562,
+            "variance": 0.04454516114326503
+          },
+          "vy_rel": {
+            "mae": 0.1884183871015063,
+            "mean_error": -0.11362826697668939,
+            "num_samples": 212,
+            "rmse": 0.23780299005514755,
+            "variance": 0.04363887902304281
+          },
+          "x_rel": {
+            "mae": 0.05705240663788019,
+            "mean_error": -0.006846032717812098,
+            "num_samples": 212,
+            "rmse": 0.06305370206662389,
+            "variance": 0.003928901180333215
+          },
+          "y_rel": {
+            "mae": 0.06088697130211046,
+            "mean_error": -0.03452362502024149,
+            "num_samples": 212,
+            "rmse": 0.07619764700636715,
+            "variance": 0.004614200724768688
+          }
+        },
+        "step_5": {
+          "clearance_error": {
+            "mae": 0.13603757065294783,
+            "mean_error": 0.13603757065294783,
+            "num_samples": 53,
+            "rmse": 0.15480342695656985,
+            "variance": 0.005457880368342279
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.9056603773584906,
+            "false_negative_count": 5,
+            "false_negative_rate": 0.09433962264150944,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 5,
+            "true_collision_rate": 0.09433962264150944,
+            "true_negative_count": 48,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.19208001495967697,
+            "mean_error": 0.06184553021446805,
+            "num_samples": 212,
+            "rmse": 0.2516822322305328,
+            "variance": 0.05951907641303519
+          },
+          "radial_distance": {
+            "mae": 0.0717667398705113,
+            "mean_error": 0.021187379970271075,
+            "num_samples": 212,
+            "rmse": 0.09480973703807931,
+            "variance": 0.008539981167225106
+          },
+          "speed_rel": {
+            "mae": 0.20296917611747337,
+            "mean_error": 0.06381610397370725,
+            "num_samples": 212,
+            "rmse": 0.24312866168705013,
+            "variance": 0.05503905100735308
+          },
+          "vx_rel": {
+            "mae": 0.21068417716701077,
+            "mean_error": -0.01479594297004196,
+            "num_samples": 212,
+            "rmse": 0.2326765094183364,
+            "variance": 0.053919438106728466
+          },
+          "vy_rel": {
+            "mae": 0.1981237530708313,
+            "mean_error": -0.12312871948728021,
+            "num_samples": 212,
+            "rmse": 0.24996606493993292,
+            "variance": 0.04732235205897744
+          },
+          "x_rel": {
+            "mae": 0.07792763926948415,
+            "mean_error": -0.008325627041381803,
+            "num_samples": 212,
+            "rmse": 0.08596820066271378,
+            "variance": 0.007321215459552433
+          },
+          "y_rel": {
+            "mae": 0.0803061526229207,
+            "mean_error": -0.046836496114131876,
+            "num_samples": 212,
+            "rmse": 0.10078597641242895,
+            "variance": 0.007964155673157596
+          }
+        },
+        "step_6": {
+          "clearance_error": {
+            "mae": 0.1739004115355582,
+            "mean_error": 0.1739004115355582,
+            "num_samples": 53,
+            "rmse": 0.19629658732015978,
+            "variance": 0.008290997061304593
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.8867924528301887,
+            "false_negative_count": 6,
+            "false_negative_rate": 0.11320754716981132,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 6,
+            "true_collision_rate": 0.11320754716981132,
+            "true_negative_count": 47,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.20175318177770152,
+            "mean_error": 0.06574597235080704,
+            "num_samples": 212,
+            "rmse": 0.26375851685786134,
+            "variance": 0.06524602233470561
+          },
+          "radial_distance": {
+            "mae": 0.09158850392282379,
+            "mean_error": 0.027702216558159295,
+            "num_samples": 212,
+            "rmse": 0.12050057779856334,
+            "variance": 0.013752976447552459
+          },
+          "speed_rel": {
+            "mae": 0.21138682864323408,
+            "mean_error": 0.07198776443213092,
+            "num_samples": 212,
+            "rmse": 0.25482015805091757,
+            "variance": 0.059751074721158634
+          },
+          "vx_rel": {
+            "mae": 0.2243235614502205,
+            "mean_error": -0.014654941435130138,
+            "num_samples": 212,
+            "rmse": 0.2475553805400356,
+            "variance": 0.06106889912585474
+          },
+          "vy_rel": {
+            "mae": 0.20415428112137993,
+            "mean_error": -0.13017005234394433,
+            "num_samples": 212,
+            "rmse": 0.25771855336534566,
+            "variance": 0.049474610221501306
+          },
+          "x_rel": {
+            "mae": 0.10004880956743972,
+            "mean_error": -0.009791122219895273,
+            "num_samples": 212,
+            "rmse": 0.1102961280909071,
+            "variance": 0.012069369797520857
+          },
+          "y_rel": {
+            "mae": 0.10023555966902015,
+            "mean_error": -0.05985350096092031,
+            "num_samples": 212,
+            "rmse": 0.1259733171145159,
+            "variance": 0.012286835047555495
+          }
+        },
+        "step_7": {
+          "clearance_error": {
+            "mae": 0.21264266801818485,
+            "mean_error": 0.21264266801818485,
+            "num_samples": 53,
+            "rmse": 0.238379006544622,
+            "variance": 0.011607646499308932
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.8679245283018868,
+            "false_negative_count": 7,
+            "false_negative_rate": 0.1320754716981132,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 7,
+            "true_collision_rate": 0.1320754716981132,
+            "true_negative_count": 46,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.20813984170171992,
+            "mean_error": 0.06941132670474921,
+            "num_samples": 212,
+            "rmse": 0.27233800431198196,
+            "variance": 0.06935005631771966
+          },
+          "radial_distance": {
+            "mae": 0.11198900848286086,
+            "mean_error": 0.03458538764162248,
+            "num_samples": 212,
+            "rmse": 0.1468496853504509,
+            "variance": 0.02036868104920514
+          },
+          "speed_rel": {
+            "mae": 0.21767223820165557,
+            "mean_error": 0.0775472868000447,
+            "num_samples": 212,
+            "rmse": 0.2640157949447998,
+            "variance": 0.06369075829028621
+          },
+          "vx_rel": {
+            "mae": 0.23389551647991505,
+            "mean_error": -0.01426122450041321,
+            "num_samples": 212,
+            "rmse": 0.25815543443788364,
+            "variance": 0.06644084580556125
+          },
+          "vy_rel": {
+            "mae": 0.2086006709427204,
+            "mean_error": -0.13621952314421815,
+            "num_samples": 212,
+            "rmse": 0.2635030162609603,
+            "variance": 0.05087808109298572
+          },
+          "x_rel": {
+            "mae": 0.1230045976753802,
+            "mean_error": -0.011217243915889819,
+            "num_samples": 212,
+            "rmse": 0.13560410650762633,
+            "variance": 0.018262647140663096
+          },
+          "y_rel": {
+            "mae": 0.12065403612234298,
+            "mean_error": -0.07347545237092883,
+            "num_samples": 212,
+            "rmse": 0.15158117773440186,
+            "variance": 0.0175782113422357
+          }
+        },
+        "step_8": {
+          "clearance_error": {
+            "mae": 0.251976631545113,
+            "mean_error": 0.251976631545113,
+            "num_samples": 53,
+            "rmse": 0.2807567220012212,
+            "variance": 0.015332114104049355
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.8490566037735849,
+            "false_negative_count": 8,
+            "false_negative_rate": 0.1509433962264151,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 8,
+            "true_collision_rate": 0.1509433962264151,
+            "true_negative_count": 45,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.21252036593049312,
+            "mean_error": 0.07368109299640557,
+            "num_samples": 212,
+            "rmse": 0.27901019297801277,
+            "variance": 0.07241778432048296
+          },
+          "radial_distance": {
+            "mae": 0.13269241643325472,
+            "mean_error": 0.041896927174691984,
+            "num_samples": 212,
+            "rmse": 0.17365729999462523,
+            "variance": 0.028401505334741815
+          },
+          "speed_rel": {
+            "mae": 0.22184096941420378,
+            "mean_error": 0.08099525204247829,
+            "num_samples": 212,
+            "rmse": 0.271008933631151,
+            "variance": 0.06688561125446904
+          },
+          "vx_rel": {
+            "mae": 0.2406769133401367,
+            "mean_error": -0.012815320548021569,
+            "num_samples": 212,
+            "rmse": 0.2660834120290254,
+            "variance": 0.07063614971625957
+          },
+          "vy_rel": {
+            "mae": 0.2118283214996446,
+            "mean_error": -0.1417347662291437,
+            "num_samples": 212,
+            "rmse": 0.26780660755898955,
+            "variance": 0.05163163509422463
+          },
+          "x_rel": {
+            "mae": 0.1465381599153259,
+            "mean_error": -0.012498775100464196,
+            "num_samples": 212,
+            "rmse": 0.16161659353004038,
+            "variance": 0.025963703925242304
+          },
+          "y_rel": {
+            "mae": 0.14138213358964732,
+            "mean_error": -0.08764892940012346,
+            "num_samples": 212,
+            "rmse": 0.1774634082489714,
+            "variance": 0.023810926442353247
+          }
+        },
+        "step_9": {
+          "clearance_error": {
+            "mae": 0.29173372870527775,
+            "mean_error": 0.29173372870527775,
+            "num_samples": 53,
+            "rmse": 0.32326928890856055,
+            "variance": 0.01939446468716181
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 0.8301886792452831,
+            "false_negative_count": 9,
+            "false_negative_rate": 0.16981132075471697,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 53,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 9,
+            "true_collision_rate": 0.16981132075471697,
+            "true_negative_count": 44,
+            "true_positive_count": 0
+          },
+          "num_samples": 212,
+          "radial_closing_speed": {
+            "mae": 0.2160708164828351,
+            "mean_error": 0.07923228337526242,
+            "num_samples": 212,
+            "rmse": 0.2847034833824705,
+            "variance": 0.07477831872125476
+          },
+          "radial_distance": {
+            "mae": 0.15360099663800034,
+            "mean_error": 0.04976512001304737,
+            "num_samples": 212,
+            "rmse": 0.20079886719040738,
+            "variance": 0.037843617895037845
+          },
+          "speed_rel": {
+            "mae": 0.22416276979173616,
+            "mean_error": 0.08224447593238847,
+            "num_samples": 212,
+            "rmse": 0.2761492516263385,
+            "variance": 0.06949425535239359
+          },
+          "vx_rel": {
+            "mae": 0.2452832728905498,
+            "mean_error": -0.009466484048456516,
+            "num_samples": 212,
+            "rmse": 0.27224893167729597,
+            "variance": 0.07402986647918929
+          },
+          "vy_rel": {
+            "mae": 0.21418826478832173,
+            "mean_error": -0.14689640897624898,
+            "num_samples": 212,
+            "rmse": 0.27111020467213565,
+            "variance": 0.05192218810724989
+          },
+          "x_rel": {
+            "mae": 0.17037985849231693,
+            "mean_error": -0.013445424219882639,
+            "num_samples": 212,
+            "rmse": 0.18813977230106266,
+            "variance": 0.03521579448904309
+          },
+          "y_rel": {
+            "mae": 0.16227582606185384,
+            "mean_error": -0.1023385707495293,
+            "num_samples": 212,
+            "rmse": 0.20351085886208475,
+            "variance": 0.03094348661172696
+          }
+        }
+      }
+    },
+    "forward_right": {
+      "num_contributing_timesteps": 7,
+      "per_horizon_step": {
+        "step_1": {
+          "clearance_error": {
+            "mae": 0.010886076017804447,
+            "mean_error": -0.010886076017804447,
+            "num_samples": 7,
+            "rmse": 0.012366846429637765,
+            "variance": 3.4432239548827204e-05
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.13046901829237717,
+            "mean_error": -0.12973789202345284,
+            "num_samples": 28,
+            "rmse": 0.14951690199914192,
+            "variance": 0.005523383356731902
+          },
+          "radial_distance": {
+            "mae": 0.011680712503817121,
+            "mean_error": -0.011452267213180227,
+            "num_samples": 28,
+            "rmse": 0.013353525242419716,
+            "variance": 4.716221207785771e-05
+          },
+          "speed_rel": {
+            "mae": 0.19906874252702858,
+            "mean_error": -0.16229412597823045,
+            "num_samples": 28,
+            "rmse": 0.24113193658571314,
+            "variance": 0.031805227514538646
+          },
+          "vx_rel": {
+            "mae": 0.15401982835360936,
+            "mean_error": -0.15401982835360936,
+            "num_samples": 28,
+            "rmse": 0.19534672689968122,
+            "variance": 0.01443823618434335
+          },
+          "vy_rel": {
+            "mae": 0.16538446715899877,
+            "mean_error": -0.09363865426608495,
+            "num_samples": 28,
+            "rmse": 0.1945101838746747,
+            "variance": 0.029066014058196372
+          },
+          "x_rel": {
+            "mae": 0.015401954724012972,
+            "mean_error": -0.015401954724012972,
+            "num_samples": 28,
+            "rmse": 0.019534635313639366,
+            "variance": 0.00014438176751634056
+          },
+          "y_rel": {
+            "mae": 0.01653845249418813,
+            "mean_error": -0.00936387513025182,
+            "num_samples": 28,
+            "rmse": 0.019451033028948555,
+            "variance": 0.00029066052843829907
+          }
+        },
+        "step_10": {
+          "clearance_error": {
+            "mae": 0.21639124911681368,
+            "mean_error": -0.21639124911681368,
+            "num_samples": 7,
+            "rmse": 0.2190074113731591,
+            "variance": 0.0011390735420372185
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.1298440229455925,
+            "mean_error": -0.10823209261487772,
+            "num_samples": 28,
+            "rmse": 0.15901923771737286,
+            "variance": 0.013572932092418869
+          },
+          "radial_distance": {
+            "mae": 0.12871984687734006,
+            "mean_error": -0.11463890530525868,
+            "num_samples": 28,
+            "rmse": 0.15962186367841597,
+            "variance": 0.01233706075458274
+          },
+          "speed_rel": {
+            "mae": 0.6565947346110209,
+            "mean_error": -0.5398892053464212,
+            "num_samples": 28,
+            "rmse": 0.7093929756492386,
+            "variance": 0.21175803985089117
+          },
+          "vx_rel": {
+            "mae": 0.6483900972775051,
+            "mean_error": 0.39311217410223825,
+            "num_samples": 28,
+            "rmse": 0.6944748268099493,
+            "variance": 0.32775810364532065
+          },
+          "vy_rel": {
+            "mae": 0.3883144770349775,
+            "mean_error": -0.3616325259208679,
+            "num_samples": 28,
+            "rmse": 0.468611357638144,
+            "variance": 0.08881852070355732
+          },
+          "x_rel": {
+            "mae": 0.2584223878304827,
+            "mean_error": 0.05483811765683808,
+            "num_samples": 28,
+            "rmse": 0.2984461084212558,
+            "variance": 0.08606286048364675
+          },
+          "y_rel": {
+            "mae": 0.35567943002193975,
+            "mean_error": -0.284565961768931,
+            "num_samples": 28,
+            "rmse": 0.3972013006966843,
+            "variance": 0.0767910866776611
+          }
+        },
+        "step_2": {
+          "clearance_error": {
+            "mae": 0.029114293513851815,
+            "mean_error": -0.029114293513851815,
+            "num_samples": 7,
+            "rmse": 0.033465100687191544,
+            "variance": 0.0002722708771931542
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.2615358947307958,
+            "mean_error": -0.23989216463761923,
+            "num_samples": 28,
+            "rmse": 0.3193945679353105,
+            "variance": 0.044464639372061084
+          },
+          "radial_distance": {
+            "mae": 0.03364712937499227,
+            "mean_error": -0.03262339185198891,
+            "num_samples": 28,
+            "rmse": 0.04058052681392737,
+            "variance": 0.0005824934605674616
+          },
+          "speed_rel": {
+            "mae": 0.3831329212736902,
+            "mean_error": -0.30394972122976094,
+            "num_samples": 28,
+            "rmse": 0.44637632388385,
+            "variance": 0.10686638948841043
+          },
+          "vx_rel": {
+            "mae": 0.29352313705853056,
+            "mean_error": -0.2326442301273346,
+            "num_samples": 28,
+            "rmse": 0.37469983055063333,
+            "variance": 0.08627662520313313
+          },
+          "vy_rel": {
+            "mae": 0.32001499618802753,
+            "mean_error": -0.1695879442351205,
+            "num_samples": 28,
+            "rmse": 0.3807629481575334,
+            "variance": 0.1162203518597221
+          },
+          "x_rel": {
+            "mae": 0.042474921253404574,
+            "mean_error": -0.03866639675045896,
+            "num_samples": 28,
+            "rmse": 0.05456306107791831,
+            "variance": 0.0014820373965287418
+          },
+          "y_rel": {
+            "mae": 0.04667162046254516,
+            "mean_error": -0.026322662161026626,
+            "num_samples": 28,
+            "rmse": 0.05671061932937898,
+            "variance": 0.0025232118014781907
+          }
+        },
+        "step_3": {
+          "clearance_error": {
+            "mae": 0.05626407638725474,
+            "mean_error": -0.05626407638725474,
+            "num_samples": 7,
+            "rmse": 0.06182894680768514,
+            "variance": 0.0006571723716367215
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.25150372648399116,
+            "mean_error": -0.23810826529854542,
+            "num_samples": 28,
+            "rmse": 0.29473204947478165,
+            "variance": 0.030171434984122645
+          },
+          "radial_distance": {
+            "mae": 0.05696775109523312,
+            "mean_error": -0.05352728053950095,
+            "num_samples": 28,
+            "rmse": 0.06724902939026087,
+            "variance": 0.0016572621919777343
+          },
+          "speed_rel": {
+            "mae": 0.3813463196080723,
+            "mean_error": -0.3182505997900386,
+            "num_samples": 28,
+            "rmse": 0.4359925935220945,
+            "variance": 0.08880609733940296
+          },
+          "vx_rel": {
+            "mae": 0.27924043791634695,
+            "mean_error": -0.1996563162122454,
+            "num_samples": 28,
+            "rmse": 0.33653039065314533,
+            "variance": 0.0733900592297145
+          },
+          "vy_rel": {
+            "mae": 0.3293378140245165,
+            "mean_error": -0.20908844896725245,
+            "num_samples": 28,
+            "rmse": 0.37745765634832806,
+            "variance": 0.09875630284444116
+          },
+          "x_rel": {
+            "mae": 0.06955055826445021,
+            "mean_error": -0.05863203874324084,
+            "num_samples": 28,
+            "rmse": 0.08616199817939751,
+            "variance": 0.003986173963077604
+          },
+          "y_rel": {
+            "mae": 0.07829801740170082,
+            "mean_error": -0.04723151173652816,
+            "num_samples": 28,
+            "rmse": 0.09386931940531103,
+            "variance": 0.006580633424698504
+          }
+        },
+        "step_4": {
+          "clearance_error": {
+            "mae": 0.07857254000820259,
+            "mean_error": -0.07857254000820259,
+            "num_samples": 7,
+            "rmse": 0.0852005788701226,
+            "variance": 0.0010854945964633837
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.20458838636411694,
+            "mean_error": -0.1926900894055838,
+            "num_samples": 28,
+            "rmse": 0.2494202823907909,
+            "variance": 0.02508100671276998
+          },
+          "radial_distance": {
+            "mae": 0.0758320842556398,
+            "mean_error": -0.06972231108234535,
+            "num_samples": 28,
+            "rmse": 0.08946992852646754,
+            "variance": 0.0031436674478678714
+          },
+          "speed_rel": {
+            "mae": 0.3961133794200622,
+            "mean_error": -0.34699286241297117,
+            "num_samples": 28,
+            "rmse": 0.4641901401342534,
+            "variance": 0.09506843963231063
+          },
+          "vx_rel": {
+            "mae": 0.25275613580431255,
+            "mean_error": -0.10265529155731201,
+            "num_samples": 28,
+            "rmse": 0.2968528300283315,
+            "variance": 0.07758349381111275
+          },
+          "vy_rel": {
+            "mae": 0.3558308184146881,
+            "mean_error": -0.2660879279885973,
+            "num_samples": 28,
+            "rmse": 0.4169423398730491,
+            "variance": 0.10303812935754822
+          },
+          "x_rel": {
+            "mae": 0.09057896880267828,
+            "mean_error": -0.06889756477473302,
+            "num_samples": 28,
+            "rmse": 0.11163203016712679,
+            "variance": 0.00771483572734577
+          },
+          "y_rel": {
+            "mae": 0.11333476063114248,
+            "mean_error": -0.07384030482517798,
+            "num_samples": 28,
+            "rmse": 0.13489513380161774,
+            "variance": 0.012744306506681152
+          }
+        },
+        "step_5": {
+          "clearance_error": {
+            "mae": 0.0989986844147875,
+            "mean_error": -0.0989986844147875,
+            "num_samples": 7,
+            "rmse": 0.10534797073856363,
+            "variance": 0.0012974554228745686
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.1671238589897061,
+            "mean_error": -0.15665103769690258,
+            "num_samples": 28,
+            "rmse": 0.2129039217004968,
+            "variance": 0.0207885322639349
+          },
+          "radial_distance": {
+            "mae": 0.09029798538755555,
+            "mean_error": -0.08217459654449069,
+            "num_samples": 28,
+            "rmse": 0.1077051242087348,
+            "variance": 0.004847729463569171
+          },
+          "speed_rel": {
+            "mae": 0.42203677308654924,
+            "mean_error": -0.36996602349895685,
+            "num_samples": 28,
+            "rmse": 0.48813359979218207,
+            "variance": 0.1013995527024434
+          },
+          "vx_rel": {
+            "mae": 0.25697018418993267,
+            "mean_error": -0.009858863694327218,
+            "num_samples": 28,
+            "rmse": 0.29957607942259323,
+            "variance": 0.08964863016886855
+          },
+          "vy_rel": {
+            "mae": 0.3814422530787332,
+            "mean_error": -0.3023378551006317,
+            "num_samples": 28,
+            "rmse": 0.4376370135814422,
+            "variance": 0.10011797702963283
+          },
+          "x_rel": {
+            "mae": 0.1102922637961151,
+            "mean_error": -0.06988347253333654,
+            "num_samples": 28,
+            "rmse": 0.13313908606290234,
+            "variance": 0.012842316504347319
+          },
+          "y_rel": {
+            "mae": 0.15147897880752897,
+            "mean_error": -0.10407408465079548,
+            "num_samples": 28,
+            "rmse": 0.1776479147738422,
+            "variance": 0.020727366527593355
+          }
+        },
+        "step_6": {
+          "clearance_error": {
+            "mae": 0.11907617150669465,
+            "mean_error": -0.11907617150669465,
+            "num_samples": 7,
+            "rmse": 0.12402784145058202,
+            "variance": 0.0012037708341989526
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.14001460212405167,
+            "mean_error": -0.12245896367202283,
+            "num_samples": 28,
+            "rmse": 0.18051741635595325,
+            "variance": 0.01759033982420277
+          },
+          "radial_distance": {
+            "mae": 0.10116382249206894,
+            "mean_error": -0.090964241092773,
+            "num_samples": 28,
+            "rmse": 0.12187694284943576,
+            "variance": 0.0065794960407404976
+          },
+          "speed_rel": {
+            "mae": 0.4628926085190877,
+            "mean_error": -0.4032187705720065,
+            "num_samples": 28,
+            "rmse": 0.5262808932304218,
+            "variance": 0.11438620163781026
+          },
+          "vx_rel": {
+            "mae": 0.30060355152402607,
+            "mean_error": 0.08752452475684029,
+            "num_samples": 28,
+            "rmse": 0.34652550012382466,
+            "variance": 0.11241937980215604
+          },
+          "vy_rel": {
+            "mae": 0.4051369684083121,
+            "mean_error": -0.33646868807928904,
+            "num_samples": 28,
+            "rmse": 0.459451402830027,
+            "variance": 0.09788441350468188
+          },
+          "x_rel": {
+            "mae": 0.1289226570822236,
+            "mean_error": -0.06113101685133897,
+            "num_samples": 28,
+            "rmse": 0.1532167400304061,
+            "variance": 0.01973836820426636
+          },
+          "y_rel": {
+            "mae": 0.1919926791704241,
+            "mean_error": -0.1377209572158602,
+            "num_samples": 28,
+            "rmse": 0.22210761191147574,
+            "variance": 0.030364729212565923
+          }
+        },
+        "step_7": {
+          "clearance_error": {
+            "mae": 0.14072123970363762,
+            "mean_error": -0.14072123970363762,
+            "num_samples": 7,
+            "rmse": 0.14430721983588513,
+            "variance": 0.001022106393033846
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.1274843417277986,
+            "mean_error": -0.10248531553518211,
+            "num_samples": 28,
+            "rmse": 0.16290171114350943,
+            "variance": 0.016033727593137544
+          },
+          "radial_distance": {
+            "mae": 0.10904278182169701,
+            "mean_error": -0.09749790430721514,
+            "num_samples": 28,
+            "rmse": 0.13323541415704537,
+            "variance": 0.008245834241300532
+          },
+          "speed_rel": {
+            "mae": 0.5074833628280857,
+            "mean_error": -0.4371227632526943,
+            "num_samples": 28,
+            "rmse": 0.5686861639392348,
+            "variance": 0.1323276429022513
+          },
+          "vx_rel": {
+            "mae": 0.37511949028287617,
+            "mean_error": 0.17600242580686296,
+            "num_samples": 28,
+            "rmse": 0.42396200339582324,
+            "variance": 0.1487669264334997
+          },
+          "vy_rel": {
+            "mae": 0.419487680707659,
+            "mean_error": -0.35781441416059223,
+            "num_samples": 28,
+            "rmse": 0.47195641412260136,
+            "variance": 0.09471170185037657
+          },
+          "x_rel": {
+            "mae": 0.15058471453192218,
+            "mean_error": -0.04353076634322252,
+            "num_samples": 28,
+            "rmse": 0.1763256990203828,
+            "variance": 0.029195824516598395
+          },
+          "y_rel": {
+            "mae": 0.23394143636479042,
+            "mean_error": -0.17350238979836333,
+            "num_samples": 28,
+            "rmse": 0.2671444929756431,
+            "variance": 0.041263100861470205
+          }
+        },
+        "step_8": {
+          "clearance_error": {
+            "mae": 0.1641494575872125,
+            "mean_error": -0.1641494575872125,
+            "num_samples": 7,
+            "rmse": 0.16691837521664982,
+            "variance": 0.0009166995587902181
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.12322947165883978,
+            "mean_error": -0.09325093482141049,
+            "num_samples": 28,
+            "rmse": 0.15272510911718243,
+            "variance": 0.014629222109788334
+          },
+          "radial_distance": {
+            "mae": 0.11518575814770847,
+            "mean_error": -0.10278979355102007,
+            "num_samples": 28,
+            "rmse": 0.1426263154402257,
+            "variance": 0.009776524197793433
+          },
+          "speed_rel": {
+            "mae": 0.5585919008847834,
+            "mean_error": -0.4783147777047567,
+            "num_samples": 28,
+            "rmse": 0.6194637325418981,
+            "variance": 0.1549502893639895
+          },
+          "vx_rel": {
+            "mae": 0.46130853039877756,
+            "mean_error": 0.25937514645712717,
+            "num_samples": 28,
+            "rmse": 0.5152782957940109,
+            "variance": 0.19823625551672402
+          },
+          "vy_rel": {
+            "mae": 0.42420628666877747,
+            "mean_error": -0.37410891481808256,
+            "num_samples": 28,
+            "rmse": 0.4812622192111014,
+            "variance": 0.09165584349363087
+          },
+          "x_rel": {
+            "mae": 0.17890746052596757,
+            "mean_error": -0.017593272642461775,
+            "num_samples": 28,
+            "rmse": 0.20669499637000852,
+            "variance": 0.04241329828212586
+          },
+          "y_rel": {
+            "mae": 0.2763620743452653,
+            "mean_error": -0.21091328998659278,
+            "num_samples": 28,
+            "rmse": 0.31217987015297827,
+            "variance": 0.05297185543576181
+          }
+        },
+        "step_9": {
+          "clearance_error": {
+            "mae": 0.1896825040875676,
+            "mean_error": -0.1896825040875676,
+            "num_samples": 7,
+            "rmse": 0.19224449704081312,
+            "variance": 0.0009784942855451078
+          },
+          "dynamic_collision_confusion": {
+            "accuracy": 1.0,
+            "false_negative_count": 0,
+            "false_negative_rate": 0.0,
+            "false_positive_count": 0,
+            "false_positive_rate": 0.0,
+            "num_samples": 7,
+            "predicted_collision_count": 0,
+            "predicted_collision_rate": 0.0,
+            "true_collision_count": 0,
+            "true_collision_rate": 0.0,
+            "true_negative_count": 7,
+            "true_positive_count": 0
+          },
+          "num_samples": 28,
+          "radial_closing_speed": {
+            "mae": 0.12338463601831413,
+            "mean_error": -0.09695858056827819,
+            "num_samples": 28,
+            "rmse": 0.15306475061618918,
+            "variance": 0.014027851535380885
+          },
+          "radial_distance": {
+            "mae": 0.12201774483466883,
+            "mean_error": -0.10821436725027125,
+            "num_samples": 28,
+            "rmse": 0.15123317788313004,
+            "variance": 0.01116112481325386
+          },
+          "speed_rel": {
+            "mae": 0.60914791533866,
+            "mean_error": -0.5129309781062709,
+            "num_samples": 28,
+            "rmse": 0.6665799394125879,
+            "variance": 0.1812306273262336
+          },
+          "vx_rel": {
+            "mae": 0.5534086908612933,
+            "mean_error": 0.33120155334472656,
+            "num_samples": 28,
+            "rmse": 0.607413880485065,
+            "variance": 0.259257153267965
+          },
+          "vy_rel": {
+            "mae": 0.41258481996400015,
+            "mean_error": -0.37489423155784607,
+            "num_samples": 28,
+            "rmse": 0.47908969876318097,
+            "variance": 0.08898125460564758
+          },
+          "x_rel": {
+            "mae": 0.21414095406605874,
+            "mean_error": 0.015526887916978602,
+            "num_samples": 28,
+            "rmse": 0.2471638189156107,
+            "variance": 0.060848869132562385
+          },
+          "y_rel": {
+            "mae": 0.31746917484360465,
+            "mean_error": -0.2484027123369585,
+            "num_samples": 28,
+            "rmse": 0.35594853113023356,
+            "variance": 0.06499544931741309
+          }
+        }
+      }
+    }
+  },
+  "aggregate_per_horizon_step": {
+    "step_1": {
+      "clearance_error": {
+        "mae": 0.014257898496156048,
+        "mean_error": 0.011717814092001677,
+        "num_samples": 60,
+        "rmse": 0.017338073385577118,
+        "variance": 0.00016330162162894447
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.9833333333333333,
+        "false_negative_count": 1,
+        "false_negative_rate": 0.016666666666666666,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 1,
+        "true_collision_rate": 0.016666666666666666,
+        "true_negative_count": 59,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.08773081182858476,
+        "mean_error": 0.0006703923846964832,
+        "num_samples": 240,
+        "rmse": 0.11561516382498489,
+        "variance": 0.013366416680328636
+      },
+      "radial_distance": {
+        "mae": 0.008609435402159539,
+        "mean_error": 0.00022764995248233388,
+        "num_samples": 240,
+        "rmse": 0.011317525854498744,
+        "variance": 0.00012803456696638233
+      },
+      "speed_rel": {
+        "mae": 0.1118410796739096,
+        "mean_error": -0.012034566506742454,
+        "num_samples": 240,
+        "rmse": 0.141780716561623,
+        "variance": 0.019956940797722072
+      },
+      "vx_rel": {
+        "mae": 0.09425395540893078,
+        "mean_error": -0.03239430673420429,
+        "num_samples": 240,
+        "rmse": 0.11229549412166853,
+        "variance": 0.011560886891239975
+      },
+      "vy_rel": {
+        "mae": 0.11212472269932429,
+        "mean_error": -0.055934132635593416,
+        "num_samples": 240,
+        "rmse": 0.13747293815951547,
+        "variance": 0.015770181532513812
+      },
+      "x_rel": {
+        "mae": 0.009425395751874184,
+        "mean_error": -0.0032394306351516957,
+        "num_samples": 240,
+        "rmse": 0.01122954532705498,
+        "variance": 0.00011560877741242306
+      },
+      "y_rel": {
+        "mae": 0.01121247348254872,
+        "mean_error": -0.005593415481613047,
+        "num_samples": 240,
+        "rmse": 0.01374729678237347,
+        "variance": 0.00015770187207270745
+      }
+    },
+    "step_10": {
+      "clearance_error": {
+        "mae": 0.3183267722536247,
+        "mean_error": 0.2678354807930348,
+        "num_samples": 60,
+        "rmse": 0.3518518984349211,
+        "variance": 0.052063913660621894
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.8333333333333334,
+        "false_negative_count": 10,
+        "false_negative_rate": 0.16666666666666666,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 10,
+        "true_collision_rate": 0.16666666666666666,
+        "true_negative_count": 50,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.20891393251091409,
+        "mean_error": 0.06324579131668108,
+        "num_samples": 240,
+        "rmse": 0.27782240575352213,
+        "variance": 0.07318525901940151
+      },
+      "radial_distance": {
+        "mae": 0.16938195392470218,
+        "mean_error": 0.03812502297840744,
+        "num_samples": 240,
+        "rmse": 0.22128873959992315,
+        "variance": 0.0475151888966185
+      },
+      "speed_rel": {
+        "mae": 0.27527926212761594,
+        "mean_error": 0.00909832144856548,
+        "num_samples": 240,
+        "rmse": 0.3574694506234044,
+        "variance": 0.12770162867581716
+      },
+      "vx_rel": {
+        "mae": 0.2949416099737088,
+        "mean_error": 0.04206450370450814,
+        "num_samples": 240,
+        "rmse": 0.352440604017079,
+        "variance": 0.12244495688801692
+      },
+      "vy_rel": {
+        "mae": 0.23588064163923264,
+        "mean_error": -0.17611929674943289,
+        "num_samples": 240,
+        "rmse": 0.3029072623019776,
+        "variance": 0.06073480286776426
+      },
+      "x_rel": {
+        "mae": 0.20197441038338618,
+        "mean_error": -0.005858870366042938,
+        "num_samples": 240,
+        "rmse": 0.22636507101417722,
+        "variance": 0.05120681901328741
+      },
+      "y_rel": {
+        "mae": 0.2034373059339662,
+        "mean_error": -0.13699131726194408,
+        "num_samples": 240,
+        "rmse": 0.25491874378875584,
+        "variance": 0.04621694492967474
+      }
+    },
+    "step_2": {
+      "clearance_error": {
+        "mae": 0.03634686203490684,
+        "mean_error": 0.029553526881674744,
+        "num_samples": 60,
+        "rmse": 0.04301225008978738,
+        "variance": 0.0009766427066405425
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.9666666666666667,
+        "false_negative_count": 2,
+        "false_negative_rate": 0.03333333333333333,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 2,
+        "true_collision_rate": 0.03333333333333333,
+        "true_negative_count": 58,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.13879561733687218,
+        "mean_error": 0.001084063163666323,
+        "num_samples": 240,
+        "rmse": 0.18849975587338483,
+        "variance": 0.035530982771382856
+      },
+      "radial_distance": {
+        "mae": 0.02190269460463293,
+        "mean_error": 0.0006296635279632451,
+        "num_samples": 240,
+        "rmse": 0.029090391452604444,
+        "variance": 0.0008458543987073148
+      },
+      "speed_rel": {
+        "mae": 0.17616131797269663,
+        "mean_error": -0.014580366083232887,
+        "num_samples": 240,
+        "rmse": 0.22682751257838674,
+        "variance": 0.05123813338737711
+      },
+      "vx_rel": {
+        "mae": 0.14998875310023627,
+        "mean_error": -0.04418645550807317,
+        "num_samples": 240,
+        "rmse": 0.18725627678789408,
+        "variance": 0.03311247034609746
+      },
+      "vy_rel": {
+        "mae": 0.16813184320926666,
+        "mean_error": -0.09128659963607788,
+        "num_samples": 240,
+        "rmse": 0.21700752336853632,
+        "variance": 0.03875902192542826
+      },
+      "x_rel": {
+        "mae": 0.02412194500444988,
+        "mean_error": -0.007658077193461307,
+        "num_samples": 240,
+        "rmse": 0.02929521030151773,
+        "variance": 0.0007995632003091384
+      },
+      "y_rel": {
+        "mae": 0.027688455447064258,
+        "mean_error": -0.014722073661087432,
+        "num_samples": 240,
+        "rmse": 0.03512405177545245,
+        "variance": 0.0010169595602421801
+      }
+    },
+    "step_3": {
+      "clearance_error": {
+        "mae": 0.0649853917496486,
+        "mean_error": 0.051857107259289166,
+        "num_samples": 60,
+        "rmse": 0.0752687030179199,
+        "variance": 0.0029762180806984025
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.95,
+        "false_negative_count": 3,
+        "false_negative_rate": 0.05,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 3,
+        "true_collision_rate": 0.05,
+        "true_negative_count": 57,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.16479158239459382,
+        "mean_error": 0.012779403078763152,
+        "num_samples": 240,
+        "rmse": 0.21568648915105687,
+        "variance": 0.04635734845925948
+      },
+      "radial_distance": {
+        "mae": 0.03794676464210665,
+        "mean_error": 0.00220048996466915,
+        "num_samples": 240,
+        "rmse": 0.049985577276075464,
+        "variance": 0.0024937157795379018
+      },
+      "speed_rel": {
+        "mae": 0.2006579141810551,
+        "mean_error": -0.0038714568852444204,
+        "num_samples": 240,
+        "rmse": 0.24759056615228872,
+        "variance": 0.06128610026919656
+      },
+      "vx_rel": {
+        "mae": 0.17865004328389963,
+        "mean_error": -0.03852440727253755,
+        "num_samples": 240,
+        "rmse": 0.20704065992143733,
+        "variance": 0.04138170490500392
+      },
+      "vy_rel": {
+        "mae": 0.19124029477437338,
+        "mean_error": -0.11246974219878515,
+        "num_samples": 240,
+        "rmse": 0.24149423200307862,
+        "variance": 0.045670021180495575
+      },
+      "x_rel": {
+        "mae": 0.04178491838932651,
+        "mean_error": -0.011510520336416445,
+        "num_samples": 240,
+        "rmse": 0.04936618760202181,
+        "variance": 0.0023045283999429556
+      },
+      "y_rel": {
+        "mae": 0.04652772917808326,
+        "mean_error": -0.025969048154435737,
+        "num_samples": 240,
+        "rmse": 0.059002319861705135,
+        "variance": 0.0028068822870155625
+      }
+    },
+    "step_4": {
+      "clearance_error": {
+        "mae": 0.09719635126943788,
+        "mean_error": 0.07886275860085729,
+        "num_samples": 60,
+        "rmse": 0.11146376324137004,
+        "variance": 0.006204835821791105
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.9333333333333333,
+        "false_negative_count": 4,
+        "false_negative_rate": 0.06666666666666667,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 4,
+        "true_collision_rate": 0.06666666666666667,
+        "true_negative_count": 56,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.17978092423882813,
+        "mean_error": 0.026679287800288297,
+        "num_samples": 240,
+        "rmse": 0.23454340429262321,
+        "variance": 0.054298824099642304
+      },
+      "radial_distance": {
+        "mae": 0.055516196886986884,
+        "mean_error": 0.005173212387305215,
+        "num_samples": 240,
+        "rmse": 0.0726496634443331,
+        "variance": 0.0052512114721707005
+      },
+      "speed_rel": {
+        "mae": 0.2163039108858027,
+        "mean_error": 0.005375027748394942,
+        "num_samples": 240,
+        "rmse": 0.2673316172978678,
+        "variance": 0.07143730268379764
+      },
+      "vx_rel": {
+        "mae": 0.19854729895790418,
+        "mean_error": -0.025748595347007117,
+        "num_samples": 240,
+        "rmse": 0.22325725589062437,
+        "variance": 0.04918081214546781
+      },
+      "vy_rel": {
+        "mae": 0.2079498374213775,
+        "mean_error": -0.13141522742807865,
+        "num_samples": 240,
+        "rmse": 0.2650173042667097,
+        "variance": 0.05296420956082019
+      },
+      "x_rel": {
+        "mae": 0.06096383889043997,
+        "mean_error": -0.014085378124452869,
+        "num_samples": 240,
+        "rmse": 0.07046840265477006,
+        "variance": 0.00476739789580599
+      },
+      "y_rel": {
+        "mae": 0.0670058800571642,
+        "mean_error": -0.03911057099748408,
+        "num_samples": 240,
+        "rmse": 0.08515663945114732,
+        "variance": 0.005722016478863455
+      }
+    },
+    "step_5": {
+      "clearance_error": {
+        "mae": 0.1317163672584958,
+        "mean_error": 0.10861667422837872,
+        "num_samples": 60,
+        "rmse": 0.14987687821667323,
+        "variance": 0.010665496703541746
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.9166666666666666,
+        "false_negative_count": 5,
+        "false_negative_rate": 0.08333333333333333,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 5,
+        "true_collision_rate": 0.08333333333333333,
+        "true_negative_count": 55,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.18916846342984706,
+        "mean_error": 0.03635426395814145,
+        "num_samples": 240,
+        "rmse": 0.2474714023281944,
+        "variance": 0.05992046246234483
+      },
+      "radial_distance": {
+        "mae": 0.07392871851416646,
+        "mean_error": 0.00912848271021553,
+        "num_samples": 240,
+        "rmse": 0.09640312296453452,
+        "variance": 0.009210232920724457
+      },
+      "speed_rel": {
+        "mae": 0.2285270624305322,
+        "mean_error": 0.013208189101896436,
+        "num_samples": 240,
+        "rmse": 0.2828672487172069,
+        "variance": 0.07983942413749073
+      },
+      "vx_rel": {
+        "mae": 0.21608421131968497,
+        "mean_error": -0.01421995038787524,
+        "num_samples": 240,
+        "rmse": 0.24143852797333482,
+        "variance": 0.05809035580089714
+      },
+      "vy_rel": {
+        "mae": 0.21951091140508652,
+        "mean_error": -0.14403645197550455,
+        "num_samples": 240,
+        "rmse": 0.27845657565521736,
+        "variance": 0.05679156502793795
+      },
+      "x_rel": {
+        "mae": 0.08170351213092444,
+        "mean_error": -0.015507375682109855,
+        "num_samples": 240,
+        "rmse": 0.0927164390762177,
+        "variance": 0.008355859374427899
+      },
+      "y_rel": {
+        "mae": 0.088609649011125,
+        "mean_error": -0.05351421477674264,
+        "num_samples": 240,
+        "rmse": 0.1124926340224857,
+        "variance": 0.00979082152614557
+      }
+    },
+    "step_6": {
+      "clearance_error": {
+        "mae": 0.16750425019885748,
+        "mean_error": 0.13971981018062873,
+        "num_samples": 60,
+        "rmse": 0.18929231796535897,
+        "variance": 0.016309956283787636
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.9,
+        "false_negative_count": 6,
+        "false_negative_rate": 0.1,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 6,
+        "true_collision_rate": 0.1,
+        "true_negative_count": 54,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.1945503474847757,
+        "mean_error": 0.04378872981481026,
+        "num_samples": 240,
+        "rmse": 0.25544859853640844,
+        "variance": 0.06333653363542073
+      },
+      "radial_distance": {
+        "mae": 0.09270562442256906,
+        "mean_error": 0.01385779649888386,
+        "num_samples": 240,
+        "rmse": 0.1206619627048375,
+        "variance": 0.014367270719979121
+      },
+      "speed_rel": {
+        "mae": 0.2407291696287504,
+        "mean_error": 0.016547002014981563,
+        "num_samples": 240,
+        "rmse": 0.29945134931398254,
+        "variance": 0.089397307330281
+      },
+      "vx_rel": {
+        "mae": 0.2332228936254978,
+        "mean_error": -0.0027340037127335866,
+        "num_samples": 240,
+        "rmse": 0.26104258198844127,
+        "variance": 0.06813575483489084
+      },
+      "vy_rel": {
+        "mae": 0.22760226130485534,
+        "mean_error": -0.15423822651306787,
+        "num_samples": 240,
+        "rmse": 0.28861359221341437,
+        "variance": 0.05950837509243463
+      },
+      "x_rel": {
+        "mae": 0.10341742511083116,
+        "mean_error": -0.015780776593563705,
+        "num_samples": 240,
+        "rmse": 0.11612386254818902,
+        "variance": 0.013235718543214729
+      },
+      "y_rel": {
+        "mae": 0.11094055694418394,
+        "mean_error": -0.06893803752399665,
+        "num_samples": 240,
+        "rmse": 0.14061734127288814,
+        "variance": 0.01502078364899592
+      }
+    },
+    "step_7": {
+      "clearance_error": {
+        "mae": 0.20425183471482106,
+        "mean_error": 0.17141687878397224,
+        "num_samples": 60,
+        "rmse": 0.22940042161473126,
+        "variance": 0.0232408071049774
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.8833333333333333,
+        "false_negative_count": 7,
+        "false_negative_rate": 0.11666666666666667,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 7,
+        "true_collision_rate": 0.11666666666666667,
+        "true_negative_count": 53,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.1987300333714291,
+        "mean_error": 0.04935671844342389,
+        "num_samples": 240,
+        "rmse": 0.261937084299008,
+        "variance": 0.06617495047556221
+      },
+      "radial_distance": {
+        "mae": 0.1116452820390584,
+        "mean_error": 0.019175670247591415,
+        "num_samples": 240,
+        "rmse": 0.14532708647152331,
+        "variance": 0.020752255732857255
+      },
+      "speed_rel": {
+        "mae": 0.2514835360747391,
+        "mean_error": 0.017502447627225182,
+        "num_samples": 240,
+        "rmse": 0.31512319523082793,
+        "variance": 0.09899629249954273
+      },
+      "vx_rel": {
+        "mae": 0.2503716467569272,
+        "mean_error": 0.00793620136876901,
+        "num_samples": 240,
+        "rmse": 0.2825582702070453,
+        "variance": 0.079776192770232
+      },
+      "vy_rel": {
+        "mae": 0.23320415541529654,
+        "mean_error": -0.1620722604294618,
+        "num_samples": 240,
+        "rmse": 0.2954993935551396,
+        "variance": 0.06105247399074001
+      },
+      "x_rel": {
+        "mae": 0.1262222779753101,
+        "mean_error": -0.0149871548657453,
+        "num_samples": 240,
+        "rmse": 0.14096242827653074,
+        "variance": 0.019645791374646244
+      },
+      "y_rel": {
+        "mae": 0.13387089948396186,
+        "mean_error": -0.08514526173746285,
+        "num_samples": 240,
+        "rmse": 0.1691811895270844,
+        "variance": 0.021372559293458205
+      }
+    },
+    "step_8": {
+      "clearance_error": {
+        "mae": 0.2417301279166913,
+        "mean_error": 0.20342858781300838,
+        "num_samples": 60,
+        "rmse": 0.2699605547169477,
+        "variance": 0.03149551076348726
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.8666666666666667,
+        "false_negative_count": 8,
+        "false_negative_rate": 0.13333333333333333,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 8,
+        "true_collision_rate": 0.13333333333333333,
+        "true_negative_count": 52,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.20210309493213355,
+        "mean_error": 0.054205689750993685,
+        "num_samples": 240,
+        "rmse": 0.26736832165018687,
+        "variance": 0.0685475626206568
+      },
+      "radial_distance": {
+        "mae": 0.13064997296660769,
+        "mean_error": 0.025016809756692248,
+        "num_samples": 240,
+        "rmse": 0.17032857103198198,
+        "variance": 0.028385981339394396
+      },
+      "speed_rel": {
+        "mae": 0.26112857808577133,
+        "mean_error": 0.015742415238634223,
+        "num_samples": 240,
+        "rmse": 0.3311287977827143,
+        "variance": 0.10939845708348012
+      },
+      "vx_rel": {
+        "mae": 0.2664172686636448,
+        "mean_error": 0.01894023393591245,
+        "num_samples": 240,
+        "rmse": 0.305805011653289,
+        "variance": 0.0931579726907211
+      },
+      "vy_rel": {
+        "mae": 0.23660575076937676,
+        "mean_error": -0.16884508356451988,
+        "num_samples": 240,
+        "rmse": 0.30062361171542107,
+        "variance": 0.06186589367691454
+      },
+      "x_rel": {
+        "mae": 0.15031457831990075,
+        "mean_error": -0.013093133147030573,
+        "num_samples": 240,
+        "rmse": 0.1675020241567378,
+        "variance": 0.027885497960998498
+      },
+      "y_rel": {
+        "mae": 0.15712979334446944,
+        "mean_error": -0.10202977146854492,
+        "num_samples": 240,
+        "rmse": 0.19796198062886508,
+        "variance": 0.02877887150857967
+      }
+    },
+    "step_9": {
+      "clearance_error": {
+        "mae": 0.27982775249987824,
+        "mean_error": 0.23556850154611245,
+        "num_samples": 60,
+        "rmse": 0.31084203875720073,
+        "variance": 0.04113025413805231
+      },
+      "dynamic_collision_confusion": {
+        "accuracy": 0.85,
+        "false_negative_count": 9,
+        "false_negative_rate": 0.15,
+        "false_positive_count": 0,
+        "false_positive_rate": 0.0,
+        "num_samples": 60,
+        "predicted_collision_count": 0,
+        "predicted_collision_rate": 0.0,
+        "true_collision_count": 9,
+        "true_collision_rate": 0.15,
+        "true_negative_count": 51,
+        "true_positive_count": 0
+      },
+      "num_samples": 240,
+      "radial_closing_speed": {
+        "mae": 0.2052574287619743,
+        "mean_error": 0.05867668258184933,
+        "num_samples": 240,
+        "rmse": 0.27264059425136794,
+        "variance": 0.07088994055492796
+      },
+      "radial_distance": {
+        "mae": 0.14991628392761172,
+        "mean_error": 0.031334179832326864,
+        "num_samples": 240,
+        "rmse": 0.19566425866309906,
+        "variance": 0.03730267129241553
+      },
+      "speed_rel": {
+        "mae": 0.26907770343887727,
+        "mean_error": 0.0128073396278782,
+        "num_samples": 240,
+        "rmse": 0.3452534671706602,
+        "variance": 0.11903592864501829
+      },
+      "vx_rel": {
+        "mae": 0.28123123832046987,
+        "mean_error": 0.03027812031408151,
+        "num_samples": 240,
+        "rmse": 0.329418524013936,
+        "variance": 0.10759979939376614
+      },
+      "vy_rel": {
+        "mae": 0.23733452955881754,
+        "mean_error": -0.17349615494410198,
+        "num_samples": 240,
+        "rmse": 0.30282635176305894,
+        "variance": 0.06160288354173606
+      },
+      "x_rel": {
+        "mae": 0.17548531964258682,
+        "mean_error": -0.010065321137248829,
+        "num_samples": 240,
+        "rmse": 0.19594421363855552,
+        "variance": 0.03829282416883595
+      },
+      "y_rel": {
+        "mae": 0.1803817167530581,
+        "mean_error": -0.1193793872680627,
+        "num_samples": 240,
+        "rmse": 0.22664138304304718,
+        "variance": 0.03711487840316715
+      }
+    }
+  },
+  "bias_variance_by_horizon": {
+    "clearance_error": {
+      "bias_squared": [
+        0.0001373071670947131,
+        0.0008734109511458717,
+        0.002689159573301421,
+        0.00621933469413709,
+        0.01179758192043375,
+        0.019521625356910925,
+        0.029383746332039034,
+        0.04138319033959486,
+        0.05549251892068078,
+        0.07173584477163612
+      ],
+      "mean_error": [
+        0.011717814092001677,
+        0.029553526881674744,
+        0.051857107259289166,
+        0.07886275860085729,
+        0.10861667422837872,
+        0.13971981018062873,
+        0.17141687878397224,
+        0.20342858781300838,
+        0.23556850154611245,
+        0.2678354807930348
+      ],
+      "mse_approx": [
+        0.00030060878872365757,
+        0.0018500536577864143,
+        0.005665377653999824,
+        0.012424170515928194,
+        0.022463078623975494,
+        0.035831581640698565,
+        0.052624553437016434,
+        0.07287870110308212,
+        0.0966227730587331,
+        0.12379975843225802
+      ],
+      "variance": [
+        0.00016330162162894447,
+        0.0009766427066405425,
+        0.0029762180806984025,
+        0.006204835821791105,
+        0.010665496703541746,
+        0.016309956283787636,
+        0.0232408071049774,
+        0.03149551076348726,
+        0.04113025413805231,
+        0.052063913660621894
+      ]
+    },
+    "radial_closing_speed": {
+      "bias_squared": [
+        4.494259494590376e-07,
+        1.175192942818237e-06,
+        0.00016331314304950115,
+        0.000711784397530612,
+        0.0013216325079382226,
+        0.001917452858794453,
+        0.00243608565550342,
+        0.0029382568013809817,
+        0.0034429530788111008,
+        0.004000030119273172
+      ],
+      "mean_error": [
+        0.0006703923846964832,
+        0.001084063163666323,
+        0.012779403078763152,
+        0.026679287800288297,
+        0.03635426395814145,
+        0.04378872981481026,
+        0.04935671844342389,
+        0.054205689750993685,
+        0.05867668258184933,
+        0.06324579131668108
+      ],
+      "mse_approx": [
+        0.013366866106278096,
+        0.03553215796432568,
+        0.04652066160230898,
+        0.055010608497172916,
+        0.06124209497028305,
+        0.06525398649421518,
+        0.06861103613106563,
+        0.07148581942203777,
+        0.07433289363373906,
+        0.07718528913867469
+      ],
+      "variance": [
+        0.013366416680328636,
+        0.035530982771382856,
+        0.04635734845925948,
+        0.054298824099642304,
+        0.05992046246234483,
+        0.06333653363542073,
+        0.06617495047556221,
+        0.0685475626206568,
+        0.07088994055492796,
+        0.07318525901940151
+      ]
+    },
+    "radial_distance": {
+      "bias_squared": [
+        5.1824500865208873e-08,
+        3.964761584471203e-07,
+        4.842156084609637e-06,
+        2.676212640416812e-05,
+        8.332919659070388e-05,
+        0.00019203852380447777,
+        0.0003677063294443626,
+        0.0006258407704025325,
+        0.0009818308257645997,
+        0.0014535173771040952
+      ],
+      "mean_error": [
+        0.00022764995248233388,
+        0.0006296635279632451,
+        0.00220048996466915,
+        0.005173212387305215,
+        0.00912848271021553,
+        0.01385779649888386,
+        0.019175670247591415,
+        0.025016809756692248,
+        0.031334179832326864,
+        0.03812502297840744
+      ],
+      "mse_approx": [
+        0.00012808639146724753,
+        0.000846250874865762,
+        0.0024985579356225115,
+        0.0052779735985748685,
+        0.009293562117315161,
+        0.014559309243783599,
+        0.021119962062301618,
+        0.029011822109796928,
+        0.03828450211818013,
+        0.048968706273722594
+      ],
+      "variance": [
+        0.00012803456696638233,
+        0.0008458543987073148,
+        0.0024937157795379018,
+        0.0052512114721707005,
+        0.009210232920724457,
+        0.014367270719979121,
+        0.020752255732857255,
+        0.028385981339394396,
+        0.03730267129241553,
+        0.0475151888966185
+      ]
+    },
+    "x_rel": {
+      "bias_squared": [
+        1.049391083995932e-05,
+        5.8646146301012206e-05,
+        0.00013249207841505654,
+        0.00019839787690881542,
+        0.00024047870054609208,
+        0.0002490329098959681,
+        0.000224614810969833,
+        0.00017143013560587072,
+        0.00010131068959594806,
+        3.4326361966096104e-05
+      ],
+      "mean_error": [
+        -0.0032394306351516957,
+        -0.007658077193461307,
+        -0.011510520336416445,
+        -0.014085378124452869,
+        -0.015507375682109855,
+        -0.015780776593563705,
+        -0.0149871548657453,
+        -0.013093133147030573,
+        -0.010065321137248829,
+        -0.005858870366042938
+      ],
+      "mse_approx": [
+        0.0001261026882523824,
+        0.0008582093466101506,
+        0.0024370204783580123,
+        0.004965795772714806,
+        0.00859633807497399,
+        0.013484751453110696,
+        0.019870406185616078,
+        0.02805692809660437,
+        0.0383941348584319,
+        0.051241145375253504
+      ],
+      "variance": [
+        0.00011560877741242306,
+        0.0007995632003091384,
+        0.0023045283999429556,
+        0.00476739789580599,
+        0.008355859374427899,
+        0.013235718543214729,
+        0.019645791374646244,
+        0.027885497960998498,
+        0.03829282416883595,
+        0.05120681901328741
+      ]
+    },
+    "y_rel": {
+      "bias_squared": [
+        3.128629674994852e-05,
+        0.0002167394528824843,
+        0.0006743914620474022,
+        0.0015296367637492427,
+        0.0028637711831713403,
+        0.004752453017659969,
+        0.007249715596341056,
+        0.010410074265923502,
+        0.01425143810449809,
+        0.018766621005162618
+      ],
+      "mean_error": [
+        -0.005593415481613047,
+        -0.014722073661087432,
+        -0.025969048154435737,
+        -0.03911057099748408,
+        -0.05351421477674264,
+        -0.06893803752399665,
+        -0.08514526173746285,
+        -0.10202977146854492,
+        -0.1193793872680627,
+        -0.13699131726194408
+      ],
+      "mse_approx": [
+        0.00018898816882265596,
+        0.0012336990131246645,
+        0.0034812737490629644,
+        0.0072516532426126976,
+        0.01265459270931691,
+        0.01977323666665589,
+        0.02862227488979926,
+        0.03918894577450317,
+        0.05136631650766524,
+        0.06498356593483737
+      ],
+      "variance": [
+        0.00015770187207270745,
+        0.0010169595602421801,
+        0.0028068822870155625,
+        0.005722016478863455,
+        0.00979082152614557,
+        0.01502078364899592,
+        0.021372559293458205,
+        0.02877887150857967,
+        0.03711487840316715,
+        0.04621694492967474
+      ]
+    }
+  },
+  "conservative_bias_horizons": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "controller": "learned_structured",
+  "episode_id": 18,
+  "fraction_of_action_horizon_cells_with_negative_clearance_bias": 0.5,
+  "fraction_of_action_horizon_cells_with_negative_radial_closing_speed_bias": 0.5,
+  "fraction_of_action_horizon_cells_with_negative_radial_distance_bias": 0.5,
+  "fraction_of_action_horizon_cells_with_positive_clearance_bias": 0.5,
+  "fraction_of_action_horizon_cells_with_positive_radial_closing_speed_bias": 0.5,
+  "fraction_of_action_horizon_cells_with_positive_radial_distance_bias": 0.5,
+  "global_clearance_mae": 0.15561436083925181,
+  "global_false_negative_rate": 0.09166666666666666,
+  "global_false_positive_rate": 0.0,
+  "global_pooled_summaries": {
+    "clearance_error": {
+      "bias_squared": 0.016863025889953615,
+      "mae": 0.15561436083925181,
+      "mean_error": 0.1298577140178958,
+      "mse_approx": 0.04244606569122018,
+      "num_samples": 600,
+      "rmse": 0.20602442984078415,
+      "variance": 0.02558303980126657
+    },
+    "dynamic_collision_confusion": {
+      "accuracy": 0.9083333333333333,
+      "false_negative_count": 55,
+      "false_negative_rate": 0.09166666666666666,
+      "false_positive_count": 0,
+      "false_positive_rate": 0.0,
+      "num_samples": 600,
+      "predicted_collision_count": 0,
+      "predicted_collision_rate": 0.0,
+      "true_collision_count": 55,
+      "true_collision_rate": 0.09166666666666666,
+      "true_negative_count": 545,
+      "true_positive_count": 0
+    },
+    "radial_closing_speed": {
+      "bias_squared": 0.0012029869474547111,
+      "mae": 0.1769822236289953,
+      "mean_error": 0.034684102229331396,
+      "mse_approx": 0.056854141396010104,
+      "num_samples": 2400,
+      "rmse": 0.2384410648273701,
+      "variance": 0.055651154448555396
+    },
+    "radial_distance": {
+      "bias_squared": 0.00020987020745197893,
+      "mae": 0.08522029273306016,
+      "mean_error": 0.01448689778565373,
+      "mse_approx": 0.016998873272563043,
+      "num_samples": 2400,
+      "rmse": 0.13037972722997637,
+      "variance": 0.016789003065111063
+    },
+    "x_rel": {
+      "bias_squared": 0.00012496118309896756,
+      "mae": 0.09754136215990299,
+      "mean_error": -0.011178603808122353,
+      "mse_approx": 0.01680308323299259,
+      "num_samples": 2400,
+      "rmse": 0.12962670725198797,
+      "variance": 0.016678122049893624
+    },
+    "y_rel": {
+      "bias_squared": 0.004243129685537472,
+      "mae": 0.1026804459635625,
+      "mean_error": -0.06513930983313741,
+      "mse_approx": 0.022874454665640084,
+      "num_samples": 2400,
+      "rmse": 0.15124303179201373,
+      "variance": 0.01863132498010261
+    }
+  },
+  "global_radial_closing_speed_signed_bias": 0.034684102229331396,
+  "global_radial_distance_signed_bias": 0.01448689778565373,
+  "global_signed_clearance_bias": 0.1298577140178958,
+  "horizon": 10,
+  "horizon_clearance_error_mae": [
+    0.014257898496156048,
+    0.03634686203490684,
+    0.0649853917496486,
+    0.09719635126943788,
+    0.1317163672584958,
+    0.16750425019885748,
+    0.20425183471482106,
+    0.2417301279166913,
+    0.27982775249987824,
+    0.3183267722536247
+  ],
+  "horizon_error_growth": {
+    "radial_closing_speed": [
+      0.08773081182858476,
+      0.13879561733687218,
+      0.16479158239459382,
+      0.17978092423882813,
+      0.18916846342984706,
+      0.1945503474847757,
+      0.1987300333714291,
+      0.20210309493213355,
+      0.2052574287619743,
+      0.20891393251091409
+    ],
+    "radial_distance": [
+      0.008609435402159539,
+      0.02190269460463293,
+      0.03794676464210665,
+      0.055516196886986884,
+      0.07392871851416646,
+      0.09270562442256906,
+      0.1116452820390584,
+      0.13064997296660769,
+      0.14991628392761172,
+      0.16938195392470218
+    ],
+    "vx_rel": [
+      0.09425395540893078,
+      0.14998875310023627,
+      0.17865004328389963,
+      0.19854729895790418,
+      0.21608421131968497,
+      0.2332228936254978,
+      0.2503716467569272,
+      0.2664172686636448,
+      0.28123123832046987,
+      0.2949416099737088
+    ],
+    "vy_rel": [
+      0.11212472269932429,
+      0.16813184320926666,
+      0.19124029477437338,
+      0.2079498374213775,
+      0.21951091140508652,
+      0.22760226130485534,
+      0.23320415541529654,
+      0.23660575076937676,
+      0.23733452955881754,
+      0.23588064163923264
+    ],
+    "x_rel": [
+      0.009425395751874184,
+      0.02412194500444988,
+      0.04178491838932651,
+      0.06096383889043997,
+      0.08170351213092444,
+      0.10341742511083116,
+      0.1262222779753101,
+      0.15031457831990075,
+      0.17548531964258682,
+      0.20197441038338618
+    ],
+    "y_rel": [
+      0.01121247348254872,
+      0.027688455447064258,
+      0.04652772917808326,
+      0.0670058800571642,
+      0.088609649011125,
+      0.11094055694418394,
+      0.13387089948396186,
+      0.15712979334446944,
+      0.1803817167530581,
+      0.2034373059339662
+    ]
+  },
+  "horizon_false_negative_rate": [
+    0.016666666666666666,
+    0.03333333333333333,
+    0.05,
+    0.06666666666666667,
+    0.08333333333333333,
+    0.1,
+    0.11666666666666667,
+    0.13333333333333333,
+    0.15,
+    0.16666666666666666
+  ],
+  "mean_signed_clearance_bias_by_horizon": [
+    0.011717814092001677,
+    0.029553526881674744,
+    0.051857107259289166,
+    0.07886275860085729,
+    0.10861667422837872,
+    0.13971981018062873,
+    0.17141687878397224,
+    0.20342858781300838,
+    0.23556850154611245,
+    0.2678354807930348
+  ],
+  "mean_signed_radial_closing_speed_bias_by_horizon": [
+    0.0006703923846964832,
+    0.001084063163666323,
+    0.012779403078763152,
+    0.026679287800288297,
+    0.03635426395814145,
+    0.04378872981481026,
+    0.04935671844342389,
+    0.054205689750993685,
+    0.05867668258184933,
+    0.06324579131668108
+  ],
+  "mean_signed_radial_distance_bias_by_horizon": [
+    0.00022764995248233388,
+    0.0006296635279632451,
+    0.00220048996466915,
+    0.005173212387305215,
+    0.00912848271021553,
+    0.01385779649888386,
+    0.019175670247591415,
+    0.025016809756692248,
+    0.031334179832326864,
+    0.03812502297840744
+  ],
+  "num_contributing_timesteps_per_action_family": {
+    "forward": 53,
+    "forward_right": 7
+  },
+  "num_contributing_timesteps_per_obstacle": {
+    "dyn_00": 60,
+    "dyn_01": 60,
+    "dyn_02": 60,
+    "dyn_03": 60
+  },
+  "num_real_steps": 60,
+  "obstacle_ids": [
+    "dyn_00",
+    "dyn_01",
+    "dyn_02",
+    "dyn_03"
+  ],
+  "obstacle_ids_stable": true,
+  "optimistic_bias_horizons": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "per_obstacle_per_horizon_step": {
+    "dyn_00": {
+      "step_1": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.09593869581697519,
+          "mean_error": -0.055613281227749875,
+          "num_samples": 60,
+          "rmse": 0.10515434838051745,
+          "variance": 0.007964599934414436
+        },
+        "radial_distance": {
+          "mae": 0.009491761803937671,
+          "mean_error": -0.0053799449753244135,
+          "num_samples": 60,
+          "rmse": 0.010427124821518426,
+          "variance": 7.978112410600728e-05
+        },
+        "speed_rel": {
+          "mae": 0.0864126414877995,
+          "mean_error": 0.005850308676327686,
+          "num_samples": 60,
+          "rmse": 0.10345468854819384,
+          "variance": 0.010668646470995477
+        },
+        "vx_rel": {
+          "mae": 0.10073073705037434,
+          "mean_error": -0.05809338887532552,
+          "num_samples": 60,
+          "rmse": 0.10984917152095308,
+          "variance": 0.008691998652819975
+        },
+        "vy_rel": {
+          "mae": 0.05769008000691732,
+          "mean_error": -0.009439682960510254,
+          "num_samples": 60,
+          "rmse": 0.07554199195904494,
+          "variance": 0.005617484934745463
+        },
+        "x_rel": {
+          "mae": 0.010073073546985552,
+          "mean_error": -0.005809334420302322,
+          "num_samples": 60,
+          "rmse": 0.010984918734348596,
+          "variance": 8.692007319333345e-05
+        },
+        "y_rel": {
+          "mae": 0.0057690076144439155,
+          "mean_error": -0.0009439685127200511,
+          "num_samples": 60,
+          "rmse": 0.0075542000702038875,
+          "variance": 5.617486214766152e-05
+        }
+      },
+      "step_10": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.2727612778876436,
+          "mean_error": -0.017120645930472682,
+          "num_samples": 60,
+          "rmse": 0.31177767862207756,
+          "variance": 0.09691220436989488
+        },
+        "radial_distance": {
+          "mae": 0.19963882228315732,
+          "mean_error": -0.04572192991435773,
+          "num_samples": 60,
+          "rmse": 0.22720567757227902,
+          "variance": 0.049531925045984984
+        },
+        "speed_rel": {
+          "mae": 0.34134465454284996,
+          "mean_error": -0.11906247395615809,
+          "num_samples": 60,
+          "rmse": 0.4137377553149873,
+          "variance": 0.15700305746852355
+        },
+        "vx_rel": {
+          "mae": 0.3734370470046997,
+          "mean_error": 0.09657267729441325,
+          "num_samples": 60,
+          "rmse": 0.4412242848415963,
+          "variance": 0.18535258753416725
+        },
+        "vy_rel": {
+          "mae": 0.09509999056657155,
+          "mean_error": -0.06675858795642853,
+          "num_samples": 60,
+          "rmse": 0.14820387801823554,
+          "variance": 0.01750768039370783
+        },
+        "x_rel": {
+          "mae": 0.24993841012612125,
+          "mean_error": -0.0015339837288153543,
+          "num_samples": 60,
+          "rmse": 0.2776077469537275,
+          "variance": 0.07706370806264455
+        },
+        "y_rel": {
+          "mae": 0.09593903458710733,
+          "mean_error": -0.052881408868194035,
+          "num_samples": 60,
+          "rmse": 0.14529741780761202,
+          "variance": 0.01831489621767466
+        }
+      },
+      "step_2": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.14441650046390406,
+          "mean_error": -0.06467149360947758,
+          "num_samples": 60,
+          "rmse": 0.1600891741237409,
+          "variance": 0.021446141585940735
+        },
+        "radial_distance": {
+          "mae": 0.022798487524660828,
+          "mean_error": -0.011397510717466657,
+          "num_samples": 60,
+          "rmse": 0.02569204872090627,
+          "variance": 0.0005301781169226544
+        },
+        "speed_rel": {
+          "mae": 0.15829706403279467,
+          "mean_error": -0.011349178425299635,
+          "num_samples": 60,
+          "rmse": 0.20004774470418357,
+          "variance": 0.039890296310300936
+        },
+        "vx_rel": {
+          "mae": 0.15962648391723633,
+          "mean_error": -0.05858675638834635,
+          "num_samples": 60,
+          "rmse": 0.1773722605329357,
+          "variance": 0.028028510782456176
+        },
+        "vy_rel": {
+          "mae": 0.09365159074465433,
+          "mean_error": -0.03775405685106913,
+          "num_samples": 60,
+          "rmse": 0.15197433582401676,
+          "variance": 0.021670829940437265
+        },
+        "x_rel": {
+          "mae": 0.024993057408884342,
+          "mean_error": -0.01166801132413872,
+          "num_samples": 60,
+          "rmse": 0.027520504897147156,
+          "variance": 0.0006212357015336713
+        },
+        "y_rel": {
+          "mae": 0.014990426582482674,
+          "mean_error": -0.004719372456734481,
+          "num_samples": 60,
+          "rmse": 0.022244649382851738,
+          "variance": 0.00047255194978062224
+        }
+      },
+      "step_3": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.17422806805865168,
+          "mean_error": -0.07035378696436702,
+          "num_samples": 60,
+          "rmse": 0.19509031804851548,
+          "variance": 0.03311057685604337
+        },
+        "radial_distance": {
+          "mae": 0.04008445900609609,
+          "mean_error": -0.017980988814587207,
+          "num_samples": 60,
+          "rmse": 0.04480967179820462,
+          "variance": 0.0016845907279125047
+        },
+        "speed_rel": {
+          "mae": 0.18800933796584648,
+          "mean_error": -0.010817588782639857,
+          "num_samples": 60,
+          "rmse": 0.22856271352321425,
+          "variance": 0.052123893786024604
+        },
+        "vx_rel": {
+          "mae": 0.19344615936279297,
+          "mean_error": -0.05505561828613281,
+          "num_samples": 60,
+          "rmse": 0.21551121314103663,
+          "variance": 0.04341396188465296
+        },
+        "vy_rel": {
+          "mae": 0.09877633055051167,
+          "mean_error": -0.03983910878499349,
+          "num_samples": 60,
+          "rmse": 0.1534308100605318,
+          "variance": 0.02195385888704844
+        },
+        "x_rel": {
+          "mae": 0.0440720118889677,
+          "mean_error": -0.017173576855296923,
+          "num_samples": 60,
+          "rmse": 0.048343824322335575,
+          "variance": 0.002042193608104055
+        },
+        "y_rel": {
+          "mae": 0.02460031286487365,
+          "mean_error": -0.00870328425703234,
+          "num_samples": 60,
+          "rmse": 0.037283468598907916,
+          "variance": 0.001314309873907045
+        }
+      },
+      "step_4": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.19760533717992956,
+          "mean_error": -0.06856396271374235,
+          "num_samples": 60,
+          "rmse": 0.2230052210409404,
+          "variance": 0.045030311628507236
+        },
+        "radial_distance": {
+          "mae": 0.05969008583188054,
+          "mean_error": -0.024324769199070968,
+          "num_samples": 60,
+          "rmse": 0.06652161410825219,
+          "variance": 0.0038334307469791457
+        },
+        "speed_rel": {
+          "mae": 0.21894016193182425,
+          "mean_error": -0.02020553346794877,
+          "num_samples": 60,
+          "rmse": 0.26445757098726946,
+          "variance": 0.06952954326976225
+        },
+        "vx_rel": {
+          "mae": 0.22565301259358725,
+          "mean_error": -0.04196437199910482,
+          "num_samples": 60,
+          "rmse": 0.25180343513196657,
+          "variance": 0.06164396142697923
+        },
+        "vy_rel": {
+          "mae": 0.10540371437867482,
+          "mean_error": -0.04811631937821706,
+          "num_samples": 60,
+          "rmse": 0.16401553356855741,
+          "variance": 0.024585915061272
+        },
+        "x_rel": {
+          "mae": 0.06599970917137185,
+          "mean_error": -0.021370016866593376,
+          "num_samples": 60,
+          "rmse": 0.07248068713353946,
+          "variance": 0.004796772386471548
+        },
+        "y_rel": {
+          "mae": 0.03478514571906785,
+          "mean_error": -0.013514917553143742,
+          "num_samples": 60,
+          "rmse": 0.0532810700241619,
+          "variance": 0.0026562194264513703
+        }
+      },
+      "step_5": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.21635458664569238,
+          "mean_error": -0.0640695567913408,
+          "num_samples": 60,
+          "rmse": 0.24548779176674498,
+          "variance": 0.05615934779907391
+        },
+        "radial_distance": {
+          "mae": 0.08090218656965623,
+          "mean_error": -0.030154810266084405,
+          "num_samples": 60,
+          "rmse": 0.09023639608499527,
+          "variance": 0.007233294596224599
+        },
+        "speed_rel": {
+          "mae": 0.24622857034679932,
+          "mean_error": -0.032388101064516395,
+          "num_samples": 60,
+          "rmse": 0.29557662027851156,
+          "variance": 0.08631654936470208
+        },
+        "vx_rel": {
+          "mae": 0.25629432996114093,
+          "mean_error": -0.025119543075561523,
+          "num_samples": 60,
+          "rmse": 0.2846201927907547,
+          "variance": 0.08037766269992137
+        },
+        "vy_rel": {
+          "mae": 0.10912633339564005,
+          "mean_error": -0.055222584803899126,
+          "num_samples": 60,
+          "rmse": 0.17000537304908145,
+          "variance": 0.025852292993133512
+        },
+        "x_rel": {
+          "mae": 0.09085569154405797,
+          "mean_error": -0.023881964064496157,
+          "num_samples": 60,
+          "rmse": 0.09955545932533968,
+          "variance": 0.009340941273901478
+        },
+        "y_rel": {
+          "mae": 0.045529586845692936,
+          "mean_error": -0.019037174392998894,
+          "num_samples": 60,
+          "rmse": 0.06976544577528353,
+          "variance": 0.004504803415354571
+        }
+      },
+      "step_6": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.2309823655015748,
+          "mean_error": -0.057061256295049954,
+          "num_samples": 60,
+          "rmse": 0.2635507209194905,
+          "variance": 0.0662029955272138
+        },
+        "radial_distance": {
+          "mae": 0.10341495357259087,
+          "mean_error": -0.035202713501074546,
+          "num_samples": 60,
+          "rmse": 0.11552007995260025,
+          "variance": 0.012105657834416417
+        },
+        "speed_rel": {
+          "mae": 0.2720730780478319,
+          "mean_error": -0.04780705576479507,
+          "num_samples": 60,
+          "rmse": 0.3258390244758291,
+          "variance": 0.1038855552904617
+        },
+        "vx_rel": {
+          "mae": 0.28606724739074707,
+          "mean_error": -0.00400996208190918,
+          "num_samples": 60,
+          "rmse": 0.3177914008387017,
+          "variance": 0.10097529465112605
+        },
+        "vy_rel": {
+          "mae": 0.11178278823693594,
+          "mean_error": -0.06275144120057424,
+          "num_samples": 60,
+          "rmse": 0.1749726393492348,
+          "variance": 0.02667768114808826
+        },
+        "x_rel": {
+          "mae": 0.11802588017733145,
+          "mean_error": -0.024282963836251184,
+          "num_samples": 60,
+          "rmse": 0.12950882448045128,
+          "variance": 0.016182873285635654
+        },
+        "y_rel": {
+          "mae": 0.056520788426765216,
+          "mean_error": -0.025312320981926602,
+          "num_samples": 60,
+          "rmse": 0.08662924613407229,
+          "variance": 0.006863912692265595
+        }
+      },
+      "step_7": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.24399979319154042,
+          "mean_error": -0.0493078534236221,
+          "num_samples": 60,
+          "rmse": 0.27858328468831467,
+          "variance": 0.07517738209848515
+        },
+        "radial_distance": {
+          "mae": 0.1265884908444259,
+          "mean_error": -0.03939910126845715,
+          "num_samples": 60,
+          "rmse": 0.1420721422339492,
+          "variance": 0.01863220441818135
+        },
+        "speed_rel": {
+          "mae": 0.29453027487614947,
+          "mean_error": -0.06394889968384891,
+          "num_samples": 60,
+          "rmse": 0.35263706026220204,
+          "variance": 0.12026343449959294
+        },
+        "vx_rel": {
+          "mae": 0.3129911422729492,
+          "mean_error": 0.018898487091064453,
+          "num_samples": 60,
+          "rmse": 0.3506507880428003,
+          "variance": 0.12259882234070574
+        },
+        "vy_rel": {
+          "mae": 0.11156086027622222,
+          "mean_error": -0.06790850460529327,
+          "num_samples": 60,
+          "rmse": 0.17464179119585072,
+          "variance": 0.025888190234367985
+        },
+        "x_rel": {
+          "mae": 0.14784923382358142,
+          "mean_error": -0.022393108982976587,
+          "num_samples": 60,
+          "rmse": 0.16233071207148073,
+          "variance": 0.025849808751710515
+        },
+        "y_rel": {
+          "mae": 0.06733606921813266,
+          "mean_error": -0.032103171593247916,
+          "num_samples": 60,
+          "rmse": 0.10326314937170292,
+          "variance": 0.009632664391817109
+        }
+      },
+      "step_8": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.2554356141960387,
+          "mean_error": -0.04124372342432335,
+          "num_samples": 60,
+          "rmse": 0.2911953367092801,
+          "variance": 0.08309367939932895
+        },
+        "radial_distance": {
+          "mae": 0.15038891878016128,
+          "mean_error": -0.04271822199880818,
+          "num_samples": 60,
+          "rmse": 0.1696776958535816,
+          "variance": 0.026965673979441093
+        },
+        "speed_rel": {
+          "mae": 0.31391558710140965,
+          "mean_error": -0.08137155281283841,
+          "num_samples": 60,
+          "rmse": 0.3771069521109278,
+          "variance": 0.1355883237232211
+        },
+        "vx_rel": {
+          "mae": 0.336302916208903,
+          "mean_error": 0.04295969009399414,
+          "num_samples": 60,
+          "rmse": 0.3830979137442385,
+          "variance": 0.144918476542216
+        },
+        "vy_rel": {
+          "mae": 0.10868141452471415,
+          "mean_error": -0.07069265246391296,
+          "num_samples": 60,
+          "rmse": 0.1693272268327269,
+          "variance": 0.023674258634478175
+        },
+        "x_rel": {
+          "mae": 0.18024343869880574,
+          "mean_error": -0.01809715062239953,
+          "num_samples": 60,
+          "rmse": 0.19808737129482257,
+          "variance": 0.038911099805843063
+        },
+        "y_rel": {
+          "mae": 0.07768054098978243,
+          "mean_error": -0.03917244389930384,
+          "num_samples": 60,
+          "rmse": 0.11906899791306627,
+          "variance": 0.012642945902977673
+        }
+      },
+      "step_9": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.2647714363948907,
+          "mean_error": -0.03061240221784111,
+          "num_samples": 60,
+          "rmse": 0.302041653950055,
+          "variance": 0.09029204155133788
+        },
+        "radial_distance": {
+          "mae": 0.1746757919433937,
+          "mean_error": -0.044915662431709066,
+          "num_samples": 60,
+          "rmse": 0.19811819257300498,
+          "variance": 0.03723340149671504
+        },
+        "speed_rel": {
+          "mae": 0.3297465246138581,
+          "mean_error": -0.10002739769737193,
+          "num_samples": 60,
+          "rmse": 0.39781714392288225,
+          "variance": 0.14825299970885106
+        },
+        "vx_rel": {
+          "mae": 0.35657139619191486,
+          "mean_error": 0.06905893484751384,
+          "num_samples": 60,
+          "rmse": 0.4138583538724524,
+          "variance": 0.16650960058774286
+        },
+        "vy_rel": {
+          "mae": 0.10277746121088664,
+          "mean_error": -0.07033109664916992,
+          "num_samples": 60,
+          "rmse": 0.15954235367378236,
+          "variance": 0.02050729945989538
+        },
+        "x_rel": {
+          "mae": 0.2142328989303427,
+          "mean_error": -0.011191258394180403,
+          "num_samples": 60,
+          "rmse": 0.2366291048872363,
+          "variance": 0.05586808901528936
+        },
+        "y_rel": {
+          "mae": 0.08730449062507113,
+          "mean_error": -0.046205553074899056,
+          "num_samples": 60,
+          "rmse": 0.1332956790824272,
+          "variance": 0.01563278492708811
+        }
+      }
+    },
+    "dyn_01": {
+      "step_1": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.1418301206437011,
+          "mean_error": 0.11781677174742249,
+          "num_samples": 60,
+          "rmse": 0.17326687947818342,
+          "variance": 0.01614061981912309
+        },
+        "radial_distance": {
+          "mae": 0.014257901172205406,
+          "mean_error": 0.01171781522260553,
+          "num_samples": 60,
+          "rmse": 0.017338079847337075,
+          "variance": 0.00016330181920151
+        },
+        "speed_rel": {
+          "mae": 0.13515185518635187,
+          "mean_error": -0.11799036746357942,
+          "num_samples": 60,
+          "rmse": 0.1513724780970375,
+          "variance": 0.008991900311047591
+        },
+        "vx_rel": {
+          "mae": 0.09262529263893764,
+          "mean_error": 0.08520302424828212,
+          "num_samples": 60,
+          "rmse": 0.100154097328771,
+          "variance": 0.0027712878706875822
+        },
+        "vy_rel": {
+          "mae": 0.1256240705649058,
+          "mean_error": -0.0714711844921112,
+          "num_samples": 60,
+          "rmse": 0.15451648337414117,
+          "variance": 0.01876721342160585
+        },
+        "x_rel": {
+          "mae": 0.009262531095422745,
+          "mean_error": 0.00852030061681016,
+          "num_samples": 60,
+          "rmse": 0.010015409530799496,
+          "variance": 2.771290546881376e-05
+        },
+        "y_rel": {
+          "mae": 0.012562405823950788,
+          "mean_error": -0.007147119682450628,
+          "num_samples": 60,
+          "rmse": 0.015451647277331294,
+          "variance": 0.00018767208382778643
+        }
+      },
+      "step_10": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3787002044510972,
+          "mean_error": 0.325493960671199,
+          "num_samples": 60,
+          "rmse": 0.4267963356002936,
+          "variance": 0.0762087936484144
+        },
+        "radial_distance": {
+          "mae": 0.31832671861050554,
+          "mean_error": 0.26783540388100247,
+          "num_samples": 60,
+          "rmse": 0.35185185903414784,
+          "variance": 0.05206392713368613
+        },
+        "speed_rel": {
+          "mae": 0.11682334424740932,
+          "mean_error": -0.062224481645403194,
+          "num_samples": 60,
+          "rmse": 0.15059978580744393,
+          "variance": 0.01880840936920887
+        },
+        "vx_rel": {
+          "mae": 0.3290663793683052,
+          "mean_error": 0.20993668188651401,
+          "num_samples": 60,
+          "rmse": 0.3480860348019856,
+          "variance": 0.07709047722264976
+        },
+        "vy_rel": {
+          "mae": 0.2597888658444087,
+          "mean_error": -0.24837981363137562,
+          "num_samples": 60,
+          "rmse": 0.32387835454284347,
+          "variance": 0.04320465672182292
+        },
+        "x_rel": {
+          "mae": 0.24458544684803407,
+          "mean_error": 0.18400232570472116,
+          "num_samples": 60,
+          "rmse": 0.251908605567861,
+          "variance": 0.029601089694397897
+        },
+        "y_rel": {
+          "mae": 0.21632961476147025,
+          "mean_error": -0.18314332957673285,
+          "num_samples": 60,
+          "rmse": 0.26652033969190736,
+          "variance": 0.037491612301037903
+        }
+      },
+      "step_2": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.21924644837441318,
+          "mean_error": 0.1798622631721445,
+          "num_samples": 60,
+          "rmse": 0.25778592545901097,
+          "variance": 0.034103149651353006
+        },
+        "radial_distance": {
+          "mae": 0.03634686798833935,
+          "mean_error": 0.029553528007900055,
+          "num_samples": 60,
+          "rmse": 0.04301226323742198,
+          "variance": 0.0009766437710915497
+        },
+        "speed_rel": {
+          "mae": 0.1769989153433443,
+          "mean_error": -0.1400467553228439,
+          "num_samples": 60,
+          "rmse": 0.19610101133432425,
+          "variance": 0.018842512969888252
+        },
+        "vx_rel": {
+          "mae": 0.14718716343243918,
+          "mean_error": 0.12942336996396384,
+          "num_samples": 60,
+          "rmse": 0.1560636772854726,
+          "variance": 0.0076054626750350855
+        },
+        "vy_rel": {
+          "mae": 0.1778922180334727,
+          "mean_error": -0.10655588905016582,
+          "num_samples": 60,
+          "rmse": 0.2230260458304369,
+          "variance": 0.03838645962748889
+        },
+        "x_rel": {
+          "mae": 0.023906425843759665,
+          "mean_error": 0.02146263699688865,
+          "num_samples": 60,
+          "rmse": 0.02550529076208762,
+          "variance": 0.00018987506999841822
+        },
+        "y_rel": {
+          "mae": 0.03028840964694627,
+          "mean_error": -0.017802707857212566,
+          "num_samples": 60,
+          "rmse": 0.03751757726407003,
+          "variance": 0.0010906321967162067
+        }
+      },
+      "step_3": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.2850042703247686,
+          "mean_error": 0.22404111051208647,
+          "num_samples": 60,
+          "rmse": 0.3244800538744063,
+          "variance": 0.05509288616284869
+        },
+        "radial_distance": {
+          "mae": 0.06498539860712103,
+          "mean_error": 0.051857106881571566,
+          "num_samples": 60,
+          "rmse": 0.07526872004067332,
+          "variance": 0.002976220682434521
+        },
+        "speed_rel": {
+          "mae": 0.17596708305236014,
+          "mean_error": -0.14652241380394437,
+          "num_samples": 60,
+          "rmse": 0.19863368624880326,
+          "variance": 0.017986523565853695
+        },
+        "vx_rel": {
+          "mae": 0.20485505213340124,
+          "mean_error": 0.15577197819948196,
+          "num_samples": 60,
+          "rmse": 0.2131998381562585,
+          "variance": 0.021189261797674937
+        },
+        "vy_rel": {
+          "mae": 0.20473194519678753,
+          "mean_error": -0.14109732309977213,
+          "num_samples": 60,
+          "rmse": 0.2600840870320152,
+          "variance": 0.047735277741355366
+        },
+        "x_rel": {
+          "mae": 0.04430376411130694,
+          "mean_error": 0.03703983702619086,
+          "num_samples": 60,
+          "rmse": 0.04652763251772162,
+          "variance": 0.0007928710607773664
+        },
+        "y_rel": {
+          "mae": 0.05065427630605037,
+          "mean_error": -0.03191243968997267,
+          "num_samples": 60,
+          "rmse": 0.06318894520136109,
+          "variance": 0.002974438988694472
+        }
+      },
+      "step_4": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3207161263001321,
+          "mean_error": 0.2708405165804692,
+          "num_samples": 60,
+          "rmse": 0.36479359074139733,
+          "variance": 0.05971977842442665
+        },
+        "radial_distance": {
+          "mae": 0.0971963568573526,
+          "mean_error": 0.07886275469158924,
+          "num_samples": 60,
+          "rmse": 0.11146378098829883,
+          "variance": 0.006204840394661667
+        },
+        "speed_rel": {
+          "mae": 0.1577594433367458,
+          "mean_error": -0.1348365354001033,
+          "num_samples": 60,
+          "rmse": 0.17930670423692271,
+          "variance": 0.01397000290560397
+        },
+        "vx_rel": {
+          "mae": 0.23599273065725962,
+          "mean_error": 0.18766894042491913,
+          "num_samples": 60,
+          "rmse": 0.24502718926204575,
+          "variance": 0.02481869227744653
+        },
+        "vy_rel": {
+          "mae": 0.2198052351673444,
+          "mean_error": -0.17549529721339543,
+          "num_samples": 60,
+          "rmse": 0.2834301119639979,
+          "variance": 0.0495340290239064
+        },
+        "x_rel": {
+          "mae": 0.06790303855353534,
+          "mean_error": 0.055806729235412945,
+          "num_samples": 60,
+          "rmse": 0.07090561068285887,
+          "variance": 0.0019132145983544568
+        },
+        "y_rel": {
+          "mae": 0.07235040853226031,
+          "mean_error": -0.04946196911292908,
+          "num_samples": 60,
+          "rmse": 0.09097807975252117,
+          "variance": 0.005830524606927753
+        }
+      },
+      "step_5": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3432410640104525,
+          "mean_error": 0.29831182484172497,
+          "num_samples": 60,
+          "rmse": 0.38914485422427564,
+          "variance": 0.06244377272883275
+        },
+        "radial_distance": {
+          "mae": 0.1317163685870589,
+          "mean_error": 0.10861666341458602,
+          "num_samples": 60,
+          "rmse": 0.14987689225743422,
+          "variance": 0.010665503261429083
+        },
+        "speed_rel": {
+          "mae": 0.14102206451324237,
+          "mean_error": -0.116722381372366,
+          "num_samples": 60,
+          "rmse": 0.1620679308056963,
+          "variance": 0.012641899882403908
+        },
+        "vx_rel": {
+          "mae": 0.2585412631432215,
+          "mean_error": 0.20756292045116426,
+          "num_samples": 60,
+          "rmse": 0.26790489451519833,
+          "variance": 0.028690666558983217
+        },
+        "vy_rel": {
+          "mae": 0.23255269924799601,
+          "mean_error": -0.19499278863271077,
+          "num_samples": 60,
+          "rmse": 0.29749719448437206,
+          "variance": 0.0504823931073113
+        },
+        "x_rel": {
+          "mae": 0.09375716395641764,
+          "mean_error": 0.07656302138235449,
+          "num_samples": 60,
+          "rmse": 0.09750109011885312,
+          "variance": 0.0036445663311698473
+        },
+        "y_rel": {
+          "mae": 0.0948850168025273,
+          "mean_error": -0.06896124775616976,
+          "num_samples": 60,
+          "rmse": 0.11984639838529422,
+          "variance": 0.009607505513838828
+        }
+      },
+      "step_6": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3552434644678687,
+          "mean_error": 0.31176276097500905,
+          "num_samples": 60,
+          "rmse": 0.40274812205943517,
+          "variance": 0.065010030691641
+        },
+        "radial_distance": {
+          "mae": 0.167504244294558,
+          "mean_error": 0.1397197893150596,
+          "num_samples": 60,
+          "rmse": 0.18929232468704216,
+          "variance": 0.016309964659179936
+        },
+        "speed_rel": {
+          "mae": 0.13203375505159032,
+          "mean_error": -0.10397696283975294,
+          "num_samples": 60,
+          "rmse": 0.15208012008603644,
+          "variance": 0.0123171541240039
+        },
+        "vx_rel": {
+          "mae": 0.2748858600854874,
+          "mean_error": 0.21662649214267732,
+          "num_samples": 60,
+          "rmse": 0.2849671120390675,
+          "variance": 0.034279217845845006
+        },
+        "vy_rel": {
+          "mae": 0.23968899349371592,
+          "mean_error": -0.2076437960068385,
+          "num_samples": 60,
+          "rmse": 0.30523846669115623,
+          "variance": 0.05005457552783854
+        },
+        "x_rel": {
+          "mae": 0.12124575034684276,
+          "mean_error": 0.09822567317109789,
+          "num_samples": 60,
+          "rmse": 0.1256423075787651,
+          "variance": 0.006137706583801675
+        },
+        "y_rel": {
+          "mae": 0.1177357874312273,
+          "mean_error": -0.08972562751432868,
+          "num_samples": 60,
+          "rmse": 0.14898931744513189,
+          "variance": 0.01414712847992623
+        }
+      },
+      "step_7": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3640868984628707,
+          "mean_error": 0.3179016926203697,
+          "num_samples": 60,
+          "rmse": 0.41214466649285175,
+          "variance": 0.06880173994760798
+        },
+        "radial_distance": {
+          "mae": 0.20425181941695666,
+          "mean_error": 0.17141684561988263,
+          "num_samples": 60,
+          "rmse": 0.22940041885978865,
+          "variance": 0.023240817210775803
+        },
+        "speed_rel": {
+          "mae": 0.1258497923051314,
+          "mean_error": -0.09257866090221595,
+          "num_samples": 60,
+          "rmse": 0.14722398652671576,
+          "variance": 0.013104093754371087
+        },
+        "vx_rel": {
+          "mae": 0.2885991806785266,
+          "mean_error": 0.21816751112540564,
+          "num_samples": 60,
+          "rmse": 0.29997940567355075,
+          "variance": 0.04239058091760275
+        },
+        "vy_rel": {
+          "mae": 0.24674316247304282,
+          "mean_error": -0.21796230475107828,
+          "num_samples": 60,
+          "rmse": 0.31156837048465946,
+          "variance": 0.049567283194064095
+        },
+        "x_rel": {
+          "mae": 0.1501056679375686,
+          "mean_error": 0.12004242741009999,
+          "num_samples": 60,
+          "rmse": 0.15511442457820288,
+          "variance": 0.009650300333717858
+        },
+        "y_rel": {
+          "mae": 0.14164674826278698,
+          "mean_error": -0.1115218582356125,
+          "num_samples": 60,
+          "rmse": 0.17836883501174994,
+          "variance": 0.01937831643912482
+        }
+      },
+      "step_8": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.3706570237011653,
+          "mean_error": 0.32136494724025977,
+          "num_samples": 60,
+          "rmse": 0.41848885046049916,
+          "variance": 0.07185748864501504
+        },
+        "radial_distance": {
+          "mae": 0.24173010148791366,
+          "mean_error": 0.20342854089946025,
+          "num_samples": 60,
+          "rmse": 0.2699605409993234,
+          "variance": 0.031495522444164
+        },
+        "speed_rel": {
+          "mae": 0.12060089352844465,
+          "mean_error": -0.08263169254081008,
+          "num_samples": 60,
+          "rmse": 0.14430961236522277,
+          "variance": 0.013997267608841898
+        },
+        "vx_rel": {
+          "mae": 0.30106275777022046,
+          "mean_error": 0.21650125086307526,
+          "num_samples": 60,
+          "rmse": 0.313816532150373,
+          "variance": 0.05160802422560981
+        },
+        "vy_rel": {
+          "mae": 0.25214915176232655,
+          "mean_error": -0.22877037823200225,
+          "num_samples": 60,
+          "rmse": 0.3164206862697996,
+          "variance": 0.04778616474303757
+        },
+        "x_rel": {
+          "mae": 0.1802119434977894,
+          "mean_error": 0.14169255118122442,
+          "num_samples": 60,
+          "rmse": 0.18585579092939153,
+          "variance": 0.0144655959617458
+        },
+        "y_rel": {
+          "mae": 0.16625310720378508,
+          "mean_error": -0.13439889634694915,
+          "num_samples": 60,
+          "rmse": 0.20783508893597086,
+          "variance": 0.025132360853744935
+        }
+      },
+      "step_9": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.37592410688712835,
+          "mean_error": 0.3232450414187353,
+          "num_samples": 60,
+          "rmse": 0.4234621105760544,
+          "variance": 0.07483280229172663
+        },
+        "radial_distance": {
+          "mae": 0.27982771332166245,
+          "mean_error": 0.2355684399106979,
+          "num_samples": 60,
+          "rmse": 0.3108420128243788,
+          "variance": 0.041130267054751174
+        },
+        "speed_rel": {
+          "mae": 0.11788214045656707,
+          "mean_error": -0.07260899283110517,
+          "num_samples": 60,
+          "rmse": 0.145485277617653,
+          "variance": 0.015893900163538085
+        },
+        "vx_rel": {
+          "mae": 0.3146686707933744,
+          "mean_error": 0.21316108653942745,
+          "num_samples": 60,
+          "rmse": 0.32998364347155235,
+          "variance": 0.06345155614409129
+        },
+        "vy_rel": {
+          "mae": 0.2566534439722697,
+          "mean_error": -0.23906450271606444,
+          "num_samples": 60,
+          "rmse": 0.32039155682863796,
+          "variance": 0.04549891322819918
+        },
+        "x_rel": {
+          "mae": 0.21167880869050257,
+          "mean_error": 0.1630086598827897,
+          "num_samples": 60,
+          "rmse": 0.21806556641853908,
+          "variance": 0.020980768060655266
+        },
+        "y_rel": {
+          "mae": 0.19111851993313883,
+          "mean_error": -0.1583053469656943,
+          "num_samples": 60,
+          "rmse": 0.23725409022818178,
+          "variance": 0.03122892045207336
+        }
+      }
+    },
+    "dyn_02": {
+      "step_1": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.07510215227142886,
+          "mean_error": -0.04551531055140645,
+          "num_samples": 60,
+          "rmse": 0.09562665689949124,
+          "variance": 0.007072814015182043
+        },
+        "radial_distance": {
+          "mae": 0.007062862622129362,
+          "mean_error": -0.0041034074070675905,
+          "num_samples": 60,
+          "rmse": 0.008670809168648383,
+          "variance": 5.834497929073967e-05
+        },
+        "speed_rel": {
+          "mae": 0.07155469901539258,
+          "mean_error": -0.05299433706155363,
+          "num_samples": 60,
+          "rmse": 0.14560923274837925,
+          "variance": 0.01839364890097812
+        },
+        "vx_rel": {
+          "mae": 0.07724404335021973,
+          "mean_error": -0.05027111371358236,
+          "num_samples": 60,
+          "rmse": 0.1201384256789638,
+          "variance": 0.011906056450615982
+        },
+        "vy_rel": {
+          "mae": 0.10529925425847371,
+          "mean_error": 0.013516485691070557,
+          "num_samples": 60,
+          "rmse": 0.13529233768434865,
+          "variance": 0.018121321250658913
+        },
+        "x_rel": {
+          "mae": 0.007724401995038062,
+          "mean_error": -0.005027112367064242,
+          "num_samples": 60,
+          "rmse": 0.0120138241206532,
+          "variance": 0.00011906011125089846
+        },
+        "y_rel": {
+          "mae": 0.010529928620576919,
+          "mean_error": 0.0013516447159641028,
+          "num_samples": 60,
+          "rmse": 0.013529244047423884,
+          "variance": 0.00018121350105656088
+        }
+      },
+      "step_10": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.13586433403652481,
+          "mean_error": -0.08069347320782332,
+          "num_samples": 60,
+          "rmse": 0.1609436529902658,
+          "variance": 0.0193914228195094
+        },
+        "radial_distance": {
+          "mae": 0.10742078974819101,
+          "mean_error": -0.05206860768977159,
+          "num_samples": 60,
+          "rmse": 0.1186673952958205,
+          "variance": 0.01137081079954318
+        },
+        "speed_rel": {
+          "mae": 0.19464346774862953,
+          "mean_error": -0.0639981482239312,
+          "num_samples": 60,
+          "rmse": 0.32003855311189394,
+          "variance": 0.0983289125018623
+        },
+        "vx_rel": {
+          "mae": 0.19584278265635172,
+          "mean_error": 0.044797301292419434,
+          "num_samples": 60,
+          "rmse": 0.3021854934748362,
+          "variance": 0.08930927426354647
+        },
+        "vy_rel": {
+          "mae": 0.17760849992434183,
+          "mean_error": 0.02168642481168111,
+          "num_samples": 60,
+          "rmse": 0.2522294912947853,
+          "variance": 0.06314941525771346
+        },
+        "x_rel": {
+          "mae": 0.10263530500764581,
+          "mean_error": -0.004007365530107092,
+          "num_samples": 60,
+          "rmse": 0.12392465818598894,
+          "variance": 0.015341261928022303
+        },
+        "y_rel": {
+          "mae": 0.17808107795304198,
+          "mean_error": 0.011458965831395745,
+          "num_samples": 60,
+          "rmse": 0.2499995888712288,
+          "variance": 0.06236848653785834
+        }
+      },
+      "step_2": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.10718758985977918,
+          "mean_error": -0.05804312950475173,
+          "num_samples": 60,
+          "rmse": 0.13568178777785905,
+          "variance": 0.0150405426518906
+        },
+        "radial_distance": {
+          "mae": 0.016898130040710117,
+          "mean_error": -0.009164525248837692,
+          "num_samples": 60,
+          "rmse": 0.020242996024350632,
+          "variance": 0.000325790365005292
+        },
+        "speed_rel": {
+          "mae": 0.12334639568664621,
+          "mean_error": -0.0885240971845925,
+          "num_samples": 60,
+          "rmse": 0.2450017618639378,
+          "variance": 0.052189347534086515
+        },
+        "vx_rel": {
+          "mae": 0.10231979688008626,
+          "mean_error": -0.05676086743672689,
+          "num_samples": 60,
+          "rmse": 0.158324030890036,
+          "variance": 0.021844702685099384
+        },
+        "vy_rel": {
+          "mae": 0.16596632401148478,
+          "mean_error": 0.0003545363744099935,
+          "num_samples": 60,
+          "rmse": 0.2346518281895399,
+          "variance": 0.05506135477665256
+        },
+        "x_rel": {
+          "mae": 0.01786455808074585,
+          "mean_error": -0.01070319576218551,
+          "num_samples": 60,
+          "rmse": 0.02747055954665646,
+          "variance": 0.0006400732422827324
+        },
+        "y_rel": {
+          "mae": 0.026856597498136795,
+          "mean_error": 0.0013870998462146415,
+          "num_samples": 60,
+          "rmse": 0.03675026429001024,
+          "variance": 0.0013486578794022336
+        }
+      },
+      "step_3": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.12070475919657854,
+          "mean_error": -0.0578061484995573,
+          "num_samples": 60,
+          "rmse": 0.14225887331174297,
+          "variance": 0.01689603623157367
+        },
+        "radial_distance": {
+          "mae": 0.02793572946931427,
+          "mean_error": -0.014252272060513176,
+          "num_samples": 60,
+          "rmse": 0.03271215019780054,
+          "variance": 0.0008669575116765777
+        },
+        "speed_rel": {
+          "mae": 0.133898838266466,
+          "mean_error": -0.08144110247117002,
+          "num_samples": 60,
+          "rmse": 0.23522406410140045,
+          "variance": 0.048697707160660145
+        },
+        "vx_rel": {
+          "mae": 0.10278932253519694,
+          "mean_error": -0.04130434989929199,
+          "num_samples": 60,
+          "rmse": 0.13633278277114308,
+          "variance": 0.016880578337520546
+        },
+        "vy_rel": {
+          "mae": 0.1800995171070099,
+          "mean_error": 0.012410849332809448,
+          "num_samples": 60,
+          "rmse": 0.24163035439688704,
+          "variance": 0.058231198984803535
+        },
+        "x_rel": {
+          "mae": 0.027689194139278832,
+          "mean_error": -0.014833638098807118,
+          "num_samples": 60,
+          "rmse": 0.040208400233252846,
+          "variance": 0.001396678630071066
+        },
+        "y_rel": {
+          "mae": 0.04471271460776764,
+          "mean_error": 0.0026281860211091043,
+          "num_samples": 60,
+          "rmse": 0.06073529586642851,
+          "variance": 0.003681868802221054
+        }
+      },
+      "step_4": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.1243599296532328,
+          "mean_error": -0.05386482033648422,
+          "num_samples": 60,
+          "rmse": 0.13836217043359375,
+          "variance": 0.016242671337213122
+        },
+        "radial_distance": {
+          "mae": 0.03925358085796978,
+          "mean_error": -0.01888844303974951,
+          "num_samples": 60,
+          "rmse": 0.04461956900247649,
+          "variance": 0.0016341326575008987
+        },
+        "speed_rel": {
+          "mae": 0.1534907485520337,
+          "mean_error": -0.08417251782246275,
+          "num_samples": 60,
+          "rmse": 0.25856464495530523,
+          "variance": 0.05977066286429023
+        },
+        "vx_rel": {
+          "mae": 0.10682471593221028,
+          "mean_error": -0.022980213165283203,
+          "num_samples": 60,
+          "rmse": 0.1237541057165372,
+          "variance": 0.014786988484578009
+        },
+        "vy_rel": {
+          "mae": 0.19668954412142436,
+          "mean_error": 0.007851562897364299,
+          "num_samples": 60,
+          "rmse": 0.2723605671075411,
+          "variance": 0.07411863147521013
+        },
+        "x_rel": {
+          "mae": 0.03630604126258996,
+          "mean_error": -0.01713165829236833,
+          "num_samples": 60,
+          "rmse": 0.04967112223179354,
+          "variance": 0.002173726667919303
+        },
+        "y_rel": {
+          "mae": 0.0640092250063772,
+          "mean_error": 0.0034133436470879463,
+          "num_samples": 60,
+          "rmse": 0.08777043755503383,
+          "variance": 0.007691998793748976
+        }
+      },
+      "step_5": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.12655518480399947,
+          "mean_error": -0.05315830591871123,
+          "num_samples": 60,
+          "rmse": 0.13784296461249937,
+          "variance": 0.016174877405015463
+        },
+        "radial_distance": {
+          "mae": 0.05061990566131344,
+          "mean_error": -0.023437740059931503,
+          "num_samples": 60,
+          "rmse": 0.0564260827764428,
+          "variance": 0.002634575158377056
+        },
+        "speed_rel": {
+          "mae": 0.16440931573706125,
+          "mean_error": -0.0803919331488608,
+          "num_samples": 60,
+          "rmse": 0.26684302686013267,
+          "variance": 0.06474233806846658
+        },
+        "vx_rel": {
+          "mae": 0.11521573861440022,
+          "mean_error": -0.007161180178324382,
+          "num_samples": 60,
+          "rmse": 0.1342616375836209,
+          "variance": 0.01797490482508913
+        },
+        "vy_rel": {
+          "mae": 0.20186346570650737,
+          "mean_error": 0.008570712804794312,
+          "num_samples": 60,
+          "rmse": 0.2813966787789253,
+          "variance": 0.07911063370982738
+        },
+        "x_rel": {
+          "mae": 0.04533842264056553,
+          "mean_error": -0.017847789663641155,
+          "num_samples": 60,
+          "rmse": 0.05718471630781892,
+          "variance": 0.002951548183328155
+        },
+        "y_rel": {
+          "mae": 0.08369513523597853,
+          "mean_error": 0.004270420202499361,
+          "num_samples": 60,
+          "rmse": 0.11565502885928347,
+          "variance": 0.013357849211735778
+        }
+      },
+      "step_6": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.1271375549369129,
+          "mean_error": -0.054443167034180846,
+          "num_samples": 60,
+          "rmse": 0.13744343905843137,
+          "variance": 0.015926640503497024
+        },
+        "radial_distance": {
+          "mae": 0.0617827043284762,
+          "mean_error": -0.02808411485326241,
+          "num_samples": 60,
+          "rmse": 0.06813128760523336,
+          "variance": 0.0038531548436557903
+        },
+        "speed_rel": {
+          "mae": 0.17379866548911516,
+          "mean_error": -0.07736326263216224,
+          "num_samples": 60,
+          "rmse": 0.2785224808023138,
+          "variance": 0.07158969790718235
+        },
+        "vx_rel": {
+          "mae": 0.12911991278330484,
+          "mean_error": 0.007238268852233887,
+          "num_samples": 60,
+          "rmse": 0.16068360160315703,
+          "variance": 0.025766827288184874
+        },
+        "vy_rel": {
+          "mae": 0.20395962794621786,
+          "mean_error": 0.008419966697692871,
+          "num_samples": 60,
+          "rmse": 0.2872014241871184,
+          "variance": 0.0824137622159189
+        },
+        "x_rel": {
+          "mae": 0.05445621119326908,
+          "mean_error": -0.017123956983220164,
+          "num_samples": 60,
+          "rmse": 0.06419987940780911,
+          "variance": 0.003828394613214056
+        },
+        "y_rel": {
+          "mae": 0.10367903239134413,
+          "mean_error": 0.005112417927667821,
+          "num_samples": 60,
+          "rmse": 0.1440531567928404,
+          "variance": 0.02072517516491552
+        }
+      },
+      "step_7": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.1283407072469962,
+          "mean_error": -0.05847746996178762,
+          "num_samples": 60,
+          "rmse": 0.14005628300002432,
+          "variance": 0.016196147914651123
+        },
+        "radial_distance": {
+          "mae": 0.07307057110928775,
+          "mean_error": -0.033108047942231336,
+          "num_samples": 60,
+          "rmse": 0.08002254864292589,
+          "variance": 0.005307465452764351
+        },
+        "speed_rel": {
+          "mae": 0.18029461717376585,
+          "mean_error": -0.07319858031042022,
+          "num_samples": 60,
+          "rmse": 0.2875722483514806,
+          "variance": 0.07733976586246456
+        },
+        "vx_rel": {
+          "mae": 0.14905432860056558,
+          "mean_error": 0.019019405047098797,
+          "num_samples": 60,
+          "rmse": 0.19501721795913152,
+          "variance": 0.03766997753217381
+        },
+        "vy_rel": {
+          "mae": 0.20118231972058614,
+          "mean_error": 0.010912046829859415,
+          "num_samples": 60,
+          "rmse": 0.2844744868030996,
+          "variance": 0.08080666087586987
+        },
+        "x_rel": {
+          "mae": 0.06446458927721913,
+          "mean_error": -0.015222010394647264,
+          "num_samples": 60,
+          "rmse": 0.07292179111077782,
+          "variance": 0.005085878018349167
+        },
+        "y_rel": {
+          "mae": 0.1233411369323622,
+          "mean_error": 0.006203626401574495,
+          "num_samples": 60,
+          "rmse": 0.17208574454932987,
+          "variance": 0.029575018496566907
+        }
+      },
+      "step_8": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.12980216998885033,
+          "mean_error": -0.064013494909648,
+          "num_samples": 60,
+          "rmse": 0.14440881263535998,
+          "variance": 0.016756177636206977
+        },
+        "radial_distance": {
+          "mae": 0.08426635192841353,
+          "mean_error": -0.038651175004958516,
+          "num_samples": 60,
+          "rmse": 0.09225088659793078,
+          "variance": 0.007016312748840355
+        },
+        "speed_rel": {
+          "mae": 0.18614121474043163,
+          "mean_error": -0.06999932458502214,
+          "num_samples": 60,
+          "rmse": 0.2987711750591201,
+          "variance": 0.0843643096038481
+        },
+        "vx_rel": {
+          "mae": 0.16740870475769043,
+          "mean_error": 0.029491504033406574,
+          "num_samples": 60,
+          "rmse": 0.2320992925446171,
+          "variance": 0.0530003327895593
+        },
+        "vy_rel": {
+          "mae": 0.19597097237904867,
+          "mean_error": 0.013704160849253336,
+          "num_samples": 60,
+          "rmse": 0.27854953635783625,
+          "variance": 0.07740204018058332
+        },
+        "x_rel": {
+          "mae": 0.0753043739024528,
+          "mean_error": -0.012272858260018686,
+          "num_samples": 60,
+          "rmse": 0.08515401475058627,
+          "variance": 0.007100583178272554
+        },
+        "y_rel": {
+          "mae": 0.14246373491813322,
+          "mean_error": 0.007574044638250447,
+          "num_samples": 60,
+          "rmse": 0.1994139003568314,
+          "variance": 0.039708537503342065
+        }
+      },
+      "step_9": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.132533306579821,
+          "mean_error": -0.07166567841661943,
+          "num_samples": 60,
+          "rmse": 0.15176077348865236,
+          "variance": 0.017895362906959738
+        },
+        "radial_distance": {
+          "mae": 0.09567287669088452,
+          "mean_error": -0.04492427729884906,
+          "num_samples": 60,
+          "rmse": 0.10507490607345538,
+          "variance": 0.009022545195521588
+        },
+        "speed_rel": {
+          "mae": 0.19095220981698255,
+          "mean_error": -0.06710210657492705,
+          "num_samples": 60,
+          "rmse": 0.3098801922811844,
+          "variance": 0.09152304086143097
+        },
+        "vx_rel": {
+          "mae": 0.18267583847045898,
+          "mean_error": 0.0378576914469401,
+          "num_samples": 60,
+          "rmse": 0.2678118511532458,
+          "variance": 0.07028998281643656
+        },
+        "vy_rel": {
+          "mae": 0.1881553848584493,
+          "mean_error": 0.01716280778249105,
+          "num_samples": 60,
+          "rmse": 0.2681877577341522,
+          "variance": 0.07163011142749356
+        },
+        "x_rel": {
+          "mae": 0.0876239286832254,
+          "mean_error": -0.008487093681839909,
+          "num_samples": 60,
+          "rmse": 0.10204664905035113,
+          "variance": 0.010341487823241203
+        },
+        "y_rel": {
+          "mae": 0.1608068816402364,
+          "mean_error": 0.009290325782128624,
+          "num_samples": 60,
+          "rmse": 0.22557481390401854,
+          "variance": 0.05079768651469452
+        }
+      }
+    },
+    "dyn_03": {
+      "step_1": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.03805227858223393,
+          "mean_error": -0.01400661042948024,
+          "num_samples": 60,
+          "rmse": 0.05695751406005005,
+          "variance": 0.003047973272177574
+        },
+        "radial_distance": {
+          "mae": 0.003625216010365717,
+          "mean_error": -0.001323863030284193,
+          "num_samples": 60,
+          "rmse": 0.005275290455862282,
+          "variance": 2.6076076070758446e-05
+        },
+        "speed_rel": {
+          "mae": 0.15424512300609447,
+          "mean_error": 0.11699612982183553,
+          "num_samples": 60,
+          "rmse": 0.15996417719444425,
+          "variance": 0.011900443592207759
+        },
+        "vx_rel": {
+          "mae": 0.1064157485961914,
+          "mean_error": -0.1064157485961914,
+          "num_samples": 60,
+          "rmse": 0.11794145573087589,
+          "variance": 0.002585875430630343
+        },
+        "vy_rel": {
+          "mae": 0.15988548596700033,
+          "mean_error": -0.15634214878082275,
+          "num_samples": 60,
+          "rmse": 0.1664610527579721,
+          "variance": 0.0032664145998874496
+        },
+        "x_rel": {
+          "mae": 0.01064157637005038,
+          "mean_error": -0.01064157637005038,
+          "num_samples": 60,
+          "rmse": 0.011794147503642164,
+          "variance": 2.5858767698054045e-05
+        },
+        "y_rel": {
+          "mae": 0.015988551871223257,
+          "mean_error": -0.01563421844724561,
+          "num_samples": 60,
+          "rmse": 0.016646107308080808,
+          "variance": 3.266410205594634e-05
+        }
+      },
+      "step_10": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.04832991366839083,
+          "mean_error": 0.02530332373382133,
+          "num_samples": 60,
+          "rmse": 0.05897341899566003,
+          "variance": 0.0028376059560591095
+        },
+        "radial_distance": {
+          "mae": 0.05214148505695485,
+          "mean_error": -0.01754477436324339,
+          "num_samples": 60,
+          "rmse": 0.0798168137783737,
+          "variance": 0.006062904654274465
+        },
+        "speed_rel": {
+          "mae": 0.44830558197157483,
+          "mean_error": 0.28167838961975444,
+          "num_samples": 60,
+          "rmse": 0.4635231724301466,
+          "variance": 0.13551101620092926
+        },
+        "vx_rel": {
+          "mae": 0.2814202308654785,
+          "mean_error": -0.18304864565531412,
+          "num_samples": 60,
+          "rmse": 0.29949739200019154,
+          "variance": 0.056191881138671664
+        },
+        "vy_rel": {
+          "mae": 0.4110252102216085,
+          "mean_error": -0.4110252102216085,
+          "num_samples": 60,
+          "rmse": 0.42015466668985874,
+          "variance": 0.0075882205035488265
+        },
+        "x_rel": {
+          "mae": 0.21073847955174344,
+          "mean_error": -0.20189645790997046,
+          "num_samples": 60,
+          "rmse": 0.22154740771814693,
+          "variance": 0.008321074150038358
+        },
+        "y_rel": {
+          "mae": 0.32339949643424526,
+          "mean_error": -0.32339949643424526,
+          "num_samples": 60,
+          "rmse": 0.32448426496906835,
+          "variance": 0.0007028039185931474
+        }
+      },
+      "step_2": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.08433193064939239,
+          "mean_error": -0.052811387403249845,
+          "num_samples": 60,
+          "rmse": 0.1778678084598968,
+          "variance": 0.028847914646870382
+        },
+        "radial_distance": {
+          "mae": 0.01156729286482141,
+          "mean_error": -0.0064728379297427285,
+          "num_samples": 60,
+          "rmse": 0.021565909559730315,
+          "variance": 0.0004231908242737513
+        },
+        "speed_rel": {
+          "mae": 0.24600289682800133,
+          "mean_error": 0.18159856659980453,
+          "num_samples": 60,
+          "rmse": 0.2594268909076006,
+          "variance": 0.03432427233488045
+        },
+        "vx_rel": {
+          "mae": 0.19082156817118326,
+          "mean_error": -0.19082156817118326,
+          "num_samples": 60,
+          "rmse": 0.24367265717384204,
+          "variance": 0.022963492974851212
+        },
+        "vy_rel": {
+          "mae": 0.23501724004745483,
+          "mean_error": -0.22119098901748657,
+          "num_samples": 60,
+          "rmse": 0.24590804064442226,
+          "variance": 0.011545310831044967
+        },
+        "x_rel": {
+          "mae": 0.029723738684409657,
+          "mean_error": -0.029723738684409657,
+          "num_samples": 60,
+          "rmse": 0.03564137620774024,
+          "variance": 0.0003868070566026005
+        },
+        "y_rel": {
+          "mae": 0.038618388060691296,
+          "mean_error": -0.037753314176617314,
+          "num_samples": 60,
+          "rmse": 0.041010012157783916,
+          "variance": 0.0002565083658632101
+        }
+      },
+      "step_3": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.07922923199837635,
+          "mean_error": -0.04476356273310954,
+          "num_samples": 60,
+          "rmse": 0.14999173915486425,
+          "variance": 0.020493745266139802
+        },
+        "radial_distance": {
+          "mae": 0.018781471485895217,
+          "mean_error": -0.010821886147794587,
+          "num_samples": 60,
+          "rmse": 0.03536750017604456,
+          "variance": 0.0011337468489066836
+        },
+        "speed_rel": {
+          "mae": 0.3047563974395479,
+          "mean_error": 0.22329527751677655,
+          "num_samples": 60,
+          "rmse": 0.3133332700690764,
+          "variance": 0.04831695717088651
+        },
+        "vx_rel": {
+          "mae": 0.21350963910420737,
+          "mean_error": -0.21350963910420737,
+          "num_samples": 60,
+          "rmse": 0.2469361411485107,
+          "variance": 0.015391091814908326
+        },
+        "vy_rel": {
+          "mae": 0.2813533862431844,
+          "mean_error": -0.2813533862431844,
+          "num_samples": 60,
+          "rmse": 0.2893231452786901,
+          "variance": 0.004548154443447491
+        },
+        "x_rel": {
+          "mae": 0.0510747034177526,
+          "mean_error": -0.0510747034177526,
+          "num_samples": 60,
+          "rmse": 0.06024467218187523,
+          "variance": 0.0010207951970902214
+        },
+        "y_rel": {
+          "mae": 0.06614361293364138,
+          "mean_error": -0.06588865469184703,
+          "num_samples": 60,
+          "rmse": 0.069666484092732,
+          "variance": 0.0005121041887414261
+        }
+      },
+      "step_4": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.07644230382201804,
+          "mean_error": -0.04169458232908948,
+          "num_samples": 60,
+          "rmse": 0.13450892655908012,
+          "variance": 0.016354213128478793
+        },
+        "radial_distance": {
+          "mae": 0.02592476400074463,
+          "mean_error": -0.014956692903547878,
+          "num_samples": 60,
+          "rmse": 0.04766223704945096,
+          "variance": 0.002047986177947016
+        },
+        "speed_rel": {
+          "mae": 0.3350252897226072,
+          "mean_error": 0.26071469768409455,
+          "num_samples": 60,
+          "rmse": 0.3419362481087924,
+          "variance": 0.04894824418220882
+        },
+        "vx_rel": {
+          "mae": 0.22571873664855957,
+          "mean_error": -0.22571873664855957,
+          "num_samples": 60,
+          "rmse": 0.24620486820457102,
+          "variance": 0.009667889053408393
+        },
+        "vy_rel": {
+          "mae": 0.3099008560180664,
+          "mean_error": -0.3099008560180664,
+          "num_samples": 60,
+          "rmse": 0.31547216059159777,
+          "variance": 0.003484143547600525
+        },
+        "x_rel": {
+          "mae": 0.07364656657426273,
+          "mean_error": -0.07364656657426273,
+          "num_samples": 60,
+          "rmse": 0.08434990855617011,
+          "variance": 0.0016910903052569477
+        },
+        "y_rel": {
+          "mae": 0.09687874097095146,
+          "mean_error": -0.09687874097095146,
+          "num_samples": 60,
+          "rmse": 0.10093106480897224,
+          "variance": 0.0008015893913562457
+        }
+      },
+      "step_5": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.0705230182592438,
+          "mean_error": -0.035666906299107105,
+          "num_samples": 60,
+          "rmse": 0.11945594799851517,
+          "variance": 0.012997595307274672
+        },
+        "radial_distance": {
+          "mae": 0.032476413238637286,
+          "mean_error": -0.018510182247707972,
+          "num_samples": 60,
+          "rmse": 0.05817779336320661,
+          "variance": 0.0030420287937686034
+        },
+        "speed_rel": {
+          "mae": 0.3624482991250258,
+          "mean_error": 0.28233517199332897,
+          "num_samples": 60,
+          "rmse": 0.3677210463824228,
+          "variance": 0.05550561860808128
+        },
+        "vx_rel": {
+          "mae": 0.2342855135599772,
+          "mean_error": -0.2321619987487793,
+          "num_samples": 60,
+          "rmse": 0.2497246026799154,
+          "variance": 0.008463183520613407
+        },
+        "vy_rel": {
+          "mae": 0.33450114727020264,
+          "mean_error": -0.33450114727020264,
+          "num_samples": 60,
+          "rmse": 0.3369892575188114,
+          "variance": 0.0016707421579980064
+        },
+        "x_rel": {
+          "mae": 0.09686277038265659,
+          "mean_error": -0.09686277038265659,
+          "num_samples": 60,
+          "rmse": 0.10815502052538359,
+          "variance": 0.0023151121786428894
+        },
+        "y_rel": {
+          "mae": 0.13032885716030124,
+          "mean_error": -0.13032885716030124,
+          "num_samples": 60,
+          "rmse": 0.13420845169614043,
+          "variance": 0.0010262974979650516
+        }
+      },
+      "step_6": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.06483800503274639,
+          "mean_error": -0.025103418386537322,
+          "num_samples": 60,
+          "rmse": 0.10227519111234717,
+          "variance": 0.009830033102377598
+        },
+        "radial_distance": {
+          "mae": 0.03812059549465111,
+          "mean_error": -0.021001774965187233,
+          "num_samples": 60,
+          "rmse": 0.0664747438258143,
+          "variance": 0.00397781701501927
+        },
+        "speed_rel": {
+          "mae": 0.3850111799264641,
+          "mean_error": 0.29533528929663644,
+          "num_samples": 60,
+          "rmse": 0.3896283322794183,
+          "variance": 0.06458730421091281
+        },
+        "vx_rel": {
+          "mae": 0.242818554242452,
+          "mean_error": -0.23079081376393637,
+          "num_samples": 60,
+          "rmse": 0.25407886419317793,
+          "variance": 0.011291669511875414
+        },
+        "vy_rel": {
+          "mae": 0.3549776355425517,
+          "mean_error": -0.3549776355425517,
+          "num_samples": 60,
+          "rmse": 0.356259201028422,
+          "variance": 0.0009114965820289771
+        },
+        "x_rel": {
+          "mae": 0.11994185872588134,
+          "mean_error": -0.11994185872588134,
+          "num_samples": 60,
+          "rmse": 0.13137296610962318,
+          "variance": 0.002872806749820927
+        },
+        "y_rel": {
+          "mae": 0.16582661952739913,
+          "mean_error": -0.16582661952739913,
+          "num_samples": 60,
+          "rmse": 0.16923117823296316,
+          "variance": 0.0011407239422321599
+        }
+      },
+      "step_7": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.058492734584309175,
+          "mean_error": -0.01268949546126449,
+          "num_samples": 60,
+          "rmse": 0.08577009671351123,
+          "variance": 0.0071954861951836185
+        },
+        "radial_distance": {
+          "mae": 0.04267024678556329,
+          "mean_error": -0.02220701541882848,
+          "num_samples": 60,
+          "rmse": 0.07257543789676409,
+          "variance": 0.004774042652094976
+        },
+        "speed_rel": {
+          "mae": 0.4052594599439096,
+          "mean_error": 0.2997359314053858,
+          "num_samples": 60,
+          "rmse": 0.41046914157928355,
+          "variance": 0.07864328761337971
+        },
+        "vx_rel": {
+          "mae": 0.2508419354756673,
+          "mean_error": -0.22434059778849283,
+          "num_samples": 60,
+          "rmse": 0.26149831732876905,
+          "variance": 0.01805266614967927
+        },
+        "vy_rel": {
+          "mae": 0.37333027919133505,
+          "mean_error": -0.37333027919133505,
+          "num_samples": 60,
+          "rmse": 0.3752055809891067,
+          "variance": 0.0014037306442929616
+        },
+        "x_rel": {
+          "mae": 0.14246962086287124,
+          "mean_error": -0.14237592749545736,
+          "num_samples": 60,
+          "rmse": 0.15411778719472788,
+          "variance": 0.0034813875996076945
+        },
+        "y_rel": {
+          "mae": 0.20315964352256546,
+          "mean_error": -0.20315964352256546,
+          "num_samples": 60,
+          "rmse": 0.2059050187841188,
+          "variance": 0.0011230360042724268
+        }
+      },
+      "step_8": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.05251757184247984,
+          "mean_error": 0.0007150300976862279,
+          "num_samples": 60,
+          "rmse": 0.07184518383590899,
+          "variance": 0.00516121917237496
+        },
+        "radial_distance": {
+          "mae": 0.046214519669942236,
+          "mean_error": -0.02199190486892457,
+          "num_samples": 60,
+          "rmse": 0.07660188114044937,
+          "variance": 0.005384204314491706
+        },
+        "speed_rel": {
+          "mae": 0.42385661697279947,
+          "mean_error": 0.2969722308932075,
+          "num_samples": 60,
+          "rmse": 0.43160860775302085,
+          "variance": 0.09809348436481242
+        },
+        "vx_rel": {
+          "mae": 0.2608946959177653,
+          "mean_error": -0.21319150924682617,
+          "num_samples": 60,
+          "rmse": 0.27377346774895284,
+          "variance": 0.029501292028347354
+        },
+        "vy_rel": {
+          "mae": 0.38962146441141765,
+          "mean_error": -0.38962146441141765,
+          "num_samples": 60,
+          "rmse": 0.3938459331157538,
+          "variance": 0.003309733501721187
+        },
+        "x_rel": {
+          "mae": 0.1654985571805551,
+          "mean_error": -0.16369507488692847,
+          "num_samples": 60,
+          "rmse": 0.176622548022023,
+          "variance": 0.004399446927554703
+        },
+        "y_rel": {
+          "mae": 0.24212179026617697,
+          "mean_error": -0.24212179026617697,
+          "num_samples": 60,
+          "rmse": 0.24416598654489874,
+          "variance": 0.000994067663745067
+        }
+      },
+      "step_9": {
+        "num_samples": 60,
+        "radial_closing_speed": {
+          "mae": 0.04780086518605718,
+          "mean_error": 0.013739769543122584,
+          "num_samples": 60,
+          "rmse": 0.06124477406824975,
+          "variance": 0.0035621410835728383
+        },
+        "radial_distance": {
+          "mae": 0.04948875375450609,
+          "mean_error": -0.02039178085083231,
+          "num_samples": 60,
+          "rmse": 0.0788904140011291,
+          "variance": 0.005807872695001174
+        },
+        "speed_rel": {
+          "mae": 0.4377299388681014,
+          "mean_error": 0.2909678556149169,
+          "num_samples": 60,
+          "rmse": 0.4487200093630546,
+          "variance": 0.11668735380163668
+        },
+        "vx_rel": {
+          "mae": 0.27100904782613117,
+          "mean_error": -0.19896523157755533,
+          "num_samples": 60,
+          "rmse": 0.28666204179691407,
+          "variance": 0.04258796283046549
+        },
+        "vy_rel": {
+          "mae": 0.40175182819366456,
+          "mean_error": -0.40175182819366456,
+          "num_samples": 60,
+          "rmse": 0.4083944313860985,
+          "variance": 0.00538148013022294
+        },
+        "x_rel": {
+          "mae": 0.1884056422662766,
+          "mean_error": -0.1835915923557647,
+          "num_samples": 60,
+          "rmse": 0.19904043889157075,
+          "variance": 0.005911223530423829
+        },
+        "y_rel": {
+          "mae": 0.2822969748137861,
+          "mean_error": -0.2822969748137861,
+          "num_samples": 60,
+          "rmse": 0.2837675597575959,
+          "variance": 0.0008324459817653592
+        }
+      }
+    }
+  },
+  "pooled_clearance_bias_by_horizon": [
+    0.011717814092001677,
+    0.029553526881674744,
+    0.051857107259289166,
+    0.07886275860085729,
+    0.10861667422837872,
+    0.13971981018062873,
+    0.17141687878397224,
+    0.20342858781300838,
+    0.23556850154611245,
+    0.2678354807930348
+  ],
+  "pooled_clearance_mae_by_horizon": [
+    0.014257898496156048,
+    0.03634686203490684,
+    0.0649853917496486,
+    0.09719635126943788,
+    0.1317163672584958,
+    0.16750425019885748,
+    0.20425183471482106,
+    0.2417301279166913,
+    0.27982775249987824,
+    0.3183267722536247
+  ],
+  "pooled_false_negative_rate_by_horizon": [
+    0.016666666666666666,
+    0.03333333333333333,
+    0.05,
+    0.06666666666666667,
+    0.08333333333333333,
+    0.1,
+    0.11666666666666667,
+    0.13333333333333333,
+    0.15,
+    0.16666666666666666
+  ],
+  "seed": 1642826
+}

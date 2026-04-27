@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -9,6 +11,7 @@ import numpy as np
 import torch
 
 from controllers.baseline_structured_controller import (
+    LearnedClearanceCalibrationConfig,
     StructuredControllerConfig,
     dynamic_clearances_from_positions,
     expert_style_rollout_cost,
@@ -22,6 +25,8 @@ from sim2d.dynamics import disk_collides_with_occupancy, minimum_static_clearanc
 from sim2d.obstacles import DynamicObstacle
 from sim2d.waypoint import compute_local_subgoal
 
+_ACTION_FAMILIES = {"stop", "forward", "forward_left", "forward_right", "slow_left", "slow_right"}
+
 
 def resolve_device(name: str) -> torch.device:
     if name == "auto":
@@ -34,6 +39,8 @@ def clone_hidden_state(hidden):
         return None
     if torch.is_tensor(hidden):
         return hidden.clone()
+    if isinstance(hidden, dict):
+        return {key: clone_hidden_state(value) for key, value in hidden.items()}
     if isinstance(hidden, (tuple, list)):
         return tuple(x.clone() for x in hidden)
     raise TypeError(f"Unsupported hidden state type: {type(hidden)!r}")
@@ -44,9 +51,15 @@ def detach_hidden_state(hidden):
         return None
     if torch.is_tensor(hidden):
         return hidden.detach()
+    if isinstance(hidden, dict):
+        return {key: detach_hidden_state(value) for key, value in hidden.items()}
     if isinstance(hidden, (tuple, list)):
         return tuple(x.detach() for x in hidden)
     raise TypeError(f"Unsupported hidden state type: {type(hidden)!r}")
+
+
+def _safe_action_family(action_name: str) -> str:
+    return action_name if action_name in _ACTION_FAMILIES else "unknown"
 
 
 class LearnedStructuredController:
@@ -78,6 +91,14 @@ class LearnedStructuredController:
         self.h_real = None
         self.canonical_ids: list[str] | None = None
         self.current_true_state: dict[str, np.ndarray] | None = None
+        self.clearance_calibration_cfg = controller_cfg.learned_clearance_calibration
+        self.clearance_calibration_by_action_family: dict[str, dict[str, dict[str, float]]] = {}
+        self.clearance_calibration_global_by_step: dict[str, dict[str, float]] = {}
+        if self.clearance_calibration_cfg.enabled:
+            (
+                self.clearance_calibration_by_action_family,
+                self.clearance_calibration_global_by_step,
+            ) = self._load_clearance_calibration(self.clearance_calibration_cfg)
 
     def reset(self) -> None:
         self.h_real = None
@@ -149,6 +170,16 @@ class LearnedStructuredController:
                 "min_clearance_clip": float(self.controller_cfg.min_clearance_clip),
                 "static_collision_penalty": float(self.controller_cfg.static_collision_penalty),
                 "dynamic_collision_penalty": float(self.controller_cfg.dynamic_collision_penalty),
+                "learned_clearance_calibration": {
+                    "enabled": bool(self.clearance_calibration_cfg.enabled),
+                    "summary_json_path": self.clearance_calibration_cfg.summary_json_path,
+                    "alpha_bias": float(self.clearance_calibration_cfg.alpha_bias),
+                    "alpha_std": float(self.clearance_calibration_cfg.alpha_std),
+                    "use_action_family_specific": bool(self.clearance_calibration_cfg.use_action_family_specific),
+                    "fallback_to_global": bool(self.clearance_calibration_cfg.fallback_to_global),
+                    "clamp_min_clearance_adjustment": self.clearance_calibration_cfg.clamp_min_clearance_adjustment,
+                    "clamp_max_clearance_adjustment": self.clearance_calibration_cfg.clamp_max_clearance_adjustment,
+                },
                 "num_feasible_non_stop": int(len(feasible_non_stop)),
                 "num_feasible_all": int(len(feasible_all)),
                 "selection_mode": selection_mode,
@@ -242,6 +273,14 @@ class LearnedStructuredController:
         true_relative_velocities: list[list[list[float]]] = []
         true_dynamic_clearances: list[float] = []
         true_dynamic_collisions: list[bool] = []
+        calibrated_dynamic_clearances: list[float] = []
+        calibrated_dynamic_collisions: list[bool] = []
+        calibration_action_family: list[str] = []
+        calibration_step_keys: list[str] = []
+        calibration_signed_biases: list[float] = []
+        calibration_bias_terms: list[float] = []
+        calibration_std_terms: list[float] = []
+        calibration_adjustments: list[float] = []
         drift_per_obstacle: list[list[float]] = []
         drift_mean: list[float] = []
         drift_max: list[float] = []
@@ -255,7 +294,8 @@ class LearnedStructuredController:
         action_index_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
         action_cont_tensor = torch.tensor([[float(action["v"]), float(action["omega"])]], dtype=torch.float32, device=self.device)
 
-        for _ in range(int(self.controller_cfg.horizon)):
+        action_family = _safe_action_family(str(action["name"]))
+        for step_index in range(int(self.controller_cfg.horizon)):
             pose = unicycle_step(
                 pose,
                 float(action["v"]),
@@ -289,10 +329,31 @@ class LearnedStructuredController:
                 radii.astype(float),
                 self.config.robot_config.radius,
             )
+            raw_dynamic_clearance = float(np.min(predicted_clearances)) if predicted_clearances.size else float("inf")
+            raw_dynamic_collision = bool(np.any(predicted_clearances <= 0.0))
+            step_key = f"step_{step_index + 1}"
+            calibration_stats = self._lookup_clearance_calibration(action_family=action_family, step_key=step_key)
+            bias_term = float(self.clearance_calibration_cfg.alpha_bias) * max(
+                0.0, float(calibration_stats["signed_bias"])
+            )
+            std_term = float(self.clearance_calibration_cfg.alpha_std) * float(calibration_stats["std"])
+            adjustment = bias_term + std_term
+            adjustment = self._clamp_clearance_adjustment(adjustment)
+            calibrated_dynamic_clearance = raw_dynamic_clearance - adjustment
+            calibrated_dynamic_collision = bool(calibrated_dynamic_clearance <= 0.0)
+
             predicted_positions_robot.append(pos_rel_next.astype(float).tolist())
             predicted_velocities_robot.append(vel_rel_next.astype(float).tolist())
-            dynamic_clearances.append(float(np.min(predicted_clearances)) if predicted_clearances.size else float("inf"))
-            dynamic_collisions.append(bool(np.any(predicted_clearances <= 0.0)))
+            dynamic_clearances.append(raw_dynamic_clearance)
+            dynamic_collisions.append(raw_dynamic_collision)
+            calibrated_dynamic_clearances.append(calibrated_dynamic_clearance)
+            calibrated_dynamic_collisions.append(calibrated_dynamic_collision)
+            calibration_action_family.append(action_family)
+            calibration_step_keys.append(step_key)
+            calibration_signed_biases.append(float(calibration_stats["signed_bias"]))
+            calibration_bias_terms.append(bias_term)
+            calibration_std_terms.append(std_term)
+            calibration_adjustments.append(adjustment)
             planning_collisions.append(bool(planning_point_collision(pose[:2], planning_occupancy, resolution, origin)))
 
             static_clearance = float(
@@ -314,7 +375,7 @@ class LearnedStructuredController:
             )
             static_clearances.append(static_clearance)
             static_collisions.append(static_collision)
-            combined_clearances.append(float(min(static_clearance, dynamic_clearances[-1])))
+            combined_clearances.append(float(min(static_clearance, calibrated_dynamic_clearances[-1])))
             robot_rollout_world.append([float(value) for value in pose])
 
             for obstacle in true_obstacles:
@@ -337,7 +398,8 @@ class LearnedStructuredController:
             drift_mean.append(float(np.mean(drift)) if drift.size else 0.0)
             drift_max.append(float(np.max(drift)) if drift.size else 0.0)
 
-            pred_risk.append(float(outputs["pred_risk"][0].detach().cpu().item()))
+            risk_output = outputs.get("pred_risk")
+            pred_risk.append(float(risk_output[0].detach().cpu().item()) if risk_output is not None else float("nan"))
             collision_next_probs.append(float(torch.sigmoid(outputs["collision_next_logits"][0]).detach().cpu().item()))
             collision_within_3_probs.append(float(torch.sigmoid(outputs["collision_within_3_logits"][0]).detach().cpu().item()))
             collision_within_5_probs.append(float(torch.sigmoid(outputs["collision_within_5_logits"][0]).detach().cpu().item()))
@@ -350,7 +412,7 @@ class LearnedStructuredController:
             infeasible_reasons.append("planning_collision")
         if any(static_collisions):
             infeasible_reasons.append("static_collision")
-        if any(dynamic_collisions):
+        if any(calibrated_dynamic_collisions):
             infeasible_reasons.append("dynamic_collision")
         feasible = not bool(infeasible_reasons)
 
@@ -383,6 +445,14 @@ class LearnedStructuredController:
             "planning_collisions": planning_collisions,
             "dynamic_clearances": dynamic_clearances,
             "dynamic_collisions": dynamic_collisions,
+            "calibrated_dynamic_clearances": calibrated_dynamic_clearances,
+            "calibrated_dynamic_collisions": calibrated_dynamic_collisions,
+            "calibration_action_family": calibration_action_family,
+            "calibration_step_keys": calibration_step_keys,
+            "calibration_signed_biases": calibration_signed_biases,
+            "calibration_bias_terms": calibration_bias_terms,
+            "calibration_std_terms": calibration_std_terms,
+            "calibration_adjustments": calibration_adjustments,
             "combined_clearances": combined_clearances,
             "predicted_positions_robot": predicted_positions_robot,
             "predicted_relative_velocities": predicted_velocities_robot,
@@ -400,9 +470,107 @@ class LearnedStructuredController:
             "feasible": bool(feasible),
             "infeasible_reasons": infeasible_reasons,
             "min_static_clearance": float(np.min(static_clearances)) if static_clearances else float("inf"),
-            "min_dynamic_clearance": float(np.min(dynamic_clearances)) if dynamic_clearances else float("inf"),
+            "min_dynamic_clearance": float(np.min(calibrated_dynamic_clearances)) if calibrated_dynamic_clearances else float("inf"),
             "min_combined_clearance": float(np.min(combined_clearances)) if combined_clearances else float("inf"),
         }
+
+    def _load_clearance_calibration(
+        self,
+        calibration_cfg: LearnedClearanceCalibrationConfig,
+    ) -> tuple[dict[str, dict[str, dict[str, float]]], dict[str, dict[str, float]]]:
+        summary_path = calibration_cfg.summary_json_path
+        if not summary_path:
+            raise ValueError("learned clearance calibration is enabled but summary_json_path is not set")
+        path = Path(summary_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Learned clearance calibration summary not found: {path}")
+        try:
+            payload = json.loads(path.read_text())
+        except Exception as exc:
+            raise ValueError(f"Failed to parse learned clearance calibration summary JSON at {path}: {exc}") from exc
+
+        by_action_family: dict[str, dict[str, dict[str, float]]] = {}
+        global_by_step: dict[str, dict[str, float]] = {}
+
+        for action_family, family_payload in dict(payload.get("aggregate_by_action_family", {})).items():
+            step_payload = dict(dict(family_payload).get("per_horizon_step", {}))
+            normalized_steps = {
+                str(step_key): normalized
+                for step_key, normalized in (
+                    (step_key, self._normalize_clearance_stats(dict(dict(step_data).get("clearance_error", {}))))
+                    for step_key, step_data in step_payload.items()
+                )
+                if normalized is not None
+            }
+            if normalized_steps:
+                by_action_family[str(action_family)] = normalized_steps
+
+        for step_key, step_payload in dict(payload.get("aggregate_per_horizon_step", {})).items():
+            normalized = self._normalize_clearance_stats(dict(dict(step_payload).get("clearance_error", {})))
+            if normalized is not None:
+                global_by_step[str(step_key)] = normalized
+
+        bias_variance_by_horizon = dict(payload.get("bias_variance_by_horizon", {}))
+        clearance_horizon_block = dict(dict(bias_variance_by_horizon).get("clearance_error", {}))
+        horizon_mean_errors = payload.get("mean_signed_clearance_bias_by_horizon", [])
+        mean_error_series = clearance_horizon_block.get("mean_error", horizon_mean_errors)
+        variance_series = clearance_horizon_block.get("variance", [])
+        if isinstance(mean_error_series, list):
+            for idx, mean_error in enumerate(mean_error_series):
+                step_key = f"step_{idx + 1}"
+                if step_key in global_by_step:
+                    continue
+                variance = variance_series[idx] if isinstance(variance_series, list) and idx < len(variance_series) else 0.0
+                normalized = self._normalize_clearance_stats({"mean_error": mean_error, "variance": variance})
+                if normalized is not None:
+                    global_by_step[step_key] = normalized
+
+        if not by_action_family and not global_by_step:
+            raise ValueError(f"No usable learned clearance calibration stats found in {path}")
+        return by_action_family, global_by_step
+
+    def _normalize_clearance_stats(self, stats_block: dict[str, object]) -> dict[str, float] | None:
+        if not stats_block:
+            return None
+        try:
+            signed_bias = float(stats_block.get("mean_error", float("nan")))
+            variance = float(stats_block.get("variance", float("nan")))
+        except (TypeError, ValueError):
+            return None
+        if not np.isfinite(signed_bias) and not np.isfinite(variance):
+            return None
+        if not np.isfinite(signed_bias):
+            signed_bias = 0.0
+        if not np.isfinite(variance):
+            variance = 0.0
+        variance = max(0.0, variance)
+        return {
+            "signed_bias": signed_bias,
+            "variance": variance,
+            "std": math.sqrt(variance),
+        }
+
+    def _lookup_clearance_calibration(self, *, action_family: str, step_key: str) -> dict[str, float]:
+        zero_stats = {"signed_bias": 0.0, "variance": 0.0, "std": 0.0}
+        if not self.clearance_calibration_cfg.enabled:
+            return zero_stats
+        if self.clearance_calibration_cfg.use_action_family_specific:
+            action_steps = self.clearance_calibration_by_action_family.get(action_family, {})
+            if step_key in action_steps:
+                return dict(action_steps[step_key])
+        if self.clearance_calibration_cfg.fallback_to_global and step_key in self.clearance_calibration_global_by_step:
+            return dict(self.clearance_calibration_global_by_step[step_key])
+        return zero_stats
+
+    def _clamp_clearance_adjustment(self, adjustment: float) -> float:
+        clamped = float(adjustment)
+        min_adjustment = self.clearance_calibration_cfg.clamp_min_clearance_adjustment
+        max_adjustment = self.clearance_calibration_cfg.clamp_max_clearance_adjustment
+        if min_adjustment is not None:
+            clamped = max(float(min_adjustment), clamped)
+        if max_adjustment is not None:
+            clamped = min(float(max_adjustment), clamped)
+        return clamped
 
     def _current_state_for_decision(
         self,
