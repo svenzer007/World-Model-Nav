@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, _load_episode_cached, list_episode_paths, split_episode_paths
 from data.weighted_sampler import build_weighted_sampler
-from models import StructuredDynamicsConfig, StructuredDynamicsModel
+from models import FACTOR_MODEL_TYPE, LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 
 
 def load_yaml_config(path: str | Path) -> dict[str, Any]:
@@ -137,6 +137,23 @@ def compute_one_step_loss(
 
     loss_delta = masked_huber(outputs["pred_delta_rel_scaled"], target_delta_scaled, mask)
     dt = batch["dt"][:, None, None, None] + 1e-6
+
+    if "pred_next_rel_vel" in outputs:
+        loss_next_vel = masked_huber(outputs["pred_next_rel_vel"], batch["target_next_obstacle_vel"], mask)
+        consistency_target = outputs["pred_delta_rel"] / dt
+        loss_consistency = masked_huber(outputs["pred_next_rel_vel"], consistency_target, mask)
+        total = (
+            float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
+            + float(loss_cfg.get("lambda_vel", 0.1)) * loss_next_vel
+            + float(loss_cfg.get("lambda_consistency", 0.05)) * loss_consistency
+        )
+        return total, {
+            "loss_delta": loss_delta.detach(),
+            "loss_next_vel": loss_next_vel.detach(),
+            "loss_consistency": loss_consistency.detach(),
+            "loss_total_one_step": total.detach(),
+        }
+
     pred_vel = outputs["pred_delta_rel"] / dt
     target_vel = batch["delta_rel"] / dt
     loss_vel = masked_huber(pred_vel, target_vel, mask)
@@ -213,7 +230,7 @@ def compute_rollout_loss(
         )
         pred_delta = outputs["pred_delta_rel"]
         x_new = x_prev + pred_delta
-        v_pred = (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
+        v_pred = outputs["pred_next_rel_vel"] if "pred_next_rel_vel" in outputs else (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
 
         # Row-local targets are t -> t1 supervision. In contiguous sequence windows,
         # row i's t1 state corresponds to row i+1's t state, so rollout can
@@ -226,21 +243,29 @@ def compute_rollout_loss(
         )
         # Rollout velocity targets must use the same finite-difference robot-frame
         # convention as the predicted rollout velocity, especially during turning.
-        target_vel = (batch["obstacle_pos"][:, target_index + 1] - batch["obstacle_pos"][:, target_index]) / (
-            batch["dt"][:, None, None] + 1e-6
+        target_vel = (
+            batch["target_next_obstacle_vel"][:, target_index]
+            if "pred_next_rel_vel" in outputs
+            else (batch["obstacle_pos"][:, target_index + 1] - batch["obstacle_pos"][:, target_index]) / (batch["dt"][:, None, None] + 1e-6)
         )
         step_loss = step_loss + float(loss_cfg.get("lambda_vel", 0.1)) * masked_huber(
             v_pred[:, None], target_vel[:, None], mask[:, None]
         )
-        step_loss = step_loss + float(loss_cfg.get("lambda_risk", 0.5)) * masked_mse(
-            outputs["pred_risk"], batch["risk"][:, target_index], mask
-        )
-        step_loss = step_loss + float(loss_cfg.get("lambda_collision_next", 0.1)) * masked_bce(
-            outputs["collision_next_logits"],
-            batch["collision_next"][:, target_index],
-            mask,
-            pos_weights.get("collision_next"),
-        )
+        if "pred_next_rel_vel" in outputs:
+            consistency_target = pred_delta / (batch["dt"][:, None, None] + 1e-6)
+            step_loss = step_loss + float(loss_cfg.get("lambda_consistency", 0.05)) * masked_huber(
+                v_pred[:, None], consistency_target[:, None], mask[:, None]
+            )
+        else:
+            step_loss = step_loss + float(loss_cfg.get("lambda_risk", 0.5)) * masked_mse(
+                outputs["pred_risk"], batch["risk"][:, target_index], mask
+            )
+            step_loss = step_loss + float(loss_cfg.get("lambda_collision_next", 0.1)) * masked_bce(
+                outputs["collision_next_logits"],
+                batch["collision_next"][:, target_index],
+                mask,
+                pos_weights.get("collision_next"),
+            )
         losses.append(step_loss)
 
         x_prev = x_new.detach()
@@ -264,16 +289,24 @@ def compute_metrics(outputs: Mapping[str, torch.Tensor], batch: Mapping[str, tor
     denom = torch.clamp(torch.sum(mask_float) * delta_error.shape[-2] * delta_error.shape[-1], min=1.0)
     delta_mae = torch.sum(torch.abs(delta_error) * mask_float) / denom
     delta_rmse = torch.sqrt(torch.sum((delta_error**2) * mask_float) / denom)
+    metrics = {
+        "delta_mae": delta_mae.detach(),
+        "delta_rmse": delta_rmse.detach(),
+    }
+    if "pred_next_rel_vel" in outputs:
+        vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
+        vel_mae = torch.sum(torch.abs(vel_error) * mask_float) / denom
+        vel_rmse = torch.sqrt(torch.sum((vel_error**2) * mask_float) / denom)
+        metrics["next_vel_mae"] = vel_mae.detach()
+        metrics["next_vel_rmse"] = vel_rmse.detach()
+        return metrics
     risk_error = outputs["pred_risk"] - batch["risk"]
     risk_mask = batch["valid_mask"].to(risk_error.dtype)
     risk_mae = torch.sum(torch.abs(risk_error) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
     risk_mse = torch.sum((risk_error**2) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
-    return {
-        "delta_mae": delta_mae.detach(),
-        "delta_rmse": delta_rmse.detach(),
-        "risk_mae": risk_mae.detach(),
-        "risk_mse": risk_mse.detach(),
-    }
+    metrics["risk_mae"] = risk_mae.detach()
+    metrics["risk_mse"] = risk_mse.detach()
+    return metrics
 
 
 def run_epoch(
@@ -410,6 +443,12 @@ def load_checkpoint(
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     if "model_state_dict" not in checkpoint:
         raise KeyError(f"{path} does not look like a full training checkpoint")
+    checkpoint_model_cfg = normalize_model_config(checkpoint.get("config", {}).get("model", {}))
+    checkpoint_model_type = str(checkpoint_model_cfg.get("model_type", LEGACY_MODEL_TYPE))
+    if checkpoint_model_type != str(model.config.model_type):
+        raise ValueError(
+            f"Checkpoint model_type={checkpoint_model_type!r} is incompatible with current model_type={model.config.model_type!r}"
+        )
     model.load_state_dict(checkpoint["model_state_dict"])
     if load_optimizer and optimizer is not None and "optimizer_state_dict" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -467,7 +506,8 @@ def main() -> None:
     set_seed(int(config.get("seed", 0)))
 
     data_cfg = config["data"]
-    model_cfg = config["model"]
+    model_cfg = normalize_model_config(config["model"])
+    config["model"] = model_cfg
     training_cfg = config["training"]
     rollout_cfg = dict(config.get("rollout", {}))
     rollout_enabled = bool(rollout_cfg.get("enabled", False))

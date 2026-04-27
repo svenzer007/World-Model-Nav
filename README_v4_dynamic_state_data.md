@@ -1,190 +1,234 @@
-# V4 Dataset Requirements
+# V4 Dynamic-State Data For The Practical Longer-Horizon Branch
 
-This README is the shared dataset-format reference for:
+This README documents the structured dynamic-obstacle data used by the practical branch under `/home/stavan/s4/rnl/longer_horizons`.
 
-- training
-- checkpoint evaluation
-- policy-comparison-adjacent debugging
+For the training architecture and loss path, see [README_v4_training.md](./README_v4_training.md).
 
-The training and evaluation scripts in this repo consume episode pickle files and turn them into contiguous fixed-length sequence windows. The policy comparison runner does not read this dataset directly, but the learned checkpoint it uses was trained against this schema.
+## Purpose
 
-## Expected Directory Layout
+The practical branch predicts short-horizon dynamic-obstacle motion in the robot frame so the learned controller can roll that prediction forward while scoring candidate actions.
 
-The loader accepts either:
+The redesigned branch keeps the dynamic state intentionally small:
 
-- a dataset root containing `episodes/`
-- or the `episodes/` directory itself
+- robot-relative position
+- robot-relative finite-difference velocity
+- obstacle radius
 
-Expected file layout:
+The main design goal is better rollout behavior from cleaner target semantics, not a much larger model.
 
-```text
-<data_dir>/
-  episodes/
-    episode_000000.pkl
-    episode_000001.pkl
-    ...
-```
+## Current Stored Dynamic Fields
 
-The filename pattern must match:
+Each generated step stores a fixed obstacle ordering and fixed obstacle count.
 
-```text
-episode_*.pkl
-```
+Core retained practical fields:
 
-This is enforced by `list_episode_paths(...)` in `data/sequence_dataset.py`.
-
-## Split Behavior
-
-Train/validation splitting is deterministic and based on sorted filename order:
-
-- `split_episode_paths(paths, train_fraction=0.9)`
-
-That means collaborators should not expect a random split unless they rename or reshuffle the episode files externally.
-
-## Sequence Window Construction
-
-`StructuredSequenceDataset` builds contiguous windows from each episode:
-
-- default `sequence_length: 20`
-- default `stride: 1`
-
-Episodes shorter than `sequence_length` are skipped.
-
-Each dataset sample corresponds to one contiguous time window and returns tensors such as:
-
-- `obstacle_pos`
-- `obstacle_vel`
-- `radii`
-- `action_index`
-- `action_cont`
-- `delta_rel`
-- `risk`
-- `collision_next`
-- `collision_within_3`
-- `collision_within_5`
-- `valid_mask`
-- `dt`
-- `goal` when enabled
-- `lidar` when enabled
-
-## Required Per-Step Fields
-
-The current training/evaluation pipeline reads these fields from each episode step:
-
+- `dynamic_obstacle_ids`
 - `dynamic_obstacles_robot_t`
 - `dynamic_obstacles_robot_t1`
-- `dynamic_obstacle_rel_vel_robot_t`
+- `dynamic_obstacle_delta_robot_t`
 - `dynamic_obstacle_radii`
-- `action_index`
-- `v_t`
-- `omega_t`
-- `dynamic_risk_t1`
-- `dynamic_collision_t1`
-- `dynamic_collision_within_3`
-- `dynamic_collision_within_5`
+- `dynamic_obstacle_rel_vel_robot_fd_t`
+- `dynamic_obstacle_rel_vel_robot_fd_t1`
 
-Additional fields used conditionally:
+Legacy compatibility and inspection fields are still generated:
 
-- `goal_t` when `model.use_goal: true`
-- `lidar_t` when `model.use_lidar: true`
+- `dynamic_obstacles_world_t`
+- `dynamic_obstacles_world_t1`
+- `dynamic_obstacle_delta_world_t`
+- `dynamic_obstacle_vel_world_t`
+- `dynamic_obstacle_vel_robot_t`
+- `dynamic_obstacle_rel_vel_robot_t`
 
-Time step handling:
+The practical training path now uses the retained practical fields first and treats the older velocity-style fields as deprecated.
 
-- `dt` is taken from the step if present
-- otherwise it falls back to `episode["robot_config"]["dt"]`
-- otherwise it falls back again to `0.1`
+## Exact Field Semantics
 
-## Shapes And Meaning
+### Position fields
 
-For the current model path, the important structured dynamic-obstacle fields are:
+- `dynamic_obstacles_world_t`: obstacle center positions in the world frame at time `t`
+- `dynamic_obstacles_world_t1`: obstacle center positions in the world frame at time `t+1`
+- `dynamic_obstacles_robot_t`: obstacle center positions expressed in the robot frame at pose `robot_pose_t`
+- `dynamic_obstacles_robot_t1`: obstacle center positions expressed in the robot frame at pose `robot_pose_t1`
 
-- `dynamic_obstacles_robot_t`: `(N_dyn, 2)` robot-relative obstacle positions at time `t`
-- `dynamic_obstacles_robot_t1`: `(N_dyn, 2)` robot-relative obstacle positions at time `t+1`
-- `dynamic_obstacle_rel_vel_robot_t`: `(N_dyn, 2)` robot-relative obstacle velocities used as the model velocity input
-- `dynamic_obstacle_radii`: `(N_dyn,)` obstacle radii, constant across an episode
+### Delta fields
 
-The dataset code derives:
+- `dynamic_obstacle_delta_world_t = dynamic_obstacles_world_t1 - dynamic_obstacles_world_t`
+- `dynamic_obstacle_delta_robot_t = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t`
 
-- `delta_rel = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t`
-- `action_cont = [v_t, omega_t]`
+`dynamic_obstacle_delta_robot_t` is the direct practical target for position prediction.
 
-Risk/collision targets are scalar per step:
+### Radius field
 
-- `dynamic_risk_t1`
-- `dynamic_collision_t1`
-- `dynamic_collision_within_3`
-- `dynamic_collision_within_5`
+- `dynamic_obstacle_radii`: static per-obstacle radius input
 
-## Fixed Obstacle Count Assumption
+Radius is treated as obstacle geometry, not dynamic state.
 
-The current config uses:
+### Legacy velocity-like fields
 
-```yaml
-model:
-  num_dynamic_obstacles: 4
+- `dynamic_obstacle_vel_world_t = dynamic_obstacle_delta_world_t / dt`
+  This is the realized step-average obstacle translational velocity in the world frame over the executed interval `t -> t+1`.
+- `dynamic_obstacle_vel_robot_t = R_t * dynamic_obstacle_vel_world_t`
+  Same realized obstacle translational velocity, rotated into the robot axes at time `t`.
+- `dynamic_obstacle_rel_vel_robot_t = R_t * (v_obs_world - v_robot_world)`
+  Obstacle translational velocity minus robot translational velocity, then rotated into the robot axes at time `t`.
+
+These fields are still useful for auditing and backward compatibility, but they are no longer the preferred practical motion representation.
+
+### New practical velocity fields
+
+- `dynamic_obstacle_rel_vel_robot_fd_t = (dynamic_obstacle_delta_robot_t) / dt`
+- `dynamic_obstacle_rel_vel_robot_fd_t1`
+
+`dynamic_obstacle_rel_vel_robot_fd_t1` is filled after the episode is assembled:
+
+- for nonterminal steps: it is copied from the next row's `dynamic_obstacle_rel_vel_robot_fd_t`
+- for the last step in the episode: it falls back to the row-local `dynamic_obstacle_rel_vel_robot_fd_t`
+
+This makes the serialized dataset self-contained for one-step supervision of next velocity.
+
+## Why `dynamic_obstacle_rel_vel_robot_t` Is Not The Same As Finite-Difference Relative Velocity
+
+The old practical path mixed two different concepts:
+
+- translational relative velocity in a robot-aligned frame at time `t`
+- finite-difference change of robot-relative position across a moving, rotating robot frame
+
+`dynamic_obstacle_rel_vel_robot_t` is:
+
+```text
+R_t (v_obs_world - v_robot_world)
 ```
 
-So the documented working path assumes a fixed four-obstacle representation. Collaborator-generated datasets should match that expectation unless they also change the model/config accordingly.
+That subtracts translational motion and rotates into the robot axes at time `t`, but it does not include the effect of the robot frame rotating between `t` and `t+1`.
 
-## Goal And LiDAR Inputs
+The finite-difference practical quantity is:
 
-The checked-in model config currently uses:
-
-```yaml
-model:
-  use_goal: true
-  use_lidar: false
+```text
+(dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t) / dt
 ```
 
-So for the default workflow:
+This quantity is directly consistent with the stored robot-frame positions because it includes:
 
-- `goal_t` is required
-- `lidar_t` is not required
+- obstacle translation
+- robot translation
+- robot rotation
 
-If `use_lidar` is turned on in the config, each step must also contain `lidar_t`.
+That is the key reason the finite-difference velocity is preferred for the practical rollout model: it matches the actual position target the model is trying to propagate.
 
-## Generation
+## Why `delta_world / dt` Is Still A Valid World Velocity
 
-Generate a dataset with the current simulator pipeline:
+`dynamic_obstacle_vel_world_t = (world_t1 - world_t) / dt` is a valid realized world-step velocity for this simulator branch.
 
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python -m sim2d.generate_data \
-  --num_episodes 20 \
-  --max_steps 250 \
-  --output_dir ./output_v4_dynamic_state \
-  --seed 0
-```
+Why it is valid:
 
-Smoke test:
+- obstacle motion is generated by actually stepping the obstacle state through the simulator
+- `world_t` and `world_t1` are the true realized obstacle positions before and after the step
+- dividing their displacement by `dt` gives the realized step-average translational velocity
 
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python -m sim2d.generate_data \
-  --num_episodes 2 \
-  --max_steps 40 \
-  --output_dir /tmp/rnl_v4_smoke \
-  --seed 0
-```
+Important nuance:
 
-Inspect the generated episodes:
+- this is a step-average velocity, not necessarily the same as the instantaneous `snapshot["velocity"]` field if an obstacle changes route segment within that step
 
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python -m sim2d.inspect_episodes \
-  /tmp/rnl_v4_smoke \
-  --report \
-  --report_path /tmp/rnl_v4_smoke/dataset_quality_report.json
-```
+That distinction matters for auditing, but it does not weaken the argument for using the finite-difference robot-frame velocity in the practical branch.
 
-## Notes For Training And Evaluation
+## Edge Cases And Assumptions
 
-- Training and evaluation both consume episode pickles, not pre-baked sequence files.
-- Evaluation runs on the validation split derived from the same deterministic filename-based split logic as training.
-- If a collaborator points `data.data_dir` at the wrong directory level and there is no `episodes/episode_*.pkl`, loading will fail immediately.
+### Obstacle identity consistency
 
-For commands, outputs, and workflow details:
+Within each serialized step, generator code checks:
 
-- training: [README_v4_training.md](./README_v4_training.md)
-- evaluation: [README_v4_evaluation.md](./README_v4_evaluation.md)
-- policy comparison: [README_v4_policy_comparison.md](./README_v4_policy_comparison.md)
+- `dynamic_obstacle_ids` at `t` must match `dynamic_obstacle_ids` at `t+1`
+
+If they differ, generation raises an error.
+
+### Slot ordering
+
+The branch assumes fixed slot ordering across the whole episode.
+
+- episode generation uses a fixed obstacle count
+- obstacle IDs remain stable
+- controller code enforces canonical ID order at runtime
+
+### Padding and absent obstacles
+
+The current practical branch does not use a padding path.
+
+Generation rejects scenarios unless it samples exactly the configured number of dynamic obstacles, so normal training/eval data has:
+
+- fixed `N_dyn`
+- no absent-slot mask
+- `valid_mask` all ones for temporal validity, not slot validity
+
+### Episode boundary handling
+
+Training windows stay inside a single episode.
+
+For `dynamic_obstacle_rel_vel_robot_fd_t1`:
+
+- nonterminal rows use the next row's finite-difference velocity
+- the terminal row falls back to its own row-local finite-difference velocity because `t+2` does not exist
+
+### `done_t1`
+
+Each row is still row-local `t -> t+1` supervision.
+
+The final row in an episode may have `done_t1 = true`, but it still contains a valid `t -> t+1` transition and is therefore usable as a one-step training sample.
+
+### `dt`
+
+The generator uses `robot_config.dt`.
+
+The loader continues to read:
+
+- per-step `dt` first
+- then `episode["robot_config"]["dt"]`
+- then `0.1` as a last fallback
+
+The practical branch assumes `dt` is effectively constant within an episode, but the loader keeps row-level handling for robustness.
+
+## New Practical Representation
+
+The practical branch now uses, per obstacle:
+
+Input:
+
+- current robot-relative position `(x_rel, y_rel)`
+- current robot-relative finite-difference velocity `(vx_rel_fd, vy_rel_fd)`
+- radius
+
+Output:
+
+- predicted delta relative position
+- predicted next-step robot-relative finite-difference velocity
+
+This gives the rollout model both:
+
+- a directly supervised position-update quantity
+- an explicit velocity state to carry forward over longer horizons
+
+## Why Predicted Velocity Helps Longer-Horizon Propagation
+
+The old path often recomputed rollout velocity from predicted delta alone.
+
+The redesigned path predicts next velocity explicitly so the controller rollout can carry both:
+
+- `x_next = x_prev + pred_delta_rel`
+- `v_next = pred_next_rel_vel_fd`
+
+This helps longer-horizon propagation by giving the recurrent model a dedicated motion-state output rather than forcing every future step to infer velocity only through position drift.
+
+## Dataset Loader Behavior
+
+`StructuredSequenceDataset` now prefers:
+
+- `dynamic_obstacle_delta_robot_t`
+- `dynamic_obstacle_rel_vel_robot_fd_t`
+- `dynamic_obstacle_rel_vel_robot_fd_t1`
+
+For older datasets, it derives them conservatively from stored robot-frame positions:
+
+- `delta_robot = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t`
+- `rel_vel_fd_t = delta_robot / dt`
+- `rel_vel_fd_t1` from the next row when available, otherwise row-local
+
+That keeps older datasets readable while making the redesigned semantics explicit for newly generated data.

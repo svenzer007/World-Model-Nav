@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths, split_episode_paths
-from models import StructuredDynamicsConfig, StructuredDynamicsModel
+from models import LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 from train_structured_world_model import load_yaml_config, move_batch_to_device, resolve_device, save_json
 
 
@@ -115,7 +115,7 @@ def compute_rollout_delta_metrics(
         )
         pred_delta = outputs["pred_delta_rel"]
         x_new = x_prev + pred_delta
-        v_pred = (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
+        v_pred = outputs["pred_next_rel_vel"] if "pred_next_rel_vel" in outputs else (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
         error = pred_delta - batch["delta_rel"][:, step_index]
         mask = batch["valid_mask"][:, step_index].to(error.dtype)[:, None, None]
         abs_sum += float(torch.sum(torch.abs(error) * mask).detach().cpu())
@@ -144,7 +144,7 @@ def main() -> None:
     args = build_arg_parser().parse_args()
     config = load_yaml_config(args.config)
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
-    model_config = checkpoint.get("config", config)["model"]
+    model_config = normalize_model_config(checkpoint.get("config", config)["model"])
     data_cfg = config["data"]
     training_cfg = config["training"]
     eval_cfg = config.get("evaluation", {})
@@ -170,18 +170,22 @@ def main() -> None:
 
     device = resolve_device(str(training_cfg.get("device", "auto")))
     model = StructuredDynamicsModel(StructuredDynamicsConfig(**model_config)).to(device)
+    checkpoint_model_cfg = normalize_model_config(checkpoint.get("config", {}).get("model", {}))
+    checkpoint_model_type = str(checkpoint_model_cfg.get("model_type", LEGACY_MODEL_TYPE))
+    if checkpoint_model_type != str(model.config.model_type):
+        raise ValueError(
+            f"Checkpoint model_type={checkpoint_model_type!r} is incompatible with requested model_type={model.config.model_type!r}"
+        )
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
     delta_abs = 0.0
     delta_sq = 0.0
     delta_count = 0.0
-    risk_abs = 0.0
-    risk_sq = 0.0
-    risk_count = 0.0
     count_totals: dict[str, dict[str, float]] = {}
     sensitivity_sum = 0.0
     sensitivity_batches = 0
+    prediction_totals: dict[str, float] = {}
     rollout_totals: dict[str, float] = {}
     rollout_batches = 0
 
@@ -203,31 +207,50 @@ def main() -> None:
             delta_sq += float(torch.sum((delta_error**2) * delta_mask).detach().cpu())
             delta_count += float(torch.sum(delta_mask).detach().cpu()) * delta_error.shape[-2] * delta_error.shape[-1]
 
-            risk_error = outputs["pred_risk"] - batch["risk"]
-            risk_mask = batch["valid_mask"].to(risk_error.dtype)
-            risk_abs += float(torch.sum(torch.abs(risk_error) * risk_mask).detach().cpu())
-            risk_sq += float(torch.sum((risk_error**2) * risk_mask).detach().cpu())
-            risk_count += float(torch.sum(risk_mask).detach().cpu())
+            if "pred_next_rel_vel" in outputs:
+                vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
+                vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
+                prediction_totals["next_vel_abs"] = prediction_totals.get("next_vel_abs", 0.0) + float(
+                    torch.sum(torch.abs(vel_error) * vel_mask).detach().cpu()
+                )
+                prediction_totals["next_vel_sq"] = prediction_totals.get("next_vel_sq", 0.0) + float(
+                    torch.sum((vel_error**2) * vel_mask).detach().cpu()
+                )
+                prediction_totals["next_vel_count"] = prediction_totals.get("next_vel_count", 0.0) + float(
+                    torch.sum(vel_mask).detach().cpu()
+                ) * vel_error.shape[-2] * vel_error.shape[-1]
+            else:
+                risk_error = outputs["pred_risk"] - batch["risk"]
+                risk_mask = batch["valid_mask"].to(risk_error.dtype)
+                prediction_totals["risk_abs"] = prediction_totals.get("risk_abs", 0.0) + float(
+                    torch.sum(torch.abs(risk_error) * risk_mask).detach().cpu()
+                )
+                prediction_totals["risk_sq"] = prediction_totals.get("risk_sq", 0.0) + float(
+                    torch.sum((risk_error**2) * risk_mask).detach().cpu()
+                )
+                prediction_totals["risk_count"] = prediction_totals.get("risk_count", 0.0) + float(
+                    torch.sum(risk_mask).detach().cpu()
+                )
 
-            accumulate_count_totals(
-                count_totals,
-                "collision_next",
-                binary_counts(outputs["collision_next_logits"], batch["collision_next"], batch["valid_mask"], threshold),
-            )
-            accumulate_count_totals(
-                count_totals,
-                "collision_within_3",
-                binary_counts(
-                    outputs["collision_within_3_logits"], batch["collision_within_3"], batch["valid_mask"], threshold
-                ),
-            )
-            accumulate_count_totals(
-                count_totals,
-                "collision_within_5",
-                binary_counts(
-                    outputs["collision_within_5_logits"], batch["collision_within_5"], batch["valid_mask"], threshold
-                ),
-            )
+                accumulate_count_totals(
+                    count_totals,
+                    "collision_next",
+                    binary_counts(outputs["collision_next_logits"], batch["collision_next"], batch["valid_mask"], threshold),
+                )
+                accumulate_count_totals(
+                    count_totals,
+                    "collision_within_3",
+                    binary_counts(
+                        outputs["collision_within_3_logits"], batch["collision_within_3"], batch["valid_mask"], threshold
+                    ),
+                )
+                accumulate_count_totals(
+                    count_totals,
+                    "collision_within_5",
+                    binary_counts(
+                        outputs["collision_within_5_logits"], batch["collision_within_5"], batch["valid_mask"], threshold
+                    ),
+                )
 
             sensitivity_sum += float(
                 compute_action_sensitivity(
@@ -253,11 +276,15 @@ def main() -> None:
         "threshold": threshold,
         "delta_mae": delta_abs / max(delta_count, 1.0),
         "delta_rmse": (delta_sq / max(delta_count, 1.0)) ** 0.5,
-        "risk_mae": risk_abs / max(risk_count, 1.0),
-        "risk_mse": risk_sq / max(risk_count, 1.0),
         "normalized_action_sensitivity": sensitivity_sum / max(sensitivity_batches, 1),
         "action_sensitivity_eps": 1e-6,
     }
+    if "next_vel_count" in prediction_totals:
+        metrics["next_vel_mae"] = prediction_totals["next_vel_abs"] / max(prediction_totals["next_vel_count"], 1.0)
+        metrics["next_vel_rmse"] = (prediction_totals["next_vel_sq"] / max(prediction_totals["next_vel_count"], 1.0)) ** 0.5
+    elif "risk_count" in prediction_totals:
+        metrics["risk_mae"] = prediction_totals["risk_abs"] / max(prediction_totals["risk_count"], 1.0)
+        metrics["risk_mse"] = prediction_totals["risk_sq"] / max(prediction_totals["risk_count"], 1.0)
     for name, counts in count_totals.items():
         metrics.update(metrics_from_counts(counts, name))
     if rollout_batches:

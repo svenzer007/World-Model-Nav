@@ -1,54 +1,142 @@
 # V4 Structured World-Model Training
 
-This README covers the longer-horizon training workflow under `/home/stavan/s4/rnl/longer_horizons`.
+This README covers the practical longer-horizon training path under `/home/stavan/s4/rnl/longer_horizons`.
 
-The recommended branch-local path is the longer-horizon rollout-curriculum setup driven by:
+For the structured dynamic-state semantics and frame definitions, see [README_v4_dynamic_state_data.md](./README_v4_dynamic_state_data.md).
+
+## Current Recommended Branch
+
+The practical redesigned branch is driven by:
 
 - `train_structured_world_model.py`
 - `configs/structured_world_model.yaml`
 
-The documented example checkpoint for this branch is:
+The default config now targets the explicit factorized practical model type:
 
-- `/home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt`
+```yaml
+model:
+  model_type: factorized_v2
+```
 
-For the dataset format expected by training, see [README_v4_dynamic_state_data.md](./README_v4_dynamic_state_data.md).
+This is intentionally checkpoint-incompatible with older joint practical checkpoints.
 
-## Prerequisites
+## Architecture Change
 
-The training script imports:
+### Old practical architecture: `joint_v1`
 
-- `torch`
-- `yaml` via `PyYAML`
-- `numpy`
-- `tqdm`
+The older practical model used:
+
+- per-obstacle feature encoding
+- flattening all obstacle embeddings into one joint slot-entangled vector
+- one GRU over the joint vector plus action and optional goal context
+- one joint output head that predicted all obstacle deltas together
+- auxiliary risk and collision heads
+
+This made the dynamic-obstacle block more entangled than needed for the practical branch.
+
+### New practical architecture: `factorized_v2`
+
+The redesigned branch uses:
+
+- a shared per-obstacle encoder applied independently to each obstacle slot
+- a small shared context input from action and optional goal
+- a lightweight recurrent temporal state over pooled obstacle/context features
+- a shared per-obstacle prediction head conditioned on obstacle embedding plus recurrent context
+
+Per-obstacle input:
+
+- `x_rel`
+- `y_rel`
+- `vx_rel_fd`
+- `vy_rel_fd`
+- `radius`
+
+Per-obstacle outputs:
+
+- `pred_delta_rel`
+- `pred_next_rel_vel_fd`
+
+Removed from the new practical model type:
+
+- risk auxiliary head
+- collision-next auxiliary head
+- collision-within-3 auxiliary head
+- collision-within-5 auxiliary head
+
+The redesign is meant to improve structure and target semantics without materially increasing capacity.
+
+## Losses
+
+### One-step losses
+
+The redesigned practical branch trains on:
+
+- delta position loss
+- next-step finite-difference velocity loss
+- a soft velocity-position consistency loss
+
+The consistency loss is lightweight:
+
+```text
+pred_next_rel_vel_fd  ~  pred_delta_rel / dt
+```
+
+It is only a soft regularizer, not a hard constraint.
+
+### Rollout loss
+
+Rollout training now propagates:
+
+- `x_next = x_prev + pred_delta_rel`
+- `v_next = pred_next_rel_vel_fd`
+
+Rollout supervision uses:
+
+- rollout delta error
+- rollout next-velocity error
+- the same small consistency regularization term
 
 ## Config
 
-The default training config is:
+The default config is:
 
 ```bash
 /home/stavan/s4/rnl/longer_horizons/configs/structured_world_model.yaml
 ```
 
-Important defaults in that file:
+Important defaults:
 
 - `data.data_dir: ./dataset`
 - `data.sequence_length: 20`
+- `model.model_type: factorized_v2`
 - `model.num_dynamic_obstacles: 4`
 - `model.use_goal: true`
 - `model.use_lidar: false`
 - `rollout.enabled: true`
 - `rollout.eval_enabled: true`
-- `training.output_dir: ./artifacts/structured_world_model_rollout_from_epoch_10`
+- `training.output_dir: ./artifacts/structured_world_model_factorized_v2`
 
-The checked-in rollout curriculum is:
+The checked-in rollout curriculum remains:
 
 - horizon `3` for `5` epochs
 - horizon `6` for `5` epochs
 - horizon `8` for `3` epochs
 - horizon `10` for `4` epochs
 
-Training expects a dataset root that contains `episodes/episode_*.pkl`, or an `episodes/` directory directly. The loader splits train/validation deterministically by sorted filename order.
+## Dataset Expectations
+
+The redesigned practical path expects the loader to provide:
+
+- `obstacle_pos`
+- `obstacle_vel`
+- `radii`
+- `delta_rel`
+- `target_next_obstacle_vel`
+- `action_index`
+- `action_cont`
+- `goal` when enabled
+
+The loader prefers the new finite-difference practical fields from [README_v4_dynamic_state_data.md](./README_v4_dynamic_state_data.md) and derives them on the fly for older datasets when needed.
 
 ## Train
 
@@ -66,11 +154,11 @@ cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model.yaml
 ```
 
-This branch’s default output directory is:
+Default output directory:
 
 ```yaml
 training:
-  output_dir: ./artifacts/structured_world_model_rollout_from_epoch_10
+  output_dir: ./artifacts/structured_world_model_factorized_v2
 ```
 
 ## Resume
@@ -91,49 +179,25 @@ cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py \
   --config configs/structured_world_model.yaml \
   --resume \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt
+  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_v2/latest.pt
 ```
 
-Resume with a fresh optimizer state:
+## Compatibility
 
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python train_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --resume \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt \
-  --fresh_optimizer
-```
+The branch now uses explicit model-type checking.
 
-## Initialize A New Run From A Checkpoint
+That means:
 
-The script also supports starting a new run from pretrained weights through the config:
+- old `joint_v1` checkpoints do not silently load into `factorized_v2`
+- new `factorized_v2` checkpoints do not pretend to be old joint checkpoints
 
-```yaml
-training:
-  output_dir: ./artifacts/structured_world_model_new_run
-  init_checkpoint: /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt
-  init_load_optimizer_state: false
-```
-
-Then launch normally:
-
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python train_structured_world_model.py --config configs/structured_world_model.yaml
-```
-
-Important behavior:
-
-- `--resume` continues the same run in the current output directory.
-- `training.init_checkpoint` starts a brand-new run in a new output directory.
-- `--resume` and `training.init_checkpoint` cannot be used together.
+Older checkpoints remain recoverable through the legacy model path, but they are intentionally separated from the redesigned practical branch.
 
 ## Outputs
 
 Training writes artifacts under `training.output_dir`.
 
-Current output files include:
+Main files include:
 
 - `epoch_001.pt`, `epoch_002.pt`, ...
 - `epoch_001_weights.pt`, `epoch_002_weights.pt`, ...
@@ -144,16 +208,6 @@ Current output files include:
 - `history.json`
 - `config_snapshot.json`
 - `init_source.json` when `training.init_checkpoint` is used
-
-Meaning of the main files:
-
-- `epoch_###.pt`: full checkpoint for that epoch
-- `latest.pt`: latest full checkpoint
-- `best.pt`: full checkpoint for the best validation loss seen so far
-- `*_weights.pt`: weights-only `state_dict` companion file
-- `history.json`: per-epoch train/validation metrics
-- `config_snapshot.json`: saved config plus train/val dataset counts and collision class weights
-- `init_source.json`: provenance for a new run initialized from another checkpoint
 
 Each full checkpoint includes:
 
@@ -167,5 +221,5 @@ Each full checkpoint includes:
 
 ## Notes
 
-- This README documents the longer-horizon curriculum branch, not the horizon-3 baseline branch.
-- The example checkpoint above is intentionally the branch-local `epoch_015.pt` checkpoint you asked to standardize on in the docs.
+- This README describes the practical factorized redesign, not the separate Version C / RSSM-style branch elsewhere in the repo.
+- The first redesign version intentionally prioritizes motion prediction simplicity over keeping low-value auxiliary heads.

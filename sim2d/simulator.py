@@ -255,6 +255,7 @@ class EpisodeSimulator:
             if done:
                 break
 
+        self._add_dynamic_velocity_targets(steps)
         self._add_collision_horizon_labels(steps, horizons=(3, 5))
         self._add_dynamic_horizon_and_event_labels(steps, horizons=(3, 5))
         dynamic_stats = self._compute_dynamic_episode_stats(steps)
@@ -262,7 +263,7 @@ class EpisodeSimulator:
         return {
             "episode_id": int(episode_id),
             "seed": int(seed),
-            "schema_version": "v4_dynamic_state_data_1",
+            "schema_version": "v4_dynamic_state_data_2",
             "map_id": map_bundle.map_id,
             "map_type": map_bundle.map_type,
             "occupancy_grid": occupancy.copy(),
@@ -477,19 +478,35 @@ class EpisodeSimulator:
         vel_robot_axes = self._world_vectors_to_robot_frame(vel_world, float(robot_pose_t[2]))
         robot_vel_world = (np.asarray(robot_pose_t1[:2], dtype=float) - np.asarray(robot_pose_t[:2], dtype=float)) / dt
         rel_vel_robot = self._world_vectors_to_robot_frame(vel_world - robot_vel_world[None, :], float(robot_pose_t[2]))
+        robot_t = self._world_points_to_robot_frame(world_t, robot_pose_t).astype(np.float32)
+        robot_t1 = self._world_points_to_robot_frame(world_t1, robot_pose_t1).astype(np.float32)
+        delta_robot = robot_t1 - robot_t
+        rel_vel_robot_fd = delta_robot / dt
 
         return {
             "dynamic_obstacle_ids": ids_t,
             "dynamic_obstacles_world_t": world_t.astype(np.float32),
             "dynamic_obstacles_world_t1": world_t1.astype(np.float32),
             "dynamic_obstacle_delta_world_t": delta_world.astype(np.float32),
-            "dynamic_obstacles_robot_t": self._world_points_to_robot_frame(world_t, robot_pose_t).astype(np.float32),
-            "dynamic_obstacles_robot_t1": self._world_points_to_robot_frame(world_t1, robot_pose_t1).astype(np.float32),
+            "dynamic_obstacles_robot_t": robot_t,
+            "dynamic_obstacles_robot_t1": robot_t1,
+            "dynamic_obstacle_delta_robot_t": delta_robot.astype(np.float32),
             "dynamic_obstacle_radii": radii.astype(np.float32),
             "dynamic_obstacle_vel_world_t": vel_world.astype(np.float32),
             "dynamic_obstacle_vel_robot_t": vel_robot_axes.astype(np.float32),
             "dynamic_obstacle_rel_vel_robot_t": rel_vel_robot.astype(np.float32),
+            "dynamic_obstacle_rel_vel_robot_fd_t": rel_vel_robot_fd.astype(np.float32),
         }
+
+    @staticmethod
+    def _add_dynamic_velocity_targets(steps: list[dict[str, object]]) -> None:
+        """Fill t+1 finite-difference relative-velocity targets after the episode is built."""
+        for index, step in enumerate(steps):
+            if index + 1 < len(steps):
+                next_velocity = np.asarray(steps[index + 1]["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=np.float32)
+            else:
+                next_velocity = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=np.float32)
+            step["dynamic_obstacle_rel_vel_robot_fd_t1"] = next_velocity.copy()
 
     @staticmethod
     def _world_points_to_robot_frame(points_world: np.ndarray, robot_pose: np.ndarray) -> np.ndarray:

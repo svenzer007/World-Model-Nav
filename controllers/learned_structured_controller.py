@@ -16,7 +16,7 @@ from controllers.baseline_structured_controller import (
     robot_frame_points,
     velocity_penalty_from_action,
 )
-from models import StructuredDynamicsConfig, StructuredDynamicsModel
+from models import FACTOR_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_static_clearance, unicycle_step
 from sim2d.obstacles import DynamicObstacle
@@ -68,13 +68,14 @@ class LearnedStructuredController:
         checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         if "model_state_dict" not in checkpoint:
             raise KeyError(f"{checkpoint_path} does not look like a full training checkpoint")
-        model_cfg = dict(checkpoint.get("config", {}).get("model", {}))
+        model_cfg = normalize_model_config(checkpoint.get("config", {}).get("model", {}))
         if bool(model_cfg.get("use_lidar", False)):
             raise ValueError("learned structured controller does not support checkpoints with use_lidar=true")
         self.model = StructuredDynamicsModel(StructuredDynamicsConfig(**model_cfg)).to(self.device)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.model.eval()
         self.use_goal = bool(model_cfg.get("use_goal", True))
+        self.model_type = str(model_cfg.get("model_type"))
         self.h_real = None
         self.canonical_ids: list[str] | None = None
         self.current_true_state: dict[str, np.ndarray] | None = None
@@ -199,11 +200,11 @@ class LearnedStructuredController:
             )
         self.h_real = detach_hidden_state(new_hidden)
         self.current_true_state = self._next_state_from_snapshots(
+            next_snapshots=ordered_t1,
+            current_vel_rel=state_t["vel_rel"],
+            path_world=path_world,
             robot_pose_t=np.asarray(robot_pose_t, dtype=float),
             robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
-            next_snapshots=ordered_t1,
-            action_cont=action_cont_np,
-            path_world=path_world,
         )
 
     def _evaluate_candidate(
@@ -245,10 +246,6 @@ class LearnedStructuredController:
         drift_per_obstacle: list[list[float]] = []
         drift_mean: list[float] = []
         drift_max: list[float] = []
-        pred_risk: list[float] = []
-        collision_next_probs: list[float] = []
-        collision_within_3_probs: list[float] = []
-        collision_within_5_probs: list[float] = []
         infeasible_reasons: list[str] = []
         true_pos_rel_current = np.asarray(current_state["pos_rel"], dtype=np.float32).copy()
 
@@ -282,7 +279,10 @@ class LearnedStructuredController:
                 )
             pred_delta_rel = outputs["pred_delta_rel"][0].detach().cpu().numpy().astype(np.float32)
             pos_rel_next = pos_rel_current + pred_delta_rel
-            vel_rel_next = (pos_rel_next - pos_rel_current) / float(self.config.robot_config.dt)
+            if "pred_next_rel_vel" in outputs:
+                vel_rel_next = outputs["pred_next_rel_vel"][0].detach().cpu().numpy().astype(np.float32)
+            else:
+                vel_rel_next = (pos_rel_next - pos_rel_current) / float(self.config.robot_config.dt)
 
             predicted_clearances = dynamic_clearances_from_positions(
                 pos_rel_next.astype(float),
@@ -337,11 +337,6 @@ class LearnedStructuredController:
             drift_mean.append(float(np.mean(drift)) if drift.size else 0.0)
             drift_max.append(float(np.max(drift)) if drift.size else 0.0)
 
-            pred_risk.append(float(outputs["pred_risk"][0].detach().cpu().item()))
-            collision_next_probs.append(float(torch.sigmoid(outputs["collision_next_logits"][0]).detach().cpu().item()))
-            collision_within_3_probs.append(float(torch.sigmoid(outputs["collision_within_3_logits"][0]).detach().cpu().item()))
-            collision_within_5_probs.append(float(torch.sigmoid(outputs["collision_within_5_logits"][0]).detach().cpu().item()))
-
             pos_rel_current = pos_rel_next
             vel_rel_current = vel_rel_next
             true_pos_rel_current = true_robot.astype(np.float32)
@@ -393,10 +388,6 @@ class LearnedStructuredController:
             "drift_per_obstacle": drift_per_obstacle,
             "drift_mean_per_step": drift_mean,
             "drift_max_per_step": drift_max,
-            "pred_risk": pred_risk,
-            "collision_next_probs": collision_next_probs,
-            "collision_within_3_probs": collision_within_3_probs,
-            "collision_within_5_probs": collision_within_5_probs,
             "feasible": bool(feasible),
             "infeasible_reasons": infeasible_reasons,
             "min_static_clearance": float(np.min(static_clearances)) if static_clearances else float("inf"),
@@ -423,14 +414,20 @@ class LearnedStructuredController:
         velocities_world = np.asarray([np.asarray(obstacle.velocity, dtype=float) for obstacle in dynamic_obstacles], dtype=float)
         radii = np.asarray([float(obstacle.radius) for obstacle in dynamic_obstacles], dtype=np.float32)
         pos_rel = robot_frame_points(robot_pose, positions_world).astype(np.float32)
-        # Match the training convention: relative velocity is obstacle world velocity minus
-        # robot world velocity, then rotated into robot frame. Before the first executed
-        # transition, the robot translational velocity is explicitly zero.
-        robot_vel_world = np.zeros((2,), dtype=float)
-        vel_rel = robot_frame_points(
-            np.array([0.0, 0.0, float(robot_pose[2])], dtype=float),
-            velocities_world - robot_vel_world[None, :],
-        ).astype(np.float32)
+        if self.model_type == FACTOR_MODEL_TYPE:
+            # Before the first executed transition there is no previous robot-relative
+            # position sample, so bootstrap finite-difference velocity by assuming the
+            # robot is instantaneously stationary and rotating obstacle world velocity
+            # into the current robot frame.
+            vel_rel = robot_frame_points(
+                np.array([0.0, 0.0, float(robot_pose[2])], dtype=float),
+                velocities_world,
+            ).astype(np.float32)
+        else:
+            vel_rel = robot_frame_points(
+                np.array([0.0, 0.0, float(robot_pose[2])], dtype=float),
+                velocities_world,
+            ).astype(np.float32)
         waypoint = compute_local_subgoal(robot_pose, path_world, self.config.lookahead_distance)
         return {
             "pos_rel": pos_rel,
@@ -450,18 +447,24 @@ class LearnedStructuredController:
     ) -> dict[str, np.ndarray]:
         positions_world = np.asarray([np.asarray(snapshot["position"], dtype=float) for snapshot in current_snapshots], dtype=float)
         positions_world_next = np.asarray([np.asarray(snapshot["position"], dtype=float) for snapshot in future_snapshots], dtype=float)
+        pos_rel = robot_frame_points(robot_pose_prev, positions_world).astype(np.float32)
         radii = np.asarray([float(snapshot["radius"]) for snapshot in current_snapshots], dtype=np.float32)
-        obstacle_vel_world = (positions_world_next - positions_world) / float(self.config.robot_config.dt)
-        robot_vel_world = (np.asarray(robot_pose_curr[:2], dtype=float) - np.asarray(robot_pose_prev[:2], dtype=float)) / float(
-            self.config.robot_config.dt
-        )
-        waypoint = compute_local_subgoal(robot_pose_prev, path_world, self.config.lookahead_distance)
-        return {
-            "pos_rel": robot_frame_points(robot_pose_prev, positions_world).astype(np.float32),
-            "vel_rel": robot_frame_points(
+        if self.model_type == FACTOR_MODEL_TYPE:
+            pos_rel_next = robot_frame_points(robot_pose_curr, positions_world_next).astype(np.float32)
+            vel_rel = (pos_rel_next - pos_rel) / float(self.config.robot_config.dt)
+        else:
+            obstacle_vel_world = (positions_world_next - positions_world) / float(self.config.robot_config.dt)
+            robot_vel_world = (np.asarray(robot_pose_curr[:2], dtype=float) - np.asarray(robot_pose_prev[:2], dtype=float)) / float(
+                self.config.robot_config.dt
+            )
+            vel_rel = robot_frame_points(
                 np.array([0.0, 0.0, float(robot_pose_prev[2])], dtype=float),
                 obstacle_vel_world - robot_vel_world[None, :],
-            ).astype(np.float32),
+            ).astype(np.float32)
+        waypoint = compute_local_subgoal(robot_pose_prev, path_world, self.config.lookahead_distance)
+        return {
+            "pos_rel": pos_rel,
+            "vel_rel": vel_rel.astype(np.float32),
             "radii": radii,
             "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
         }
@@ -469,26 +472,29 @@ class LearnedStructuredController:
     def _next_state_from_snapshots(
         self,
         *,
+        next_snapshots: Sequence[dict[str, object]],
+        current_vel_rel: np.ndarray,
+        path_world: np.ndarray,
         robot_pose_t: np.ndarray,
         robot_pose_t1: np.ndarray,
-        next_snapshots: Sequence[dict[str, object]],
-        action_cont: np.ndarray,
-        path_world: np.ndarray,
     ) -> dict[str, np.ndarray]:
-        del action_cont
         positions_world = np.asarray([np.asarray(snapshot["position"], dtype=float) for snapshot in next_snapshots], dtype=float)
-        obstacle_vel_world = np.asarray([np.asarray(snapshot["velocity"], dtype=float) for snapshot in next_snapshots], dtype=float)
-        robot_vel_world = (np.asarray(robot_pose_t1[:2], dtype=float) - np.asarray(robot_pose_t[:2], dtype=float)) / float(
-            self.config.robot_config.dt
-        )
         radii = np.asarray([float(snapshot["radius"]) for snapshot in next_snapshots], dtype=np.float32)
         waypoint = compute_local_subgoal(robot_pose_t1, path_world, self.config.lookahead_distance)
-        return {
-            "pos_rel": robot_frame_points(robot_pose_t1, positions_world).astype(np.float32),
-            "vel_rel": robot_frame_points(
+        if self.model_type == FACTOR_MODEL_TYPE:
+            vel_rel = np.asarray(current_vel_rel, dtype=np.float32).copy()
+        else:
+            obstacle_vel_world = np.asarray([np.asarray(snapshot["velocity"], dtype=float) for snapshot in next_snapshots], dtype=float)
+            robot_vel_world = (np.asarray(robot_pose_t1[:2], dtype=float) - np.asarray(robot_pose_t[:2], dtype=float)) / float(
+                self.config.robot_config.dt
+            )
+            vel_rel = robot_frame_points(
                 np.array([0.0, 0.0, float(robot_pose_t1[2])], dtype=float),
                 obstacle_vel_world - robot_vel_world[None, :],
-            ).astype(np.float32),
+            ).astype(np.float32)
+        return {
+            "pos_rel": robot_frame_points(robot_pose_t1, positions_world).astype(np.float32),
+            "vel_rel": vel_rel,
             "radii": radii,
             "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
         }

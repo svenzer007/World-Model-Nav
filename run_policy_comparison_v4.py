@@ -25,7 +25,7 @@ from sim2d.waypoint import compute_local_subgoal
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_rollout_from_epoch_10/best.pt")
+    parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_factorized_v2/best.pt")
     parser.add_argument("--output_dir", type=str, default="artifacts/policy_comparison_v4_h10")
     parser.add_argument("--num_episodes", type=int, default=10)
     parser.add_argument("--seed", type=int, default=1000)
