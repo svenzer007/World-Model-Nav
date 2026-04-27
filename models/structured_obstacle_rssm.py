@@ -27,7 +27,7 @@ def _mlp(input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.0)
 @dataclass
 class StructuredObstacleRSSMConfig:
     model_type: str = "structured_obstacle_rssm_vc"
-    model_version: str = "version_c"
+    model_version: str = "version_c_motion_v2"
     num_dynamic_obstacles: int = 4
     obstacle_feature_dim: int = 5
     obstacle_embed_dim: int = 32
@@ -43,7 +43,7 @@ class StructuredObstacleRSSMConfig:
     head_hidden_dim: int = 128
     dropout: float = 0.0
     delta_scale: float = 0.05
-    risk_head_enabled: bool = False
+    velocity_scale: float = 1.0
 
 
 class StructuredObstacleRSSMModel(nn.Module):
@@ -55,10 +55,10 @@ class StructuredObstacleRSSMModel(nn.Module):
             raise ValueError("StructuredObstacleRSSMModel does not support use_lidar=true")
         self.config = config
         self.delta_scale = float(config.delta_scale)
+        self.velocity_scale = float(config.velocity_scale)
         self.num_dynamic_obstacles = int(config.num_dynamic_obstacles)
         self.hidden_dim = int(config.hidden_dim)
         self.latent_dim = int(config.latent_dim)
-        self.risk_head_enabled = bool(config.risk_head_enabled)
 
         self.obstacle_encoder = _mlp(
             input_dim=int(config.obstacle_feature_dim),
@@ -101,10 +101,7 @@ class StructuredObstacleRSSMModel(nn.Module):
             dropout=float(config.dropout),
         )
         self.delta_head = nn.Linear(int(config.head_hidden_dim), 2)
-        self.collision_next_head = nn.Linear(int(config.head_hidden_dim), 1)
-        self.collision_within_3_head = nn.Linear(int(config.head_hidden_dim), 1)
-        self.collision_within_5_head = nn.Linear(int(config.head_hidden_dim), 1)
-        self.risk_head = nn.Linear(int(config.head_hidden_dim), 1) if self.risk_head_enabled else None
+        self.next_velocity_head = nn.Linear(int(config.head_hidden_dim), 2)
 
     def initial_state(
         self,
@@ -309,21 +306,11 @@ class StructuredObstacleRSSMModel(nn.Module):
         decoder_input = torch.cat([history, latent, context_expanded], dim=-1)
         body = self.decoder_body(decoder_input.reshape(batch_size * n_dyn, -1)).reshape(batch_size, n_dyn, -1)
         pred_delta_scaled = self.delta_head(body)
-        collision_next_slot = self.collision_next_head(body).squeeze(-1)
-        collision_within_3_slot = self.collision_within_3_head(body).squeeze(-1)
-        collision_within_5_slot = self.collision_within_5_head(body).squeeze(-1)
+        pred_next_rel_vel_scaled = self.next_velocity_head(body)
         outputs = {
             "pred_delta_rel_scaled": pred_delta_scaled,
             "pred_delta_rel": pred_delta_scaled * self.delta_scale,
-            # Collision supervision is global in the current dataset, so the
-            # factorized obstacle signals are pooled across slots.
-            "collision_next_logits": collision_next_slot.max(dim=1).values,
-            "collision_within_3_logits": collision_within_3_slot.max(dim=1).values,
-            "collision_within_5_logits": collision_within_5_slot.max(dim=1).values,
+            "pred_next_rel_vel_scaled": pred_next_rel_vel_scaled,
+            "pred_next_rel_vel": pred_next_rel_vel_scaled * self.velocity_scale,
         }
-        if self.risk_head is not None:
-            raw_risk_slot = self.risk_head(body).squeeze(-1)
-            raw_risk = raw_risk_slot.max(dim=1).values
-            outputs["raw_risk"] = raw_risk
-            outputs["pred_risk"] = torch.sigmoid(raw_risk)
         return outputs

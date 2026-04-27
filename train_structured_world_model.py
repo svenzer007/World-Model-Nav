@@ -133,6 +133,8 @@ def estimate_pos_weights(dataset: StructuredSequenceDataset, caps: Mapping[str, 
 
 
 def configured_pos_weights(config: Mapping[str, Any], train_dataset: StructuredSequenceDataset) -> dict[str, float]:
+    if resolve_model_type(config.get("model", {})) == VERSION_C_MODEL_TYPE:
+        return {}
     loss_cfg = config.get("loss_weights", {})
     if not bool(loss_cfg.get("auto_pos_weight", True)):
         return {
@@ -141,11 +143,6 @@ def configured_pos_weights(config: Mapping[str, Any], train_dataset: StructuredS
             "collision_within_5": float(loss_cfg.get("collision_within_5_pos_weight", 1.0)),
         }
     return estimate_pos_weights(train_dataset, loss_cfg)
-
-
-def model_supports_risk(outputs: Mapping[str, torch.Tensor]) -> bool:
-    return "pred_risk" in outputs
-
 
 def version_c_prev_context(
     model: nn.Module,
@@ -218,50 +215,32 @@ def compute_one_step_loss_version_c(
     config: Mapping[str, Any],
     pos_weights: Mapping[str, torch.Tensor],
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    del pos_weights
     loss_cfg = config["loss_weights"]
     delta_scale = float(config["model"].get("delta_scale", 0.05))
+    velocity_scale = float(config["model"].get("velocity_scale", 1.0))
     mask = batch["valid_mask"]
     target_delta_scaled = batch["delta_rel"] / delta_scale
+    target_next_vel_scaled = batch["target_next_obstacle_vel"] / max(velocity_scale, 1e-9)
 
     loss_delta = masked_huber(outputs["pred_delta_rel_scaled"], target_delta_scaled, mask)
+    loss_next_vel = masked_huber(outputs["pred_next_rel_vel_scaled"], target_next_vel_scaled, mask)
+    dt = batch["dt"][:, None, None, None] + 1e-6
+    loss_consistency = masked_huber(outputs["pred_next_rel_vel"], outputs["pred_delta_rel"] / dt, mask)
     loss_latent = masked_mse(outputs["prior_latent"], outputs["posterior_latent"].detach(), mask)
-    loss_collision_next = masked_bce(
-        outputs["collision_next_logits"], batch["collision_next"], mask, pos_weights.get("collision_next")
-    )
-    loss_collision_within_3 = masked_bce(
-        outputs["collision_within_3_logits"],
-        batch["collision_within_3"],
-        mask,
-        pos_weights.get("collision_within_3"),
-    )
-    loss_collision_within_5 = masked_bce(
-        outputs["collision_within_5_logits"],
-        batch["collision_within_5"],
-        mask,
-        pos_weights.get("collision_within_5"),
-    )
     total = (
         float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
+        + float(loss_cfg.get("lambda_vel", 0.1)) * loss_next_vel
+        + float(loss_cfg.get("lambda_consistency", 0.05)) * loss_consistency
         + float(loss_cfg.get("lambda_latent", 0.25)) * loss_latent
-        + float(loss_cfg.get("lambda_collision_next", 0.1)) * loss_collision_next
-        + float(loss_cfg.get("lambda_collision_within_3", 0.1)) * loss_collision_within_3
-        + float(loss_cfg.get("lambda_collision_within_5", 0.05)) * loss_collision_within_5
     )
-    if model_supports_risk(outputs):
-        loss_risk = masked_mse(outputs["pred_risk"], batch["risk"], mask)
-        total = total + float(loss_cfg.get("lambda_risk", 0.0)) * loss_risk
-    else:
-        loss_risk = None
     components = {
         "loss_delta": loss_delta.detach(),
+        "loss_next_vel": loss_next_vel.detach(),
+        "loss_consistency": loss_consistency.detach(),
         "loss_latent": loss_latent.detach(),
-        "loss_collision_next": loss_collision_next.detach(),
-        "loss_collision_within_3": loss_collision_within_3.detach(),
-        "loss_collision_within_5": loss_collision_within_5.detach(),
         "loss_total_one_step": total.detach(),
     }
-    if loss_risk is not None:
-        components["loss_risk"] = loss_risk.detach()
     return total, components
 
 
@@ -358,6 +337,7 @@ def compute_rollout_loss_version_c(
     *,
     active_rollout_horizon: int | None = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    del pos_weights
     rollout_cfg = config.get("rollout", {})
     horizon = int(active_rollout_horizon if active_rollout_horizon is not None else rollout_cfg.get("horizon", 3))
     if horizon <= 0 or batch["obstacle_pos"].shape[1] <= 2:
@@ -365,6 +345,8 @@ def compute_rollout_loss_version_c(
         return zero, {"loss_rollout": zero.detach(), "loss_rollout_latent": zero.detach()}
 
     loss_cfg = config["loss_weights"]
+    delta_scale = float(config["model"].get("delta_scale", 0.05))
+    velocity_scale = float(config["model"].get("velocity_scale", 1.0))
     max_rollout_index = min(horizon, batch["obstacle_pos"].shape[1] - 1)
     goal = batch.get("goal")
 
@@ -417,26 +399,18 @@ def compute_rollout_loss_version_c(
         mask = batch["valid_mask"][:, step_index]
         step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
             outputs["pred_delta_rel_scaled"][:, None],
-            (batch["delta_rel"][:, step_index] / float(config["model"].get("delta_scale", 0.05)))[:, None],
+            (batch["delta_rel"][:, step_index] / delta_scale)[:, None],
             mask[:, None],
         )
-        step_loss = step_loss + float(loss_cfg.get("lambda_collision_next", 0.1)) * masked_bce(
-            outputs["collision_next_logits"],
-            batch["collision_next"][:, step_index],
-            mask,
-            pos_weights.get("collision_next"),
+        step_loss = step_loss + float(loss_cfg.get("lambda_vel", 0.1)) * masked_huber(
+            outputs["pred_next_rel_vel_scaled"][:, None],
+            (batch["target_next_obstacle_vel"][:, step_index] / max(velocity_scale, 1e-9))[:, None],
+            mask[:, None],
         )
-        step_loss = step_loss + float(loss_cfg.get("lambda_collision_within_3", 0.1)) * masked_bce(
-            outputs["collision_within_3_logits"],
-            batch["collision_within_3"][:, step_index],
-            mask,
-            pos_weights.get("collision_within_3"),
-        )
-        step_loss = step_loss + float(loss_cfg.get("lambda_collision_within_5", 0.05)) * masked_bce(
-            outputs["collision_within_5_logits"],
-            batch["collision_within_5"][:, step_index],
-            mask,
-            pos_weights.get("collision_within_5"),
+        step_loss = step_loss + float(loss_cfg.get("lambda_consistency", 0.05)) * masked_huber(
+            outputs["pred_next_rel_vel"][:, None],
+            (outputs["pred_delta_rel"] / (batch["dt"][:, None, None] + 1e-6))[:, None],
+            mask[:, None],
         )
         grounded_losses.append(step_loss)
         latent_losses.append(masked_mse(outputs["prior_latent"], target_outputs["posterior_latent"].detach(), mask))
@@ -497,15 +471,14 @@ def compute_metrics(
         "delta_mae": delta_mae.detach(),
         "delta_rmse": delta_rmse.detach(),
     }
+    if "pred_next_rel_vel" in outputs and "target_next_obstacle_vel" in batch:
+        vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
+        vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
+        vel_denom = torch.clamp(torch.sum(vel_mask) * vel_error.shape[-2] * vel_error.shape[-1], min=1.0)
+        metrics["vel_mae"] = (torch.sum(torch.abs(vel_error) * vel_mask) / vel_denom).detach()
+        metrics["vel_rmse"] = torch.sqrt(torch.sum((vel_error**2) * vel_mask) / vel_denom).detach()
     if model_type == VERSION_C_MODEL_TYPE and "prior_latent" in outputs:
         metrics["latent_mae"] = torch.mean(torch.abs(outputs["prior_latent"] - outputs["posterior_latent"].detach())).detach()
-    if model_supports_risk(outputs):
-        risk_error = outputs["pred_risk"] - batch["risk"]
-        risk_mask = batch["valid_mask"].to(risk_error.dtype)
-        risk_mae = torch.sum(torch.abs(risk_error) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
-        risk_mse = torch.sum((risk_error**2) * risk_mask) / torch.clamp(torch.sum(risk_mask), min=1.0)
-        metrics["risk_mae"] = risk_mae.detach()
-        metrics["risk_mse"] = risk_mse.detach()
     return metrics
 
 
@@ -651,6 +624,7 @@ def load_checkpoint(
     device: torch.device,
     load_optimizer: bool = True,
     expected_model_type: str | None = None,
+    expected_model_version: str | None = None,
     expected_training_stage: str | None = None,
 ) -> dict[str, Any]:
     checkpoint = torch.load(path, map_location=device, weights_only=False)
@@ -662,6 +636,13 @@ def load_checkpoint(
     if expected_model_type is not None and checkpoint_model_type != expected_model_type:
         raise ValueError(
             f"Checkpoint {path} has model_type={checkpoint_model_type}, expected {expected_model_type}"
+        )
+    checkpoint_model_version = str(
+        checkpoint.get("model_version") or resolve_model_version(checkpoint_model_type, checkpoint_model_cfg)
+    )
+    if expected_model_version is not None and checkpoint_model_version != expected_model_version:
+        raise ValueError(
+            f"Checkpoint {path} has model_version={checkpoint_model_version}, expected {expected_model_version}"
         )
     checkpoint_stage = checkpoint.get("training_stage")
     if expected_training_stage == "stage2" and checkpoint_model_type == VERSION_C_MODEL_TYPE:
@@ -714,7 +695,7 @@ def save_init_source(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=str, default="configs/structured_world_model.yaml")
+    parser.add_argument("--config", type=str, default="configs/structured_world_model_version_c_stage1.yaml")
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint or --checkpoint")
     parser.add_argument("--checkpoint", type=str, default=None, help="Checkpoint path for resume")
     parser.add_argument(
@@ -795,6 +776,7 @@ def main() -> None:
 
     device = resolve_device(str(training_cfg.get("device", "auto")))
     model = build_model(model_cfg).to(device)
+    expected_model_version = resolve_model_version(model_type, model_cfg)
     optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg.get("learning_rate", 3e-4)))
     pos_weights_float = configured_pos_weights(config, train_dataset)
     pos_weights = {key: torch.tensor(value, dtype=torch.float32, device=device) for key, value in pos_weights_float.items()}
@@ -841,6 +823,7 @@ def main() -> None:
             device=device,
             load_optimizer=not bool(args.fresh_optimizer),
             expected_model_type=model_type,
+            expected_model_version=expected_model_version,
             expected_training_stage=training_stage,
         )
         start_epoch = int(checkpoint.get("epoch", 0)) + 1
@@ -866,6 +849,7 @@ def main() -> None:
             device=device,
             load_optimizer=init_load_optimizer_state,
             expected_model_type=model_type,
+            expected_model_version=expected_model_version,
             expected_training_stage=training_stage,
         )
         save_init_source(

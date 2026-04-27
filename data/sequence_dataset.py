@@ -128,13 +128,44 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         obstacle_pos = np.stack(
             [np.asarray(step["dynamic_obstacles_robot_t"], dtype=np.float32) for step in steps], axis=0
         )
-        obstacle_vel = np.stack(
-            [np.asarray(step["dynamic_obstacle_rel_vel_robot_t"], dtype=np.float32) for step in steps], axis=0
-        )
         obstacle_pos_t1 = np.stack(
             [np.asarray(step["dynamic_obstacles_robot_t1"], dtype=np.float32) for step in steps], axis=0
         )
-        delta_rel = obstacle_pos_t1 - obstacle_pos
+        dt_value = float(steps[0].get("dt", episode.get("robot_config", {}).get("dt", 0.1)))
+        dt_safe = max(dt_value, 1e-6)
+        if all("dynamic_obstacle_delta_robot_t" in step for step in steps):
+            delta_rel = np.stack(
+                [np.asarray(step["dynamic_obstacle_delta_robot_t"], dtype=np.float32) for step in steps], axis=0
+            )
+        else:
+            delta_rel = obstacle_pos_t1 - obstacle_pos
+        if all("dynamic_obstacle_rel_vel_robot_fd_t" in step for step in steps):
+            obstacle_vel = np.stack(
+                [np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=np.float32) for step in steps], axis=0
+            )
+        else:
+            obstacle_vel = delta_rel / dt_safe
+        if all("dynamic_obstacle_rel_vel_robot_fd_t1" in step for step in steps):
+            target_next_obstacle_vel = np.stack(
+                [np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t1"], dtype=np.float32) for step in steps], axis=0
+            )
+        else:
+            episode_steps = episode["steps"]
+            target_next_velocity_rows: list[np.ndarray] = []
+            for local_index, step in enumerate(steps):
+                episode_step_index = window.start_step + local_index
+                if episode_step_index + 1 < len(episode_steps):
+                    next_step = episode_steps[episode_step_index + 1]
+                    if "dynamic_obstacle_rel_vel_robot_fd_t" in next_step:
+                        next_vel = np.asarray(next_step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=np.float32)
+                    else:
+                        next_pos = np.asarray(next_step["dynamic_obstacles_robot_t"], dtype=np.float32)
+                        next_pos_t1 = np.asarray(next_step["dynamic_obstacles_robot_t1"], dtype=np.float32)
+                        next_vel = (next_pos_t1 - next_pos) / dt_safe
+                else:
+                    next_vel = delta_rel[local_index] / dt_safe
+                target_next_velocity_rows.append(next_vel)
+            target_next_obstacle_vel = np.stack(target_next_velocity_rows, axis=0)
         radii = np.asarray(steps[0]["dynamic_obstacle_radii"], dtype=np.float32)
 
         action_index = np.asarray([int(step["action_index"]) for step in steps], dtype=np.int64)
@@ -152,12 +183,13 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
             "action_index": torch.from_numpy(action_index),
             "action_cont": torch.from_numpy(action_cont),
             "delta_rel": torch.from_numpy(delta_rel),
+            "target_next_obstacle_vel": torch.from_numpy(target_next_obstacle_vel),
             "risk": torch.from_numpy(risk),
             "collision_next": torch.from_numpy(collision_next),
             "collision_within_3": torch.from_numpy(collision_within_3),
             "collision_within_5": torch.from_numpy(collision_within_5),
             "valid_mask": torch.from_numpy(valid_mask),
-            "dt": torch.tensor(float(steps[0].get("dt", episode.get("robot_config", {}).get("dt", 0.1))), dtype=torch.float32),
+            "dt": torch.tensor(dt_value, dtype=torch.float32),
             "episode_id": torch.tensor(window.episode_id, dtype=torch.long),
             "start_step": torch.tensor(window.start_step, dtype=torch.long),
             "source_file": str(window.episode_path),

@@ -25,41 +25,6 @@ from train_structured_world_model import (
 )
 
 
-def binary_counts(logits: torch.Tensor, target: torch.Tensor, mask: torch.Tensor, threshold: float) -> dict[str, float]:
-    pred = (torch.sigmoid(logits) >= threshold).to(torch.bool)
-    truth = (target >= 0.5).to(torch.bool)
-    valid = mask.to(torch.bool)
-    return {
-        "tp": float(torch.sum(pred & truth & valid).detach().cpu()),
-        "fp": float(torch.sum(pred & (~truth) & valid).detach().cpu()),
-        "tn": float(torch.sum((~pred) & (~truth) & valid).detach().cpu()),
-        "fn": float(torch.sum((~pred) & truth & valid).detach().cpu()),
-    }
-
-
-def metrics_from_counts(counts: Mapping[str, float], prefix: str) -> dict[str, float]:
-    tp = float(counts.get("tp", 0.0))
-    fp = float(counts.get("fp", 0.0))
-    fn = float(counts.get("fn", 0.0))
-    precision = tp / max(tp + fp, 1.0)
-    recall = tp / max(tp + fn, 1.0)
-    f1 = 2.0 * precision * recall / max(precision + recall, 1e-12)
-    return {
-        f"{prefix}_precision": precision,
-        f"{prefix}_recall": recall,
-        f"{prefix}_f1": f1,
-        f"{prefix}_tp": tp,
-        f"{prefix}_fp": fp,
-        f"{prefix}_fn": fn,
-    }
-
-
-def accumulate_count_totals(total: dict[str, dict[str, float]], name: str, counts: dict[str, float]) -> None:
-    bucket = total.setdefault(name, {})
-    for key, value in counts.items():
-        bucket[key] = bucket.get(key, 0.0) + float(value)
-
-
 def compute_action_sensitivity(
     model: nn.Module,
     batch: Mapping[str, torch.Tensor],
@@ -162,6 +127,8 @@ def compute_rollout_delta_metrics_version_c(
     prev_context = version_c_prev_context(model, batch, 0)
     abs_sum = 0.0
     sq_sum = 0.0
+    vel_abs_sum = 0.0
+    vel_sq_sum = 0.0
     count = 0.0
     for step_index in range(1, max_rollout_index + 1):
         outputs, rollout_state = model.forward_step(
@@ -177,16 +144,22 @@ def compute_rollout_delta_metrics_version_c(
             use_posterior=False,
         )
         error = outputs["pred_delta_rel"] - batch["delta_rel"][:, step_index]
+        vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"][:, step_index]
         mask = batch["valid_mask"][:, step_index].to(error.dtype)[:, None, None]
         abs_sum += float(torch.sum(torch.abs(error) * mask).detach().cpu())
         sq_sum += float(torch.sum((error**2) * mask).detach().cpu())
         count += float(torch.sum(mask).detach().cpu()) * error.shape[-2] * error.shape[-1]
+        vel_abs_sum += float(torch.sum(torch.abs(vel_error) * mask).detach().cpu())
+        vel_sq_sum += float(torch.sum((vel_error**2) * mask).detach().cpu())
         prev_context = version_c_prev_context(model, batch, step_index)
         rollout_state = detach_recurrent_state(rollout_state)
-    return {
+    metrics = {
         "rollout_delta_mae": abs_sum / max(count, 1.0),
         "rollout_delta_rmse": (sq_sum / max(count, 1.0)) ** 0.5,
     }
+    metrics["rollout_vel_mae"] = vel_abs_sum / max(count, 1.0)
+    metrics["rollout_vel_rmse"] = (vel_sq_sum / max(count, 1.0)) ** 0.5
+    return metrics
 
 
 def compute_rollout_delta_metrics(
@@ -202,7 +175,7 @@ def compute_rollout_delta_metrics(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=str, default="configs/structured_world_model.yaml")
+    parser.add_argument("--config", type=str, default="configs/structured_world_model_version_c_stage2.yaml")
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--threshold", type=float, default=None)
@@ -251,15 +224,13 @@ def main() -> None:
     delta_abs = 0.0
     delta_sq = 0.0
     delta_count = 0.0
-    risk_abs = 0.0
-    risk_sq = 0.0
-    risk_count = 0.0
-    count_totals: dict[str, dict[str, float]] = {}
+    vel_abs = 0.0
+    vel_sq = 0.0
+    vel_count = 0.0
     sensitivity_sum = 0.0
     sensitivity_batches = 0
     rollout_totals: dict[str, float] = {}
     rollout_batches = 0
-    saw_risk = False
 
     with torch.no_grad():
         for batch in tqdm(loader, desc="eval", leave=False, dynamic_ncols=True):
@@ -278,34 +249,11 @@ def main() -> None:
             delta_abs += float(torch.sum(torch.abs(delta_error) * delta_mask).detach().cpu())
             delta_sq += float(torch.sum((delta_error**2) * delta_mask).detach().cpu())
             delta_count += float(torch.sum(delta_mask).detach().cpu()) * delta_error.shape[-2] * delta_error.shape[-1]
-
-            if "pred_risk" in outputs:
-                saw_risk = True
-                risk_error = outputs["pred_risk"] - batch["risk"]
-                risk_mask = batch["valid_mask"].to(risk_error.dtype)
-                risk_abs += float(torch.sum(torch.abs(risk_error) * risk_mask).detach().cpu())
-                risk_sq += float(torch.sum((risk_error**2) * risk_mask).detach().cpu())
-                risk_count += float(torch.sum(risk_mask).detach().cpu())
-
-            accumulate_count_totals(
-                count_totals,
-                "collision_next",
-                binary_counts(outputs["collision_next_logits"], batch["collision_next"], batch["valid_mask"], threshold),
-            )
-            accumulate_count_totals(
-                count_totals,
-                "collision_within_3",
-                binary_counts(
-                    outputs["collision_within_3_logits"], batch["collision_within_3"], batch["valid_mask"], threshold
-                ),
-            )
-            accumulate_count_totals(
-                count_totals,
-                "collision_within_5",
-                binary_counts(
-                    outputs["collision_within_5_logits"], batch["collision_within_5"], batch["valid_mask"], threshold
-                ),
-            )
+            vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
+            vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
+            vel_abs += float(torch.sum(torch.abs(vel_error) * vel_mask).detach().cpu())
+            vel_sq += float(torch.sum((vel_error**2) * vel_mask).detach().cpu())
+            vel_count += float(torch.sum(vel_mask).detach().cpu()) * vel_error.shape[-2] * vel_error.shape[-1]
 
             sensitivity_sum += float(
                 compute_action_sensitivity(
@@ -334,14 +282,11 @@ def main() -> None:
         "threshold": threshold,
         "delta_mae": delta_abs / max(delta_count, 1.0),
         "delta_rmse": (delta_sq / max(delta_count, 1.0)) ** 0.5,
+        "vel_mae": vel_abs / max(vel_count, 1.0),
+        "vel_rmse": (vel_sq / max(vel_count, 1.0)) ** 0.5,
         "normalized_action_sensitivity": sensitivity_sum / max(sensitivity_batches, 1),
         "action_sensitivity_eps": 1e-6,
     }
-    if saw_risk:
-        metrics["risk_mae"] = risk_abs / max(risk_count, 1.0)
-        metrics["risk_mse"] = risk_sq / max(risk_count, 1.0)
-    for name, counts in count_totals.items():
-        metrics.update(metrics_from_counts(counts, name))
     if rollout_batches:
         for key, value in rollout_totals.items():
             metrics[key] = value / rollout_batches

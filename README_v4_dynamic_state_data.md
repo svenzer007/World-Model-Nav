@@ -1,167 +1,136 @@
-# V4 Structured Dynamic-Obstacle Dataset
+# World-Model Dynamic State Data
 
-V4 generates data for structured dynamic-obstacle prediction and dynamic-risk supervision. The primary learning inputs are fixed-ID obstacle states, especially robot-relative obstacle positions and robot-relative velocities. LiDAR is saved only as auxiliary front-sector context and should not be treated as the main dynamic-obstacle representation.
+This branch keeps the Version-C / RSSM model family, but the practical dynamic-obstacle state is now defined around robot-relative positions and robot-relative finite-difference velocities. This note documents both the pre-cleanup audit and the cleaned-up practical representation used by the learned-model path.
 
-## Generate
+See [README_v4_training.md](/home/stavan/s4/rnl/world_model/README_v4_training.md) for the stage-1 / stage-2 RSSM training path.
 
-```bash
-cd /home/stavan/s4/rnl/4proj
-python -m sim2d.generate_data \
-  --num_episodes 20 \
-  --max_steps 250 \
-  --output_dir ./output_v4_dynamic_state \
-  --seed 0
-```
+## Current practical fields
 
-Smoke test:
-
-```bash
-cd /home/stavan/s4/rnl/4proj
-python -m sim2d.generate_data \
-  --num_episodes 2 \
-  --max_steps 40 \
-  --output_dir /tmp/rnl_v4_smoke \
-  --seed 0
-```
-
-Inspect:
-
-```bash
-cd /home/stavan/s4/rnl/4proj
-python -m sim2d.inspect_episodes \
-  /tmp/rnl_v4_smoke \
-  --report \
-  --report_path /tmp/rnl_v4_smoke/dataset_quality_report.json
-```
-
-## Defaults
-
-- Robot: radius `0.19m`, `dt=0.1s`, goal tolerance `0.4m`.
-- LiDAR: auxiliary front sector, `241` beams, `[-pi/2, pi/2]`, max range `6.0m`, step size `0.05m`.
-- Dynamic obstacles: fixed `N_dyn=4`, radii sampled from `(0.17, 0.26)m`, speeds from `(0.18, 0.30)m/s`, route length from `2` to `4` waypoints.
-- Dynamic labels: `dynamic_risk_tau=0.5`, `dynamic_risk_positive_threshold=0.35`, `dynamic_visibility_radius=1.2`.
-- Acceptance: `min_dynamic_visible_fraction=0.06`, `min_dynamic_risk_fraction=0.04`, `min_dynamic_event_steps=3`, `dynamic_interaction_resample_limit=30`.
-
-## Per-Step Schema
-
-Robot/action/task:
-
-```text
-robot_pose_t, robot_pose_t1
-goal_t, goal_t1
-action_index, action_name, v_t, omega_t
-```
-
-Primary structured obstacle fields:
+Per step, the simulator stores:
 
 ```text
 dynamic_obstacle_ids
-dynamic_obstacles_world_t       shape (N_dyn, 2)
-dynamic_obstacles_world_t1      shape (N_dyn, 2)
-dynamic_obstacle_delta_world_t  shape (N_dyn, 2)
-dynamic_obstacles_robot_t       shape (N_dyn, 2)
-dynamic_obstacles_robot_t1      shape (N_dyn, 2)
-dynamic_obstacle_radii          shape (N_dyn,)
-dynamic_obstacle_vel_world_t    shape (N_dyn, 2)
-dynamic_obstacle_vel_robot_t    shape (N_dyn, 2)
-dynamic_obstacle_rel_vel_robot_t shape (N_dyn, 2)
+dynamic_obstacles_world_t
+dynamic_obstacles_world_t1
+dynamic_obstacle_delta_world_t
+dynamic_obstacles_robot_t
+dynamic_obstacles_robot_t1
+dynamic_obstacle_delta_robot_t
+dynamic_obstacle_radii
+dynamic_obstacle_vel_world_t
+dynamic_obstacle_vel_robot_t
+dynamic_obstacle_rel_vel_robot_t
+dynamic_obstacle_rel_vel_robot_fd_t
+dynamic_obstacle_rel_vel_robot_fd_t1
 ```
 
-Auxiliary context:
+The key semantics are:
+
+- `dynamic_obstacles_robot_t`: obstacle position relative to the robot origin, expressed in the robot frame at time `t`.
+- `dynamic_obstacles_robot_t1`: obstacle position relative to the robot origin, expressed in the robot frame at time `t+1`.
+- `dynamic_obstacle_delta_robot_t = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t`.
+- `dynamic_obstacle_rel_vel_robot_fd_t = dynamic_obstacle_delta_robot_t / dt`.
+- `dynamic_obstacle_rel_vel_robot_fd_t1`: next-step finite-difference velocity target used by the practical model path. Newly generated datasets store it directly; older datasets synthesize it in the loader.
+
+Legacy fields are still present for compatibility and inspection:
+
+- `dynamic_obstacle_vel_world_t = (dynamic_obstacles_world_t1 - dynamic_obstacles_world_t) / dt`
+- `dynamic_obstacle_vel_robot_t = R_t dynamic_obstacle_vel_world_t`
+- `dynamic_obstacle_rel_vel_robot_t = R_t (v_obs_world - v_robot_world)`
+
+Those legacy velocity fields are no longer the practical learned-model inputs.
+
+## Velocity audit
+
+The important distinction is:
 
 ```text
-lidar_t, lidar_t1
-lidar_static_t, lidar_static_t1
-lidar_dynamic_residual_t, lidar_dynamic_residual_t1
+dynamic_obstacle_rel_vel_robot_t = R_t (v_obs_world - v_robot_world)
 ```
 
-Dynamic hazard targets:
+is not the same as:
 
 ```text
-dynamic_visible_t
-dynamic_collision_t1
-dynamic_collision_within_3
-dynamic_collision_within_5
-min_dynamic_clearance_t
-min_dynamic_clearance_t1
-dynamic_risk_t1
-dynamic_event_step_t
+(dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t) / dt
 ```
 
-## Identity and Motion
+Why they differ:
 
-Obstacle identity is fixed within each episode. Obstacles are sampled once, assigned stable IDs `dyn_00`, `dyn_01`, ..., and every `(N_dyn, 2)` array is assembled in that same list order. The inspector verifies that IDs remain unchanged and that `dynamic_obstacles_world_t1` at step `i` matches `dynamic_obstacles_world_t` at step `i+1`.
+- `R_t (v_obs_world - v_robot_world)` subtracts robot translation in world coordinates and rotates the result into the robot axes at time `t`.
+- `(dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t) / dt` differentiates a quantity that is already robot-relative and already expressed in the robot frame, so it also captures robot-frame rotation between `t` and `t+1`.
 
-Dynamic motion is smooth waypoint patrol motion: each obstacle moves at a sampled constant speed toward its current route target, then advances to the next waypoint. There is no frame-to-frame random walk, so deterministic short-horizon prediction over about seven steps remains meaningful.
+During turning, those are not equivalent. If the robot rotates in place near a stationary obstacle, the obstacle's robot-relative coordinates change even when `v_obs_world - v_robot_world` is near zero. That turning-induced change appears in the finite-difference robot-frame velocity and is missed by the older translational-relative convention.
 
-## Frames, Deltas, and Velocities
+This branch previously had the same practical mismatch seen elsewhere:
 
-Robot-frame obstacle position is:
+- stored obstacle positions were robot-relative
+- RSSM/controller inputs used `dynamic_obstacle_rel_vel_robot_t`
+- rollout-style propagation naturally implied finite-difference robot-relative velocity
+
+The cleaned-up branch now treats finite-difference robot-frame relative velocity as canonical for the learned-model path.
+
+## Model inputs and targets
+
+The practical Version-C / RSSM path now uses:
+
+- input obstacle state per slot: `[x_rel, y_rel, vx_rel_fd, vy_rel_fd, radius]`
+- target obstacle delta: `dynamic_obstacle_delta_robot_t`
+- target next velocity: `dynamic_obstacle_rel_vel_robot_fd_t1`
+
+The model predicts:
+
+- `pred_delta_rel`
+- `pred_next_rel_vel`
+
+This keeps target semantics aligned with rollout propagation:
 
 ```text
-p_robot = R(-theta_robot) @ (p_world - robot_xy)
+pos_rel_next = pos_rel_current + pred_delta_rel
+vel_rel_next = pred_next_rel_vel
 ```
 
-The rollout target delta is:
+and lightly regularizes them with:
 
 ```text
-dynamic_obstacle_delta_world_t = dynamic_obstacles_world_t1 - dynamic_obstacles_world_t
+pred_next_rel_vel ~= pred_delta_rel / dt
 ```
 
-Velocity fields are finite-difference fields:
+## Data loader behavior
+
+New datasets can provide the practical fields directly.
+
+Older `v4_dynamic_state_data_1` datasets remain readable. The loader derives:
 
 ```text
-dynamic_obstacle_vel_world_t = dynamic_obstacle_delta_world_t / dt
-dynamic_obstacle_vel_robot_t = R(-theta_t) @ dynamic_obstacle_vel_world_t
-robot_vel_world_t = (robot_pose_t1[:2] - robot_pose_t[:2]) / dt
-dynamic_obstacle_rel_vel_robot_t = R(-theta_t) @ (dynamic_obstacle_vel_world_t - robot_vel_world_t)
+dynamic_obstacle_delta_robot_t = dynamic_obstacles_robot_t1 - dynamic_obstacles_robot_t
+dynamic_obstacle_rel_vel_robot_fd_t = dynamic_obstacle_delta_robot_t / dt
 ```
 
-`dynamic_obstacle_vel_robot_t` is world velocity expressed in robot axes. It is not ego-relative. `dynamic_obstacle_rel_vel_robot_t` subtracts robot translation and is the preferred relative-velocity input for later control learning.
+and synthesizes `dynamic_obstacle_rel_vel_robot_fd_t1` from the next row when available, with a row-local finite-difference fallback at the episode end.
 
-## Dynamic Labels
+So retraining does not require regeneration, although regeneration is cleaner if you want the serialized dataset to carry the new fields explicitly.
 
-Clearance is dynamic-only:
+## Why `delta_world / dt` is still valid
 
-```text
-min_dynamic_clearance = min_i(||robot_xy - obs_i_xy|| - robot_radius - obs_i_radius)
-```
+`dynamic_obstacle_vel_world_t = (world_t1 - world_t) / dt` is still a valid realized world-frame step velocity for this simulator branch. It is the actual finite-difference velocity realized over the executed step, even if it differs from a separate instantaneous velocity snapshot convention.
 
-Visibility is structured-state based:
+That does not make it the right practical learned-state velocity here. The issue was not that `delta_world / dt` was invalid, but that the learned branch mixed world/translational-relative notions with robot-relative position targets.
 
-```text
-dynamic_visible_t = min_dynamic_clearance_t < dynamic_visibility_radius
-```
+## Edge cases and assumptions
 
-Dynamic collision and risk:
-
-```text
-dynamic_collision_t1 = min_dynamic_clearance_t1 <= 0
-dynamic_risk_t1 = 1.0 if min_dynamic_clearance_t1 <= 0
-dynamic_risk_t1 = exp(-min_dynamic_clearance_t1 / dynamic_risk_tau) otherwise
-```
-
-Horizon labels:
-
-```text
-dynamic_collision_within_H at step i =
-  any dynamic_collision_t1 in step indices [i, i + H - 1]
-```
-
-Because `dynamic_collision_t1` is already the collision event after taking the action at step `i`, `dynamic_collision_within_H` corresponds to collision events from times `t+1` through `t+H`.
-
-Event steps:
-
-```text
-dynamic_event_step_t =
-  dynamic_visible_t
-  OR dynamic_risk_t1 >= dynamic_risk_positive_threshold
-  OR dynamic_collision_within_3
-  OR dynamic_collision_within_5
-```
-
-The simulator, acceptance filter, inspector, and report use this same definition.
-
-## Optional Action-Conditional Labels
-
-V4 v1 does not implement privileged per-action labels such as `dynamic_collision_next_if_action` or `dynamic_risk_if_action`. The schema is intentionally focused on the main fixed-ID state pipeline; per-action rollout labels can be added later without changing the primary obstacle-state fields.
+- Identity/order stability:
+  - obstacle IDs are fixed and checked per step
+  - slot ordering is stable by construction
+- Fixed obstacle count:
+  - this branch still assumes a fixed `N_dyn`
+  - no padding redesign was added
+- Episode boundaries:
+  - each row stores a valid local `t -> t+1` transition
+  - sequence windows stay within an episode
+  - synthesized `*_fd_t1` falls back row-locally on terminal rows
+- `dt` usage:
+  - data generation uses `robot_config.dt`
+  - loader/training use stored row `dt` with episode fallback
+- Compatibility:
+  - newly generated data is marked `v4_dynamic_state_data_2`
+  - old datasets remain usable through loader-side derivation

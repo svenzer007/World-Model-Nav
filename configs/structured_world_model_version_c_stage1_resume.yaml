@@ -8,7 +8,7 @@ data:
 
 model:
   model_type: structured_obstacle_rssm_vc
-  model_version: version_c
+  model_version: version_c_motion_v2
   num_dynamic_obstacles: 4
   obstacle_feature_dim: 5
   obstacle_embed_dim: 48
@@ -24,7 +24,7 @@ model:
   head_hidden_dim: 128
   dropout: 0.0
   delta_scale: 0.05
-  risk_head_enabled: false
+  velocity_scale: 1.0
 
 training:
   stage: stage1
@@ -45,16 +45,10 @@ rollout:
 
 loss_weights:
   lambda_delta: 1.0
+  lambda_vel: 0.2
+  lambda_consistency: 0.05
   lambda_latent: 0.25
-  lambda_collision_next: 0.08
-  lambda_collision_within_3: 0.06
-  lambda_collision_within_5: 0.03
   lambda_rollout: 0.5
-  lambda_risk: 0.0
-  auto_pos_weight: true
-  collision_next_pos_weight_cap: 100.0
-  collision_within_3_pos_weight_cap: 100.0
-  collision_within_5_pos_weight_cap: 100.0
 
 sampler:
   enabled: true
