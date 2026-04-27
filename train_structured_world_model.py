@@ -114,6 +114,9 @@ def estimate_pos_weights(dataset: StructuredSequenceDataset, caps: Mapping[str, 
 
 
 def configured_pos_weights(config: Mapping[str, Any], train_dataset: StructuredSequenceDataset) -> dict[str, float]:
+    model_cfg = normalize_model_config(config.get("model", {}))
+    if str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)) == FACTOR_MODEL_TYPE:
+        return {}
     loss_cfg = config.get("loss_weights", {})
     if not bool(loss_cfg.get("auto_pos_weight", True)):
         return {
@@ -587,6 +590,7 @@ def main() -> None:
             "num_train_sequences": len(train_dataset),
             "num_val_sequences": len(val_dataset),
             "collision_pos_weights": pos_weights_float,
+            "motion_only_training": bool(str(model_cfg.get("model_type")) == FACTOR_MODEL_TYPE),
         },
     )
 

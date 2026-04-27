@@ -1,0 +1,30 @@
+Use this if you want to retrain with the existing dataset:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model.yaml
+If you want to resume later:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model.yaml --resume
+If you want to evaluate the new checkpoint afterward:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python eval_structured_world_model.py \
+  --config configs/structured_world_model.yaml \
+  --checkpoint artifacts/structured_world_model_factorized_v2/best.pt
+If you want the cleaner regenerated dataset anyway, use:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python -m sim2d.generate_data \
+  --num_episodes 20 \
+  --max_steps 250 \
+  --output_dir ./dataset_v4_dynamic_state_v2 \
+  --seed 0
+Then point training at it by editing configs/structured_world_model.yaml:
+
+data:
+  data_dir: ./dataset_v4_dynamic_state_v2
+And train:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model.yaml

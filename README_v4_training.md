@@ -75,6 +75,14 @@ The redesigned practical branch trains on:
 - next-step finite-difference velocity loss
 - a soft velocity-position consistency loss
 
+For `model_type: factorized_v2`, the practical branch does not use:
+
+- risk loss
+- collision-next loss
+- collision-within-3 loss
+- collision-within-5 loss
+- collision class positive-weight estimation
+
 The consistency loss is lightweight:
 
 ```text
