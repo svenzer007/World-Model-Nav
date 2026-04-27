@@ -28,6 +28,7 @@ model:
   velocity_scale: 1.0
 
 training:
+  stage: stage2
   batch_size: 64
   epochs: 17
   learning_rate: 0.00007

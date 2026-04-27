@@ -512,8 +512,11 @@ def main() -> None:
     model_cfg = normalize_model_config(config["model"])
     config["model"] = model_cfg
     training_cfg = config["training"]
+    training_stage = str(training_cfg.get("stage", "stage2"))
+    if training_stage not in {"stage1", "stage2"}:
+        raise ValueError(f"Unsupported training.stage={training_stage!r}; expected 'stage1' or 'stage2'")
     rollout_cfg = dict(config.get("rollout", {}))
-    rollout_enabled = bool(rollout_cfg.get("enabled", False))
+    rollout_enabled = bool(rollout_cfg.get("enabled", False)) and training_stage == "stage2"
     fallback_rollout_horizon = int(rollout_cfg.get("horizon", 0)) if rollout_enabled else 0
     rollout_curriculum, curriculum_total_epochs = resolve_rollout_curriculum(config) if rollout_enabled else ([], 0)
     total_epochs = int(curriculum_total_epochs if rollout_curriculum else training_cfg.get("epochs", 40))
@@ -584,6 +587,7 @@ def main() -> None:
         output_dir / "config_snapshot.json",
         {
             "config": config,
+            "training_stage": training_stage,
             "resolved_rollout_curriculum": rollout_curriculum,
             "num_train_episodes": len(train_paths),
             "num_val_episodes": len(val_paths),
@@ -620,7 +624,7 @@ def main() -> None:
         print(
             f"Resuming from {checkpoint_path} at epoch {start_epoch} "
             f"({'fresh optimizer' if args.fresh_optimizer else 'optimizer restored'}); "
-            f"active rollout horizon={resumed_horizon}.",
+            f"stage={training_stage}; active rollout horizon={resumed_horizon}.",
             flush=True,
         )
     elif init_checkpoint_path is not None:
@@ -643,7 +647,7 @@ def main() -> None:
         print(
             f"Initialized new run from {init_checkpoint_path} at local epoch 1 "
             f"({'optimizer restored' if init_load_optimizer_state else 'fresh optimizer'}); "
-            f"starting rollout horizon={active_rollout_horizon}.",
+            f"stage={training_stage}; starting rollout horizon={active_rollout_horizon}.",
             flush=True,
         )
 

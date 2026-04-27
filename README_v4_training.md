@@ -11,6 +11,11 @@ The practical redesigned branch is driven by:
 - `train_structured_world_model.py`
 - `configs/structured_world_model.yaml`
 
+The recommended two-stage entrypoints for this branch are:
+
+- `configs/structured_world_model_stage1.yaml`
+- `configs/structured_world_model_stage2.yaml`
+
 The default config now targets the explicit factorized practical model type:
 
 ```yaml
@@ -155,14 +160,30 @@ cd /home/stavan/s4/rnl/longer_horizons
 python -m compileall .
 ```
 
-Run training with the default config:
+Stage 1 one-step-only training:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model_stage1.yaml
+```
+
+Stage 2 rollout training initialized from a stage-1 checkpoint:
+
+Set `training.init_checkpoint` in `configs/structured_world_model_stage2.yaml`, then run:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model_stage2.yaml
+```
+
+The existing shared config remains rollout-enabled and stage-2-like:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model.yaml
 ```
 
-Default output directory:
+Default shared-config output directory:
 
 ```yaml
 training:
