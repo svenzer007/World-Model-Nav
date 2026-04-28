@@ -1,6 +1,7 @@
 """Structured V4 dynamics models."""
 
 from .structured_dynamics_model import (
+    FACTOR_WORLD_MODEL_TYPE,
     FACTOR_MODEL_TYPE,
     LEGACY_MODEL_TYPE,
     SUPPORTED_MODEL_TYPES,
@@ -10,6 +11,7 @@ from .structured_dynamics_model import (
 )
 
 __all__ = [
+    "FACTOR_WORLD_MODEL_TYPE",
     "FACTOR_MODEL_TYPE",
     "LEGACY_MODEL_TYPE",
     "SUPPORTED_MODEL_TYPES",

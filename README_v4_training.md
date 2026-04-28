@@ -1,164 +1,69 @@
-# V4 Structured World-Model Training
+# Longer-Horizons Practical Training
 
-This README covers the practical longer-horizon training path under `/home/stavan/s4/rnl/longer_horizons`.
+This README covers the practical recurrent learned-model branch under `/home/stavan/s4/rnl/longer_horizons`.
 
-For the structured dynamic-state semantics and frame definitions, see [README_v4_dynamic_state_data.md](./README_v4_dynamic_state_data.md).
-
-## Current Recommended Branch
-
-The practical redesigned branch is driven by:
-
-- `train_structured_world_model.py`
-- `configs/structured_world_model.yaml`
-
-The recommended two-stage entrypoints for this branch are:
-
-- `configs/structured_world_model_stage1.yaml`
-- `configs/structured_world_model_stage2.yaml`
-
-The default config now targets the explicit factorized practical model type:
+The current recommended practical branch is the world-frame redesign:
 
 ```yaml
 model:
-  model_type: factorized_v2
+  model_type: factorized_world_v3
 ```
 
-This is intentionally checkpoint-incompatible with older joint practical checkpoints.
+For the detailed state semantics and causal-velocity definition, see [dynamic_state_data.md](/home/stavan/s4/rnl/longer_horizons/dynamic_state_data.md).
 
-## Architecture Change
+## Current practical model
 
-### Old practical architecture: `joint_v1`
+The practical branch keeps the same general recurrent family:
 
-The older practical model used:
+- shared per-obstacle encoder
+- recurrent GRU temporal state
+- shared per-obstacle prediction head
 
-- per-obstacle feature encoding
-- flattening all obstacle embeddings into one joint slot-entangled vector
-- one GRU over the joint vector plus action and optional goal context
-- one joint output head that predicted all obstacle deltas together
-- auxiliary risk and collision heads
+The new world-frame practical path uses:
 
-This made the dynamic-obstacle block more entangled than needed for the practical branch.
+- input per obstacle:
+  - `x_world`
+  - `y_world`
+  - `vx_world_causal`
+  - `vy_world_causal`
+  - `radius`
+- output per obstacle:
+  - `pred_delta_world`
 
-### New practical architecture: `factorized_v2`
+The world-frame branch intentionally does not keep:
 
-The redesigned branch uses:
+- explicit next-velocity head
+- velocity consistency loss
+- risk/collision auxiliary heads
 
-- a shared per-obstacle encoder applied independently to each obstacle slot
-- a small shared context input from action and optional goal
-- a lightweight recurrent temporal state over pooled obstacle/context features
-- a shared per-obstacle prediction head conditioned on obstacle embedding plus recurrent context
+## Action conditioning
 
-Per-obstacle input:
+The new world-frame practical branch does not meaningfully rely on robot action for obstacle prediction.
 
-- `x_rel`
-- `y_rel`
-- `vx_rel_fd`
-- `vy_rel_fd`
-- `radius`
+Implementation detail:
 
-Per-obstacle outputs:
+- the public model interface still accepts action tensors so the training/controller plumbing stays stable
+- but `factorized_world_v3` uses pooled obstacle state as its recurrent input context rather than action-conditioned obstacle dynamics
 
-- `pred_delta_rel`
-- `pred_next_rel_vel_fd`
-
-Removed from the new practical model type:
-
-- risk auxiliary head
-- collision-next auxiliary head
-- collision-within-3 auxiliary head
-- collision-within-5 auxiliary head
-
-The redesign is meant to improve structure and target semantics without materially increasing capacity.
+That keeps churn low while making the effective obstacle-dynamics path action-independent.
 
 ## Losses
 
-### One-step losses
+For `factorized_world_v3`, training is motion-only:
 
-The redesigned practical branch trains on:
+- one-step world-delta loss
+- rollout world-delta loss when rollout training is enabled
 
-- delta position loss
-- next-step finite-difference velocity loss
-- a soft velocity-position consistency loss
-
-For `model_type: factorized_v2`, the practical branch does not use:
-
-- risk loss
-- collision-next loss
-- collision-within-3 loss
-- collision-within-5 loss
-- collision class positive-weight estimation
-
-The consistency loss is lightweight:
+Rollout uses:
 
 ```text
-pred_next_rel_vel_fd  ~  pred_delta_rel / dt
+p_world_next = p_world_prev + pred_delta_world
+v_world_next = (p_world_next - p_world_prev) / dt
 ```
 
-It is only a soft regularizer, not a hard constraint.
+So a causal world velocity state is still carried through rollout, but it is derived from consecutive predicted world positions rather than predicted directly by a second head.
 
-### Rollout loss
-
-Rollout training now propagates:
-
-- `x_next = x_prev + pred_delta_rel`
-- `v_next = pred_next_rel_vel_fd`
-
-Rollout supervision uses:
-
-- rollout delta error
-- rollout next-velocity error
-- the same small consistency regularization term
-
-## Config
-
-The default config is:
-
-```bash
-/home/stavan/s4/rnl/longer_horizons/configs/structured_world_model.yaml
-```
-
-Important defaults:
-
-- `data.data_dir: ./dataset`
-- `data.sequence_length: 20`
-- `model.model_type: factorized_v2`
-- `model.num_dynamic_obstacles: 4`
-- `model.use_goal: true`
-- `model.use_lidar: false`
-- `rollout.enabled: true`
-- `rollout.eval_enabled: true`
-- `training.output_dir: ./artifacts/structured_world_model_factorized_v2`
-
-The checked-in rollout curriculum remains:
-
-- horizon `3` for `5` epochs
-- horizon `6` for `5` epochs
-- horizon `8` for `3` epochs
-- horizon `10` for `4` epochs
-
-## Dataset Expectations
-
-The redesigned practical path expects the loader to provide:
-
-- `obstacle_pos`
-- `obstacle_vel`
-- `radii`
-- `delta_rel`
-- `target_next_obstacle_vel`
-- `action_index`
-- `action_cont`
-- `goal` when enabled
-
-The loader prefers the new finite-difference practical fields from [README_v4_dynamic_state_data.md](./README_v4_dynamic_state_data.md) and derives them on the fly for older datasets when needed.
-
-## Train
-
-Compile first:
-
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python -m compileall .
-```
+## Stage 1 / Stage 2
 
 Stage 1 one-step-only training:
 
@@ -167,88 +72,51 @@ cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model_stage1.yaml
 ```
 
-Stage 2 rollout training initialized from a stage-1 checkpoint:
-
-Set `training.init_checkpoint` in `configs/structured_world_model_stage2.yaml`, then run:
+Stage 2 rollout training:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model_stage2.yaml
 ```
 
-The existing shared config remains rollout-enabled and stage-2-like:
+The shared rollout-enabled config remains:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model.yaml
 ```
 
-Default shared-config output directory:
+## Evaluation
 
-```yaml
-training:
-  output_dir: ./artifacts/structured_world_model_factorized_v2
-```
-
-## Resume
-
-Resume from the default latest checkpoint in the configured output directory:
+Example evaluation command:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
-python train_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --resume
-```
-
-Resume from a specific full checkpoint:
-
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python train_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --resume \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_v2/latest.pt
+python eval_structured_world_model.py \
+  --config configs/structured_world_model_stage2.yaml \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
 ```
 
 ## Compatibility
 
-The branch now uses explicit model-type checking.
+The world-frame redesign uses a new explicit model type:
 
-That means:
+- `factorized_world_v3`
 
-- old `joint_v1` checkpoints do not silently load into `factorized_v2`
-- new `factorized_v2` checkpoints do not pretend to be old joint checkpoints
+That keeps old robot-frame factorized checkpoints recoverable and prevents them from silently loading into the new semantics.
 
-Older checkpoints remain recoverable through the legacy model path, but they are intentionally separated from the redesigned practical branch.
+## Dataset expectations
 
-## Outputs
+The world-frame practical branch expects the loader to provide:
 
-Training writes artifacts under `training.output_dir`.
+- `obstacle_pos` in world frame
+- `obstacle_vel` as causal world velocity
+- `radii`
+- `delta_world`
+- `action_index`, `action_cont`
+- `goal` if enabled
 
-Main files include:
+Older datasets remain usable because the loader can synthesize causal world velocity from:
 
-- `epoch_001.pt`, `epoch_002.pt`, ...
-- `epoch_001_weights.pt`, `epoch_002_weights.pt`, ...
-- `latest.pt`
-- `latest_weights.pt`
-- `best.pt`
-- `best_weights.pt`
-- `history.json`
-- `config_snapshot.json`
-- `init_source.json` when `training.init_checkpoint` is used
-
-Each full checkpoint includes:
-
-- `model_state_dict`
-- `optimizer_state_dict`
-- `epoch`
-- `config`
-- `metrics`
-- `best_val_loss`
-- `active_rollout_horizon`
-
-## Notes
-
-- This README describes the practical factorized redesign, not the separate Version C / RSSM-style branch elsewhere in the repo.
-- The first redesign version intentionally prioritizes motion prediction simplicity over keeping low-value auxiliary heads.
+- stored snapshot velocity at the first step
+- prior world positions afterward

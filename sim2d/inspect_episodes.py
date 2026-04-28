@@ -215,13 +215,8 @@ def _validate_v4_step_fields(episode: dict[str, object], step_index: int, step: 
         "dynamic_obstacle_delta_world_t",
         "dynamic_obstacles_robot_t",
         "dynamic_obstacles_robot_t1",
-        "dynamic_obstacle_delta_robot_t",
         "dynamic_obstacle_radii",
         "dynamic_obstacle_vel_world_t",
-        "dynamic_obstacle_vel_robot_t",
-        "dynamic_obstacle_rel_vel_robot_t",
-        "dynamic_obstacle_rel_vel_robot_fd_t",
-        "dynamic_obstacle_rel_vel_robot_fd_t1",
         "dynamic_visible_t",
         "dynamic_collision_t1",
         "dynamic_collision_within_3",
@@ -258,13 +253,12 @@ def _validate_v4_structured_dynamic_fields(
     delta = np.asarray(step["dynamic_obstacle_delta_world_t"], dtype=float)
     robot_t = np.asarray(step["dynamic_obstacles_robot_t"], dtype=float)
     robot_t1 = np.asarray(step["dynamic_obstacles_robot_t1"], dtype=float)
-    delta_robot = np.asarray(step["dynamic_obstacle_delta_robot_t"], dtype=float)
     radii = np.asarray(step["dynamic_obstacle_radii"], dtype=float)
     vel_world = np.asarray(step["dynamic_obstacle_vel_world_t"], dtype=float)
-    vel_robot = np.asarray(step["dynamic_obstacle_vel_robot_t"], dtype=float)
-    rel_vel_robot = np.asarray(step["dynamic_obstacle_rel_vel_robot_t"], dtype=float)
-    rel_vel_robot_fd = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=float)
-    rel_vel_robot_fd_t1 = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t1"], dtype=float)
+    vel_world_causal = np.asarray(
+        step.get("dynamic_obstacle_vel_world_causal_t", np.zeros_like(vel_world)),
+        dtype=float,
+    )
 
     for name, array in (
         ("dynamic_obstacles_world_t", world_t),
@@ -272,12 +266,7 @@ def _validate_v4_structured_dynamic_fields(
         ("dynamic_obstacle_delta_world_t", delta),
         ("dynamic_obstacles_robot_t", robot_t),
         ("dynamic_obstacles_robot_t1", robot_t1),
-        ("dynamic_obstacle_delta_robot_t", delta_robot),
         ("dynamic_obstacle_vel_world_t", vel_world),
-        ("dynamic_obstacle_vel_robot_t", vel_robot),
-        ("dynamic_obstacle_rel_vel_robot_t", rel_vel_robot),
-        ("dynamic_obstacle_rel_vel_robot_fd_t", rel_vel_robot_fd),
-        ("dynamic_obstacle_rel_vel_robot_fd_t1", rel_vel_robot_fd_t1),
     ):
         if array.shape != (n_dyn, 2):
             raise ValueError(f"Unexpected {name} shape in episode {episode['episode_id']} step {step_index}")
@@ -291,31 +280,66 @@ def _validate_v4_structured_dynamic_fields(
         raise ValueError(f"Dynamic obstacle delta mismatch in episode {episode['episode_id']} step {step_index}")
     if not np.allclose(vel_world, delta / dt, atol=1e-5):
         raise ValueError(f"Dynamic obstacle world velocity mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_vel_world_causal_t" in step:
+        if step_index == 0:
+            expected_vel_world_causal = np.asarray(
+                [np.asarray(snapshot["velocity"], dtype=float) for snapshot in step.get("dynamic_obstacles_t", [])],
+                dtype=float,
+            )
+        else:
+            previous_world_t = np.asarray(episode["steps"][step_index - 1]["dynamic_obstacles_world_t"], dtype=float)
+            expected_vel_world_causal = (world_t - previous_world_t) / dt
+        if not np.allclose(vel_world_causal, expected_vel_world_causal, atol=1e-5):
+            raise ValueError(f"Causal world velocity mismatch in episode {episode['episode_id']} step {step_index}")
     expected_robot_t = _world_points_to_robot_frame(world_t, pose_t)
     expected_robot_t1 = _world_points_to_robot_frame(world_t1, pose_t1)
     if not np.allclose(robot_t, expected_robot_t, atol=1e-5):
         raise ValueError(f"Robot-frame obstacle position mismatch in episode {episode['episode_id']} step {step_index}")
     if not np.allclose(robot_t1, expected_robot_t1, atol=1e-5):
         raise ValueError(f"Robot-frame t1 obstacle position mismatch in episode {episode['episode_id']} step {step_index}")
-    if not np.allclose(delta_robot, robot_t1 - robot_t, atol=1e-5):
-        raise ValueError(f"Robot-frame obstacle delta mismatch in episode {episode['episode_id']} step {step_index}")
     expected_vel_robot = _world_vectors_to_robot_frame(vel_world, float(pose_t[2]))
     robot_vel_world = (pose_t1[:2] - pose_t[:2]) / dt
     expected_rel_vel_robot = _world_vectors_to_robot_frame(vel_world - robot_vel_world[None, :], float(pose_t[2]))
     expected_rel_vel_robot_fd = (robot_t1 - robot_t) / dt
-    if not np.allclose(vel_robot, expected_vel_robot, atol=1e-5):
-        raise ValueError(f"Robot-axis obstacle velocity mismatch in episode {episode['episode_id']} step {step_index}")
-    if not np.allclose(rel_vel_robot, expected_rel_vel_robot, atol=1e-5):
-        raise ValueError(f"Relative obstacle velocity mismatch in episode {episode['episode_id']} step {step_index}")
-    if not np.allclose(rel_vel_robot_fd, expected_rel_vel_robot_fd, atol=1e-5):
-        raise ValueError(f"Finite-difference relative velocity mismatch in episode {episode['episode_id']} step {step_index}")
-    if step_index < len(episode["steps"]) - 1:
-        next_step = episode["steps"][step_index + 1]
-        expected_rel_vel_robot_fd_t1 = np.asarray(next_step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=float)
-    else:
-        expected_rel_vel_robot_fd_t1 = expected_rel_vel_robot_fd
-    if not np.allclose(rel_vel_robot_fd_t1, expected_rel_vel_robot_fd_t1, atol=1e-5):
-        raise ValueError(f"Next-step finite-difference relative velocity mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_delta_robot_t" in step:
+        delta_robot = np.asarray(step["dynamic_obstacle_delta_robot_t"], dtype=float)
+        if delta_robot.shape != (n_dyn, 2):
+            raise ValueError(f"Unexpected dynamic_obstacle_delta_robot_t shape in episode {episode['episode_id']} step {step_index}")
+        if not np.allclose(delta_robot, robot_t1 - robot_t, atol=1e-5):
+            raise ValueError(f"Robot-frame obstacle delta mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_vel_robot_t" in step:
+        vel_robot = np.asarray(step["dynamic_obstacle_vel_robot_t"], dtype=float)
+        if vel_robot.shape != (n_dyn, 2):
+            raise ValueError(f"Unexpected dynamic_obstacle_vel_robot_t shape in episode {episode['episode_id']} step {step_index}")
+        if not np.allclose(vel_robot, expected_vel_robot, atol=1e-5):
+            raise ValueError(f"Robot-axis obstacle velocity mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_rel_vel_robot_t" in step:
+        rel_vel_robot = np.asarray(step["dynamic_obstacle_rel_vel_robot_t"], dtype=float)
+        if rel_vel_robot.shape != (n_dyn, 2):
+            raise ValueError(f"Unexpected dynamic_obstacle_rel_vel_robot_t shape in episode {episode['episode_id']} step {step_index}")
+        if not np.allclose(rel_vel_robot, expected_rel_vel_robot, atol=1e-5):
+            raise ValueError(f"Relative obstacle velocity mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_rel_vel_robot_fd_t" in step:
+        rel_vel_robot_fd = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=float)
+        if rel_vel_robot_fd.shape != (n_dyn, 2):
+            raise ValueError(
+                f"Unexpected dynamic_obstacle_rel_vel_robot_fd_t shape in episode {episode['episode_id']} step {step_index}"
+            )
+        if not np.allclose(rel_vel_robot_fd, expected_rel_vel_robot_fd, atol=1e-5):
+            raise ValueError(f"Finite-difference relative velocity mismatch in episode {episode['episode_id']} step {step_index}")
+    if "dynamic_obstacle_rel_vel_robot_fd_t1" in step:
+        rel_vel_robot_fd_t1 = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t1"], dtype=float)
+        if rel_vel_robot_fd_t1.shape != (n_dyn, 2):
+            raise ValueError(
+                f"Unexpected dynamic_obstacle_rel_vel_robot_fd_t1 shape in episode {episode['episode_id']} step {step_index}"
+            )
+        if step_index < len(episode["steps"]) - 1 and "dynamic_obstacle_rel_vel_robot_fd_t" in episode["steps"][step_index + 1]:
+            next_step = episode["steps"][step_index + 1]
+            expected_rel_vel_robot_fd_t1 = np.asarray(next_step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=float)
+        else:
+            expected_rel_vel_robot_fd_t1 = expected_rel_vel_robot_fd
+        if not np.allclose(rel_vel_robot_fd_t1, expected_rel_vel_robot_fd_t1, atol=1e-5):
+            raise ValueError(f"Next-step finite-difference relative velocity mismatch in episode {episode['episode_id']} step {step_index}")
 
 
 def _validate_dynamic_horizon_labels(episode: dict[str, object]) -> None:

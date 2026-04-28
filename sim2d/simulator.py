@@ -255,6 +255,7 @@ class EpisodeSimulator:
             if done:
                 break
 
+        self._add_causal_world_velocity_fields(steps)
         self._add_dynamic_velocity_targets(steps)
         self._add_collision_horizon_labels(steps, horizons=(3, 5))
         self._add_dynamic_horizon_and_event_labels(steps, horizons=(3, 5))
@@ -263,7 +264,7 @@ class EpisodeSimulator:
         return {
             "episode_id": int(episode_id),
             "seed": int(seed),
-            "schema_version": "v4_dynamic_state_data_2",
+            "schema_version": "v4_dynamic_state_data_3",
             "map_id": map_bundle.map_id,
             "map_type": map_bundle.map_type,
             "occupancy_grid": occupancy.copy(),
@@ -507,6 +508,25 @@ class EpisodeSimulator:
             else:
                 next_velocity = np.asarray(step["dynamic_obstacle_rel_vel_robot_fd_t"], dtype=np.float32)
             step["dynamic_obstacle_rel_vel_robot_fd_t1"] = next_velocity.copy()
+
+    @staticmethod
+    def _add_causal_world_velocity_fields(steps: list[dict[str, object]]) -> None:
+        """Fill causal world velocity used by the world-frame practical branch."""
+        for index, step in enumerate(steps):
+            dt = max(1e-9, float(step.get("dt", 0.1)))
+            if index == 0:
+                current_snapshots = list(step.get("dynamic_obstacles_t", []))
+                if not current_snapshots:
+                    raise ValueError("Cannot bootstrap causal world velocity without dynamic_obstacles_t snapshots")
+                causal_velocity = np.asarray(
+                    [np.asarray(snapshot["velocity"], dtype=np.float32) for snapshot in current_snapshots],
+                    dtype=np.float32,
+                )
+            else:
+                current_world = np.asarray(step["dynamic_obstacles_world_t"], dtype=np.float32)
+                previous_world = np.asarray(steps[index - 1]["dynamic_obstacles_world_t"], dtype=np.float32)
+                causal_velocity = (current_world - previous_world) / dt
+            step["dynamic_obstacle_vel_world_causal_t"] = causal_velocity.astype(np.float32)
 
     @staticmethod
     def _world_points_to_robot_frame(points_world: np.ndarray, robot_pose: np.ndarray) -> np.ndarray:

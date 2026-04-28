@@ -7,7 +7,7 @@ data:
   stride: 1
 
 model:
-  model_type: factorized_v2
+  model_type: factorized_world_v3
   num_dynamic_obstacles: 4
   obstacle_feature_dim: 5
   obstacle_embed_dim: 32
@@ -25,7 +25,6 @@ model:
   head_hidden_dim: 128
   dropout: 0.0
   delta_scale: 0.05
-  velocity_scale: 1.0
 
 training:
   stage: stage2
@@ -35,7 +34,7 @@ training:
   grad_clip_norm: 5.0
   num_workers: 0
   device: auto
-  output_dir: ./artifacts/structured_world_model_factorized_v2_stage2
+  output_dir: ./artifacts/structured_world_model_factorized_world_v3_stage2
   init_checkpoint: null
   init_load_optimizer_state: false
 
@@ -52,8 +51,6 @@ rollout:
 loss_weights:
   lambda_delta: 1.0
   lambda_rollout: 0.5
-  lambda_vel: 0.1
-  lambda_consistency: 0.05
 
 sampler:
   enabled: true
@@ -69,7 +66,7 @@ sampler:
 
 evaluation:
   threshold: 0.5
-  output_path: ./artifacts/structured_world_model_factorized_v2_stage2/eval_metrics.json
+  output_path: ./artifacts/structured_world_model_factorized_world_v3_stage2/eval_metrics.json
   action_cont_values:
     - [0.0, 0.0]
     - [0.4, 0.0]

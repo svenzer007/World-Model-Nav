@@ -1,4 +1,4 @@
-"""Learned V4 controller using GRU-predicted robot-relative obstacle rollout."""
+"""Learned V4 controller using recurrent obstacle rollout for dynamic scoring."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from controllers.baseline_structured_controller import (
     robot_frame_points,
     velocity_penalty_from_action,
 )
-from models import FACTOR_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
+from models import FACTOR_MODEL_TYPE, FACTOR_WORLD_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_static_clearance, unicycle_step
 from sim2d.obstacles import DynamicObstacle
@@ -50,7 +50,7 @@ def detach_hidden_state(hidden):
 
 
 class LearnedStructuredController:
-    """Roll out the structured dynamics model in robot frame for dynamic scoring."""
+    """Roll out the structured dynamics model for dynamic scoring."""
 
     name = "learned_structured"
 
@@ -173,18 +173,30 @@ class LearnedStructuredController:
     ) -> None:
         ordered_t = self._order_snapshot_dicts(dynamic_obstacles_t)
         ordered_t1 = self._order_snapshot_dicts(dynamic_obstacles_t1)
-        state_t = self._state_from_transition(
-            robot_pose_prev=np.asarray(robot_pose_t, dtype=float),
-            robot_pose_curr=np.asarray(robot_pose_t1, dtype=float),
-            current_snapshots=ordered_t,
-            future_snapshots=ordered_t1,
-            path_world=path_world,
-        )
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE and self.current_true_state is not None:
+            state_t = {
+                "pos_world": np.asarray(self.current_true_state["pos_world"], dtype=np.float32).copy(),
+                "vel_world": np.asarray(self.current_true_state["vel_world"], dtype=np.float32).copy(),
+                "radii": np.asarray(self.current_true_state["radii"], dtype=np.float32).copy(),
+                "goal": np.asarray(self.current_true_state["goal"], dtype=np.float32).copy(),
+            }
+        else:
+            state_t = self._state_from_transition(
+                robot_pose_prev=np.asarray(robot_pose_t, dtype=float),
+                robot_pose_curr=np.asarray(robot_pose_t1, dtype=float),
+                current_snapshots=ordered_t,
+                future_snapshots=ordered_t1,
+                path_world=path_world,
+            )
         action_cont_np = np.asarray(action_cont, dtype=np.float32)
         action_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
         action_cont_tensor = torch.from_numpy(action_cont_np[None]).to(self.device)
-        obstacle_pos = torch.from_numpy(state_t["pos_rel"][None]).to(self.device)
-        obstacle_vel = torch.from_numpy(state_t["vel_rel"][None]).to(self.device)
+        obstacle_pos = torch.from_numpy(
+            state_t["pos_world" if self.model_type == FACTOR_WORLD_MODEL_TYPE else "pos_rel"][None]
+        ).to(self.device)
+        obstacle_vel = torch.from_numpy(
+            state_t["vel_world" if self.model_type == FACTOR_WORLD_MODEL_TYPE else "vel_rel"][None]
+        ).to(self.device)
         radii = torch.from_numpy(state_t["radii"][None]).to(self.device)
         goal_tensor = torch.from_numpy(state_t["goal"][None]).to(self.device) if self.use_goal else None
         with torch.no_grad():
@@ -199,13 +211,21 @@ class LearnedStructuredController:
                 hidden=self.h_real,
             )
         self.h_real = detach_hidden_state(new_hidden)
-        self.current_true_state = self._next_state_from_snapshots(
-            next_snapshots=ordered_t1,
-            current_vel_rel=state_t["vel_rel"],
-            path_world=path_world,
-            robot_pose_t=np.asarray(robot_pose_t, dtype=float),
-            robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
-        )
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            self.current_true_state = self._next_world_state_from_snapshots(
+                current_snapshots=ordered_t,
+                next_snapshots=ordered_t1,
+                path_world=path_world,
+                robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
+            )
+        else:
+            self.current_true_state = self._next_state_from_snapshots(
+                next_snapshots=ordered_t1,
+                current_vel_rel=state_t["vel_rel"],
+                path_world=path_world,
+                robot_pose_t=np.asarray(robot_pose_t, dtype=float),
+                robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
+            )
 
     def _evaluate_candidate(
         self,
@@ -224,8 +244,15 @@ class LearnedStructuredController:
     ) -> dict[str, Any]:
         action = ACTIONS[int(action_index)]
         pose = np.asarray(robot_pose, dtype=float).copy()
-        pos_rel_current = np.asarray(current_state["pos_rel"], dtype=np.float32).copy()
-        vel_rel_current = np.asarray(current_state["vel_rel"], dtype=np.float32).copy()
+        use_world_state = self.model_type == FACTOR_WORLD_MODEL_TYPE
+        pos_state_current = np.asarray(
+            current_state["pos_world" if use_world_state else "pos_rel"],
+            dtype=np.float32,
+        ).copy()
+        vel_state_current = np.asarray(
+            current_state["vel_world" if use_world_state else "vel_rel"],
+            dtype=np.float32,
+        ).copy()
         radii = np.asarray(current_state["radii"], dtype=np.float32).copy()
         h_candidate = clone_hidden_state(self.h_real)
         true_obstacles = [obstacle.clone() for obstacle in dynamic_obstacles]
@@ -247,7 +274,13 @@ class LearnedStructuredController:
         drift_mean: list[float] = []
         drift_max: list[float] = []
         infeasible_reasons: list[str] = []
-        true_pos_rel_current = np.asarray(current_state["pos_rel"], dtype=np.float32).copy()
+        true_pos_rel_current = robot_frame_points(
+            np.asarray(robot_pose, dtype=float),
+            np.asarray(current_state["pos_world"], dtype=float) if use_world_state else np.asarray(
+                [obstacle.position.copy() for obstacle in dynamic_obstacles],
+                dtype=float,
+            ),
+        ).astype(np.float32)
 
         action_index_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
         action_cont_tensor = torch.tensor([[float(action["v"]), float(action["omega"])]], dtype=torch.float32, device=self.device)
@@ -261,8 +294,8 @@ class LearnedStructuredController:
             )
             waypoint = compute_local_subgoal(pose, path_world, self.config.lookahead_distance)
             goal_features = np.asarray(waypoint["goal_features"], dtype=np.float32)
-            obstacle_pos_tensor = torch.from_numpy(pos_rel_current[None]).to(self.device)
-            obstacle_vel_tensor = torch.from_numpy(vel_rel_current[None]).to(self.device)
+            obstacle_pos_tensor = torch.from_numpy(pos_state_current[None]).to(self.device)
+            obstacle_vel_tensor = torch.from_numpy(vel_state_current[None]).to(self.device)
             radii_tensor = torch.from_numpy(radii[None]).to(self.device)
             goal_tensor = torch.from_numpy(goal_features[None]).to(self.device) if self.use_goal else None
 
@@ -277,12 +310,22 @@ class LearnedStructuredController:
                     lidar=None,
                     hidden=h_candidate,
                 )
-            pred_delta_rel = outputs["pred_delta_rel"][0].detach().cpu().numpy().astype(np.float32)
-            pos_rel_next = pos_rel_current + pred_delta_rel
-            if "pred_next_rel_vel" in outputs:
-                vel_rel_next = outputs["pred_next_rel_vel"][0].detach().cpu().numpy().astype(np.float32)
+            pred_delta = outputs["pred_delta_rel"][0].detach().cpu().numpy().astype(np.float32)
+            pos_state_next = pos_state_current + pred_delta
+            vel_state_next = (pos_state_next - pos_state_current) / float(self.config.robot_config.dt)
+
+            if use_world_state:
+                pos_rel_next = robot_frame_points(pose, pos_state_next.astype(float)).astype(np.float32)
+                vel_rel_next = robot_frame_points(
+                    np.array([0.0, 0.0, float(pose[2])], dtype=float),
+                    vel_state_next.astype(float),
+                ).astype(np.float32)
             else:
-                vel_rel_next = (pos_rel_next - pos_rel_current) / float(self.config.robot_config.dt)
+                pos_rel_next = pos_state_next
+                if "pred_next_rel_vel" in outputs:
+                    vel_rel_next = outputs["pred_next_rel_vel"][0].detach().cpu().numpy().astype(np.float32)
+                else:
+                    vel_rel_next = vel_state_next
 
             predicted_clearances = dynamic_clearances_from_positions(
                 pos_rel_next.astype(float),
@@ -337,8 +380,8 @@ class LearnedStructuredController:
             drift_mean.append(float(np.mean(drift)) if drift.size else 0.0)
             drift_max.append(float(np.max(drift)) if drift.size else 0.0)
 
-            pos_rel_current = pos_rel_next
-            vel_rel_current = vel_rel_next
+            pos_state_current = pos_state_next
+            vel_state_current = vel_state_next if use_world_state else vel_rel_next
             true_pos_rel_current = true_robot.astype(np.float32)
 
         if any(planning_collisions):
@@ -403,6 +446,13 @@ class LearnedStructuredController:
         dynamic_obstacles: Sequence[DynamicObstacle],
     ) -> dict[str, np.ndarray]:
         if self.current_true_state is not None:
+            if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+                return {
+                    "pos_world": np.asarray(self.current_true_state["pos_world"], dtype=np.float32).copy(),
+                    "vel_world": np.asarray(self.current_true_state["vel_world"], dtype=np.float32).copy(),
+                    "radii": np.asarray(self.current_true_state["radii"], dtype=np.float32).copy(),
+                    "goal": np.asarray(self.current_true_state["goal"], dtype=np.float32).copy(),
+                }
             return {
                 "pos_rel": np.asarray(self.current_true_state["pos_rel"], dtype=np.float32).copy(),
                 "vel_rel": np.asarray(self.current_true_state["vel_rel"], dtype=np.float32).copy(),
@@ -413,6 +463,14 @@ class LearnedStructuredController:
         positions_world = np.asarray([obstacle.position.copy() for obstacle in dynamic_obstacles], dtype=float)
         velocities_world = np.asarray([np.asarray(obstacle.velocity, dtype=float) for obstacle in dynamic_obstacles], dtype=float)
         radii = np.asarray([float(obstacle.radius) for obstacle in dynamic_obstacles], dtype=np.float32)
+        waypoint = compute_local_subgoal(robot_pose, path_world, self.config.lookahead_distance)
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            return {
+                "pos_world": positions_world.astype(np.float32),
+                "vel_world": velocities_world.astype(np.float32),
+                "radii": radii,
+                "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
+            }
         pos_rel = robot_frame_points(robot_pose, positions_world).astype(np.float32)
         if self.model_type == FACTOR_MODEL_TYPE:
             # Before the first executed transition there is no previous robot-relative
@@ -428,7 +486,6 @@ class LearnedStructuredController:
                 np.array([0.0, 0.0, float(robot_pose[2])], dtype=float),
                 velocities_world,
             ).astype(np.float32)
-        waypoint = compute_local_subgoal(robot_pose, path_world, self.config.lookahead_distance)
         return {
             "pos_rel": pos_rel,
             "vel_rel": vel_rel,
@@ -445,6 +502,23 @@ class LearnedStructuredController:
         future_snapshots: Sequence[dict[str, object]],
         path_world: np.ndarray,
     ) -> dict[str, np.ndarray]:
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            positions_world = np.asarray(
+                [np.asarray(snapshot["position"], dtype=float) for snapshot in current_snapshots],
+                dtype=float,
+            )
+            velocities_world = np.asarray(
+                [np.asarray(snapshot["velocity"], dtype=float) for snapshot in current_snapshots],
+                dtype=float,
+            )
+            radii = np.asarray([float(snapshot["radius"]) for snapshot in current_snapshots], dtype=np.float32)
+            waypoint = compute_local_subgoal(robot_pose_prev, path_world, self.config.lookahead_distance)
+            return {
+                "pos_world": positions_world.astype(np.float32),
+                "vel_world": velocities_world.astype(np.float32),
+                "radii": radii,
+                "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
+            }
         positions_world = np.asarray([np.asarray(snapshot["position"], dtype=float) for snapshot in current_snapshots], dtype=float)
         positions_world_next = np.asarray([np.asarray(snapshot["position"], dtype=float) for snapshot in future_snapshots], dtype=float)
         pos_rel = robot_frame_points(robot_pose_prev, positions_world).astype(np.float32)
@@ -495,6 +569,33 @@ class LearnedStructuredController:
         return {
             "pos_rel": robot_frame_points(robot_pose_t1, positions_world).astype(np.float32),
             "vel_rel": vel_rel,
+            "radii": radii,
+            "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
+        }
+
+    def _next_world_state_from_snapshots(
+        self,
+        *,
+        current_snapshots: Sequence[dict[str, object]],
+        next_snapshots: Sequence[dict[str, object]],
+        path_world: np.ndarray,
+        robot_pose_t1: np.ndarray,
+    ) -> dict[str, np.ndarray]:
+        positions_world_prev = np.asarray(
+            [np.asarray(snapshot["position"], dtype=float) for snapshot in current_snapshots],
+            dtype=float,
+        )
+        positions_world_next = np.asarray(
+            [np.asarray(snapshot["position"], dtype=float) for snapshot in next_snapshots],
+            dtype=float,
+        )
+        radii = np.asarray([float(snapshot["radius"]) for snapshot in next_snapshots], dtype=np.float32)
+        waypoint = compute_local_subgoal(robot_pose_t1, path_world, self.config.lookahead_distance)
+        return {
+            "pos_world": positions_world_next.astype(np.float32),
+            "vel_world": (
+                (positions_world_next - positions_world_prev) / float(self.config.robot_config.dt)
+            ).astype(np.float32),
             "radii": radii,
             "goal": np.asarray(waypoint["goal_features"], dtype=np.float32),
         }

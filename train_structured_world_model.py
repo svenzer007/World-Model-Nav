@@ -17,7 +17,14 @@ from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, _load_episode_cached, list_episode_paths, split_episode_paths
 from data.weighted_sampler import build_weighted_sampler
-from models import FACTOR_MODEL_TYPE, LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
+from models import (
+    FACTOR_MODEL_TYPE,
+    FACTOR_WORLD_MODEL_TYPE,
+    LEGACY_MODEL_TYPE,
+    StructuredDynamicsConfig,
+    StructuredDynamicsModel,
+    normalize_model_config,
+)
 
 
 def load_yaml_config(path: str | Path) -> dict[str, Any]:
@@ -115,7 +122,7 @@ def estimate_pos_weights(dataset: StructuredSequenceDataset, caps: Mapping[str, 
 
 def configured_pos_weights(config: Mapping[str, Any], train_dataset: StructuredSequenceDataset) -> dict[str, float]:
     model_cfg = normalize_model_config(config.get("model", {}))
-    if str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)) == FACTOR_MODEL_TYPE:
+    if str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)) in {FACTOR_MODEL_TYPE, FACTOR_WORLD_MODEL_TYPE}:
         return {}
     loss_cfg = config.get("loss_weights", {})
     if not bool(loss_cfg.get("auto_pos_weight", True)):
@@ -135,12 +142,20 @@ def compute_one_step_loss(
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     loss_cfg = config["loss_weights"]
     delta_scale = float(config["model"].get("delta_scale", 0.05))
+    model_type = str(config["model"].get("model_type", LEGACY_MODEL_TYPE))
     mask = batch["valid_mask"]
-    target_delta_scaled = batch["delta_rel"] / delta_scale
+    delta_target_key = "delta_world" if model_type == FACTOR_WORLD_MODEL_TYPE else "delta_rel"
+    target_delta_scaled = batch[delta_target_key] / delta_scale
 
     loss_delta = masked_huber(outputs["pred_delta_rel_scaled"], target_delta_scaled, mask)
-    dt = batch["dt"][:, None, None, None] + 1e-6
+    if model_type == FACTOR_WORLD_MODEL_TYPE:
+        total = float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
+        return total, {
+            "loss_delta": loss_delta.detach(),
+            "loss_total_one_step": total.detach(),
+        }
 
+    dt = batch["dt"][:, None, None, None] + 1e-6
     if "pred_next_rel_vel" in outputs:
         loss_next_vel = masked_huber(outputs["pred_next_rel_vel"], batch["target_next_obstacle_vel"], mask)
         consistency_target = outputs["pred_delta_rel"] / dt
@@ -212,6 +227,7 @@ def compute_rollout_loss(
 
     delta_scale = float(config["model"].get("delta_scale", 0.05))
     loss_cfg = config["loss_weights"]
+    model_type = str(config["model"].get("model_type", LEGACY_MODEL_TYPE))
     max_steps = min(horizon, batch["obstacle_pos"].shape[1] - 1)
     x_prev = batch["obstacle_pos"][:, 0]
     v_prev = batch["obstacle_vel"][:, 0]
@@ -233,17 +249,25 @@ def compute_rollout_loss(
         )
         pred_delta = outputs["pred_delta_rel"]
         x_new = x_prev + pred_delta
-        v_pred = outputs["pred_next_rel_vel"] if "pred_next_rel_vel" in outputs else (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
+        v_pred = (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
 
         # Row-local targets are t -> t1 supervision. In contiguous sequence windows,
         # row i's t1 state corresponds to row i+1's t state, so rollout can
         # recursively feed predicted states while supervising against row-local targets.
         target_index = step_index
         mask = batch["valid_mask"][:, target_index]
-        target_delta_scaled = batch["delta_rel"][:, target_index] / delta_scale
+        delta_target_key = "delta_world" if model_type == FACTOR_WORLD_MODEL_TYPE else "delta_rel"
+        target_delta_scaled = batch[delta_target_key][:, target_index] / delta_scale
         step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
             outputs["pred_delta_rel_scaled"][:, None], target_delta_scaled[:, None], mask[:, None]
         )
+        if model_type == FACTOR_WORLD_MODEL_TYPE:
+            losses.append(step_loss)
+            x_prev = x_new.detach()
+            v_prev = v_pred.detach()
+            if hidden is not None:
+                hidden = hidden.detach()
+            continue
         # Rollout velocity targets must use the same finite-difference robot-frame
         # convention as the predicted rollout velocity, especially during turning.
         target_vel = (
@@ -284,8 +308,10 @@ def compute_rollout_loss(
 
 
 def compute_metrics(outputs: Mapping[str, torch.Tensor], batch: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    model_type = str(batch.get("model_type", ""))
     mask = batch["valid_mask"]
-    delta_error = outputs["pred_delta_rel"] - batch["delta_rel"]
+    delta_target_key = "delta_world" if model_type == FACTOR_WORLD_MODEL_TYPE else "delta_rel"
+    delta_error = outputs["pred_delta_rel"] - batch[delta_target_key]
     while mask.ndim < delta_error.ndim:
         mask = mask.unsqueeze(-1)
     mask_float = mask.to(delta_error.dtype)
@@ -296,6 +322,8 @@ def compute_metrics(outputs: Mapping[str, torch.Tensor], batch: Mapping[str, tor
         "delta_mae": delta_mae.detach(),
         "delta_rmse": delta_rmse.detach(),
     }
+    if model_type == FACTOR_WORLD_MODEL_TYPE:
+        return metrics
     if "pred_next_rel_vel" in outputs:
         vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
         vel_mae = torch.sum(torch.abs(vel_error) * mask_float) / denom
@@ -330,6 +358,7 @@ def run_epoch(
     iterator = tqdm(loader, desc=progress_label, leave=False, dynamic_ncols=True) if progress_label else loader
     for batch in iterator:
         batch = move_batch_to_device(batch, device)
+        batch["model_type"] = str(model.config.model_type)
         with torch.set_grad_enabled(training):
             outputs = model.forward_sequence(
                 obstacle_pos=batch["obstacle_pos"],
@@ -535,6 +564,7 @@ def main() -> None:
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
+        model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
     )
     val_dataset = StructuredSequenceDataset(
         val_paths,
@@ -543,6 +573,7 @@ def main() -> None:
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
+        model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
     )
     if len(train_dataset) == 0 or len(val_dataset) == 0:
         raise ValueError("Train/val datasets must both have at least one sequence")
@@ -594,7 +625,7 @@ def main() -> None:
             "num_train_sequences": len(train_dataset),
             "num_val_sequences": len(val_dataset),
             "collision_pos_weights": pos_weights_float,
-            "motion_only_training": bool(str(model_cfg.get("model_type")) == FACTOR_MODEL_TYPE),
+            "motion_only_training": bool(str(model_cfg.get("model_type")) in {FACTOR_MODEL_TYPE, FACTOR_WORLD_MODEL_TYPE}),
         },
     )
 

@@ -12,6 +12,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from models import FACTOR_WORLD_MODEL_TYPE, LEGACY_MODEL_TYPE
+
 
 @dataclass(frozen=True)
 class SequenceWindow:
@@ -65,6 +67,7 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         use_goal: bool = True,
         use_lidar: bool = False,
         rollout_horizon: int = 0,
+        model_type: str = LEGACY_MODEL_TYPE,
     ):
         if sequence_length <= 0:
             raise ValueError("sequence_length must be positive")
@@ -76,6 +79,7 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         self.use_goal = bool(use_goal)
         self.use_lidar = bool(use_lidar)
         self.rollout_horizon = max(0, int(rollout_horizon))
+        self.model_type = str(model_type)
         self.windows: list[SequenceWindow] = []
         self._build_index()
 
@@ -125,34 +129,56 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         if len(steps) != window.sequence_length:
             raise IndexError("Incomplete sequence window")
 
-        obstacle_pos = np.stack(
-            [np.asarray(step["dynamic_obstacles_robot_t"], dtype=np.float32) for step in steps], axis=0
-        )
-        obstacle_pos_t1 = np.stack(
-            [np.asarray(step["dynamic_obstacles_robot_t1"], dtype=np.float32) for step in steps], axis=0
-        )
         dt_value = float(steps[0].get("dt", episode.get("robot_config", {}).get("dt", 0.1)))
         dt_safe = max(dt_value, 1e-9)
-        delta_rel = np.stack(
-            [self._delta_rel_from_step(step) for step in steps],
-            axis=0,
-        )
-        obstacle_vel = np.stack(
-            [self._fd_velocity_t_from_step(step, dt_safe) for step in steps],
-            axis=0,
-        )
-        target_next_obstacle_vel = np.stack(
-            [
-                self._fd_velocity_t1_from_step(
-                    episode=episode,
-                    absolute_step_index=window.start_step + offset,
-                    step=step,
-                    dt=dt_safe,
-                )
-                for offset, step in enumerate(steps)
-            ],
-            axis=0,
-        )
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            obstacle_pos = np.stack(
+                [np.asarray(step["dynamic_obstacles_world_t"], dtype=np.float32) for step in steps],
+                axis=0,
+            )
+            delta_world = np.stack(
+                [self._delta_world_from_step(step) for step in steps],
+                axis=0,
+            )
+            obstacle_vel = np.stack(
+                [
+                    self._causal_world_velocity_from_step(
+                        episode=episode,
+                        absolute_step_index=window.start_step + offset,
+                        step=step,
+                        dt=dt_safe,
+                    )
+                    for offset, step in enumerate(steps)
+                ],
+                axis=0,
+            )
+            target_next_obstacle_vel = None
+            delta_rel = None
+        else:
+            obstacle_pos = np.stack(
+                [np.asarray(step["dynamic_obstacles_robot_t"], dtype=np.float32) for step in steps], axis=0
+            )
+            delta_rel = np.stack(
+                [self._delta_rel_from_step(step) for step in steps],
+                axis=0,
+            )
+            obstacle_vel = np.stack(
+                [self._fd_velocity_t_from_step(step, dt_safe) for step in steps],
+                axis=0,
+            )
+            target_next_obstacle_vel = np.stack(
+                [
+                    self._fd_velocity_t1_from_step(
+                        episode=episode,
+                        absolute_step_index=window.start_step + offset,
+                        step=step,
+                        dt=dt_safe,
+                    )
+                    for offset, step in enumerate(steps)
+                ],
+                axis=0,
+            )
+            delta_world = None
         radii = np.asarray(steps[0]["dynamic_obstacle_radii"], dtype=np.float32)
 
         action_index = np.asarray([int(step["action_index"]) for step in steps], dtype=np.int64)
@@ -169,8 +195,6 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
             "radii": torch.from_numpy(radii),
             "action_index": torch.from_numpy(action_index),
             "action_cont": torch.from_numpy(action_cont),
-            "delta_rel": torch.from_numpy(delta_rel),
-            "target_next_obstacle_vel": torch.from_numpy(target_next_obstacle_vel),
             "risk": torch.from_numpy(risk),
             "collision_next": torch.from_numpy(collision_next),
             "collision_within_3": torch.from_numpy(collision_within_3),
@@ -181,6 +205,12 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
             "start_step": torch.tensor(window.start_step, dtype=torch.long),
             "source_file": str(window.episode_path),
         }
+        if delta_rel is not None:
+            sample["delta_rel"] = torch.from_numpy(delta_rel)
+        if target_next_obstacle_vel is not None:
+            sample["target_next_obstacle_vel"] = torch.from_numpy(target_next_obstacle_vel)
+        if delta_world is not None:
+            sample["delta_world"] = torch.from_numpy(delta_world)
         if self.use_goal:
             goal = np.stack([np.asarray(step["goal_t"], dtype=np.float32) for step in steps], axis=0)
             sample["goal"] = torch.from_numpy(goal)
@@ -219,3 +249,33 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         if next_index < len(episode_steps):
             return cls._fd_velocity_t_from_step(episode_steps[next_index], dt)
         return cls._fd_velocity_t_from_step(step, dt)
+
+    @staticmethod
+    def _delta_world_from_step(step: dict[str, object]) -> np.ndarray:
+        if "dynamic_obstacle_delta_world_t" in step:
+            return np.asarray(step["dynamic_obstacle_delta_world_t"], dtype=np.float32)
+        pos_t = np.asarray(step["dynamic_obstacles_world_t"], dtype=np.float32)
+        pos_t1 = np.asarray(step["dynamic_obstacles_world_t1"], dtype=np.float32)
+        return pos_t1 - pos_t
+
+    @classmethod
+    def _causal_world_velocity_from_step(
+        cls,
+        *,
+        episode: dict[str, object],
+        absolute_step_index: int,
+        step: dict[str, object],
+        dt: float,
+    ) -> np.ndarray:
+        if "dynamic_obstacle_vel_world_causal_t" in step:
+            return np.asarray(step["dynamic_obstacle_vel_world_causal_t"], dtype=np.float32)
+        if absolute_step_index == 0:
+            snapshots = list(step.get("dynamic_obstacles_t", []))
+            if not snapshots:
+                raise ValueError("Cannot synthesize causal world velocity for t=0 without dynamic_obstacles_t")
+            return np.asarray([np.asarray(snapshot["velocity"], dtype=np.float32) for snapshot in snapshots], dtype=np.float32)
+        episode_steps = episode.get("steps", [])
+        previous_step = episode_steps[absolute_step_index - 1]
+        current_world = np.asarray(step["dynamic_obstacles_world_t"], dtype=np.float32)
+        previous_world = np.asarray(previous_step["dynamic_obstacles_world_t"], dtype=np.float32)
+        return (current_world - previous_world) / dt

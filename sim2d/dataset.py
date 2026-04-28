@@ -41,7 +41,7 @@ def summarize_dataset(episodes: list[dict[str, object]], config: DatasetConfig, 
         if np.isfinite(float(episode.get("episode_stats", {}).get("path_turn_angle_sum", 0.0)))
     ]
     return {
-        "schema_version": "v4_dynamic_state_data_2",
+        "schema_version": "v4_dynamic_state_data_3",
         "num_episodes": int(len(episodes)),
         "average_episode_length": average_episode_length,
         "success_count": int(done_reasons.get("goal_reached", 0)),

@@ -11,7 +11,8 @@ from torch import nn
 
 LEGACY_MODEL_TYPE = "joint_v1"
 FACTOR_MODEL_TYPE = "factorized_v2"
-SUPPORTED_MODEL_TYPES = {LEGACY_MODEL_TYPE, FACTOR_MODEL_TYPE}
+FACTOR_WORLD_MODEL_TYPE = "factorized_world_v3"
+SUPPORTED_MODEL_TYPES = {LEGACY_MODEL_TYPE, FACTOR_MODEL_TYPE, FACTOR_WORLD_MODEL_TYPE}
 
 
 @dataclass
@@ -67,7 +68,7 @@ def _mlp(input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.0)
 
 
 class StructuredDynamicsModel(nn.Module):
-    """Predict robot-relative obstacle deltas and optionally next relative velocity."""
+    """Predict structured obstacle deltas for practical recurrent world-model variants."""
 
     def __init__(self, config: StructuredDynamicsConfig):
         super().__init__()
@@ -131,7 +132,7 @@ class StructuredDynamicsModel(nn.Module):
             self.collision_next_head = nn.Linear(int(config.head_hidden_dim), 1)
             self.collision_within_3_head = nn.Linear(int(config.head_hidden_dim), 1)
             self.collision_within_5_head = nn.Linear(int(config.head_hidden_dim), 1)
-        else:
+        elif self.model_type == FACTOR_MODEL_TYPE:
             context_input_dim = int(config.obstacle_embed_dim)
             context_input_dim += int(config.action_embed_dim) + int(config.action_cont_dim)
             if self.goal_encoder is not None:
@@ -155,6 +156,24 @@ class StructuredDynamicsModel(nn.Module):
             )
             self.delta_head = nn.Linear(int(config.head_hidden_dim), 2)
             self.velocity_head = nn.Linear(int(config.head_hidden_dim), 2)
+        else:
+            context_input_dim = int(config.obstacle_embed_dim)
+
+            self.gru = nn.GRU(
+                input_size=context_input_dim,
+                hidden_size=int(config.gru_hidden_dim),
+                num_layers=int(config.gru_layers),
+                batch_first=True,
+                dropout=float(config.dropout) if int(config.gru_layers) > 1 else 0.0,
+            )
+            token_dim = int(config.obstacle_embed_dim) + int(config.gru_hidden_dim)
+            self.slot_head_body = _mlp(
+                input_dim=token_dim,
+                hidden_dim=int(config.head_hidden_dim),
+                output_dim=int(config.head_hidden_dim),
+                dropout=float(config.dropout),
+            )
+            self.delta_head = nn.Linear(int(config.head_hidden_dim), 2)
 
     def forward_sequence(
         self,
@@ -308,6 +327,9 @@ class StructuredDynamicsModel(nn.Module):
         obstacle_emb = obstacle_emb.reshape(batch_size, seq_len, n_dyn, int(self.config.obstacle_embed_dim))
 
         pooled_obstacle_emb = obstacle_emb.mean(dim=2)
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            return obstacle_emb, pooled_obstacle_emb
+
         action_emb = self.action_embedding(action_index.long())
         pieces = [pooled_obstacle_emb, action_emb, action_cont]
 
@@ -347,6 +369,11 @@ class StructuredDynamicsModel(nn.Module):
         slot_features = torch.cat([obstacle_emb, hidden_expanded], dim=-1)
         slot_body = self.slot_head_body(slot_features.reshape(batch_size * seq_len * n_dyn, -1))
         pred_delta_scaled = self.delta_head(slot_body).reshape(batch_size, seq_len, n_dyn, 2)
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE:
+            return {
+                "pred_delta_rel_scaled": pred_delta_scaled,
+                "pred_delta_rel": pred_delta_scaled * self.delta_scale,
+            }
         pred_next_vel_scaled = self.velocity_head(slot_body).reshape(batch_size, seq_len, n_dyn, 2)
         return {
             "pred_delta_rel_scaled": pred_delta_scaled,

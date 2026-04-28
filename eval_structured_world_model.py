@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths, split_episode_paths
-from models import LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
+from models import FACTOR_WORLD_MODEL_TYPE, LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 from train_structured_world_model import load_yaml_config, move_batch_to_device, resolve_device, save_json
 
 
@@ -97,6 +97,7 @@ def compute_rollout_delta_metrics(
     x_prev = batch["obstacle_pos"][:, 0]
     v_prev = batch["obstacle_vel"][:, 0]
     hidden = None
+    model_type = str(model.config.model_type)
     abs_sum = 0.0
     sq_sum = 0.0
     count = 0.0
@@ -115,8 +116,9 @@ def compute_rollout_delta_metrics(
         )
         pred_delta = outputs["pred_delta_rel"]
         x_new = x_prev + pred_delta
-        v_pred = outputs["pred_next_rel_vel"] if "pred_next_rel_vel" in outputs else (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
-        error = pred_delta - batch["delta_rel"][:, step_index]
+        v_pred = (x_new - x_prev) / (batch["dt"][:, None, None] + 1e-6)
+        delta_target_key = "delta_world" if model_type == FACTOR_WORLD_MODEL_TYPE else "delta_rel"
+        error = pred_delta - batch[delta_target_key][:, step_index]
         mask = batch["valid_mask"][:, step_index].to(error.dtype)[:, None, None]
         abs_sum += float(torch.sum(torch.abs(error) * mask).detach().cpu())
         sq_sum += float(torch.sum((error**2) * mask).detach().cpu())
@@ -158,6 +160,7 @@ def main() -> None:
         stride=int(data_cfg.get("stride", 1)),
         use_goal=bool(model_config.get("use_goal", True)),
         use_lidar=bool(model_config.get("use_lidar", False)),
+        model_type=str(model_config.get("model_type", LEGACY_MODEL_TYPE)),
     )
     if len(dataset) == 0:
         raise ValueError("Validation dataset has no sequences")
@@ -192,6 +195,7 @@ def main() -> None:
     with torch.no_grad():
         for batch in tqdm(loader, desc="eval", leave=False, dynamic_ncols=True):
             batch = move_batch_to_device(batch, device)
+            batch["model_type"] = str(model.config.model_type)
             outputs = model.forward_sequence(
                 obstacle_pos=batch["obstacle_pos"],
                 obstacle_vel=batch["obstacle_vel"],
@@ -201,13 +205,16 @@ def main() -> None:
                 goal=batch.get("goal"),
                 lidar=batch.get("lidar"),
             )
-            delta_error = outputs["pred_delta_rel"] - batch["delta_rel"]
+            delta_target_key = "delta_world" if str(model.config.model_type) == FACTOR_WORLD_MODEL_TYPE else "delta_rel"
+            delta_error = outputs["pred_delta_rel"] - batch[delta_target_key]
             delta_mask = batch["valid_mask"][:, :, None, None].to(delta_error.dtype)
             delta_abs += float(torch.sum(torch.abs(delta_error) * delta_mask).detach().cpu())
             delta_sq += float(torch.sum((delta_error**2) * delta_mask).detach().cpu())
             delta_count += float(torch.sum(delta_mask).detach().cpu()) * delta_error.shape[-2] * delta_error.shape[-1]
 
-            if "pred_next_rel_vel" in outputs:
+            if str(model.config.model_type) == FACTOR_WORLD_MODEL_TYPE:
+                pass
+            elif "pred_next_rel_vel" in outputs:
                 vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
                 vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
                 prediction_totals["next_vel_abs"] = prediction_totals.get("next_vel_abs", 0.0) + float(
