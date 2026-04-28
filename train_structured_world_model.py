@@ -19,12 +19,22 @@ from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, _load_episode_cached, list_episode_paths, split_episode_paths
 from data.weighted_sampler import build_weighted_sampler
-from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, build_model, resolve_model_type
+from models import (
+    BASELINE_MODEL_TYPE,
+    VERSION_C_MODEL_TYPE,
+    VERSION_C_WORLD_DELTA_MODEL_VERSION,
+    build_model,
+    resolve_model_type,
+)
 
 
 def resolve_model_version(model_type: str, model_config: Mapping[str, Any]) -> str:
-    default_version = "v4_baseline" if model_type == BASELINE_MODEL_TYPE else model_type
+    default_version = "v4_baseline" if model_type == BASELINE_MODEL_TYPE else VERSION_C_WORLD_DELTA_MODEL_VERSION
     return str(model_config.get("model_version", default_version))
+
+
+def is_version_c_world_delta(model_type: str, model_version: str) -> bool:
+    return model_type == VERSION_C_MODEL_TYPE and str(model_version) == VERSION_C_WORLD_DELTA_MODEL_VERSION
 
 
 def load_yaml_config(path: str | Path) -> dict[str, Any]:
@@ -218,29 +228,40 @@ def compute_one_step_loss_version_c(
     del pos_weights
     loss_cfg = config["loss_weights"]
     delta_scale = float(config["model"].get("delta_scale", 0.05))
-    velocity_scale = float(config["model"].get("velocity_scale", 1.0))
+    model_type = resolve_model_type(config.get("model", {}))
+    model_version = resolve_model_version(model_type, config.get("model", {}))
     mask = batch["valid_mask"]
-    target_delta_scaled = batch["delta_rel"] / delta_scale
-    target_next_vel_scaled = batch["target_next_obstacle_vel"] / max(velocity_scale, 1e-9)
+    delta_target_key = "delta_world" if is_version_c_world_delta(model_type, model_version) else "delta_rel"
+    delta_output_scaled_key = "pred_delta_world_scaled" if is_version_c_world_delta(model_type, model_version) else "pred_delta_rel_scaled"
+    target_delta_scaled = batch[delta_target_key] / delta_scale
 
-    loss_delta = masked_huber(outputs["pred_delta_rel_scaled"], target_delta_scaled, mask)
-    loss_next_vel = masked_huber(outputs["pred_next_rel_vel_scaled"], target_next_vel_scaled, mask)
-    dt = batch["dt"][:, None, None, None] + 1e-6
-    loss_consistency = masked_huber(outputs["pred_next_rel_vel"], outputs["pred_delta_rel"] / dt, mask)
+    loss_delta = masked_huber(outputs[delta_output_scaled_key], target_delta_scaled, mask)
     loss_latent = masked_mse(outputs["prior_latent"], outputs["posterior_latent"].detach(), mask)
-    total = (
-        float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
-        + float(loss_cfg.get("lambda_vel", 0.1)) * loss_next_vel
-        + float(loss_cfg.get("lambda_consistency", 0.05)) * loss_consistency
-        + float(loss_cfg.get("lambda_latent", 0.25)) * loss_latent
-    )
+    total = float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta + float(loss_cfg.get("lambda_latent", 0.25)) * loss_latent
     components = {
         "loss_delta": loss_delta.detach(),
-        "loss_next_vel": loss_next_vel.detach(),
-        "loss_consistency": loss_consistency.detach(),
         "loss_latent": loss_latent.detach(),
         "loss_total_one_step": total.detach(),
     }
+    if not is_version_c_world_delta(model_type, model_version):
+        velocity_scale = float(config["model"].get("velocity_scale", 1.0))
+        target_next_vel_scaled = batch["target_next_obstacle_vel"] / max(velocity_scale, 1e-9)
+        loss_next_vel = masked_huber(outputs["pred_next_rel_vel_scaled"], target_next_vel_scaled, mask)
+        dt = batch["dt"][:, None, None, None] + 1e-6
+        loss_consistency = masked_huber(outputs["pred_next_rel_vel"], outputs["pred_delta_rel"] / dt, mask)
+        total = (
+            float(loss_cfg.get("lambda_delta", 1.0)) * loss_delta
+            + float(loss_cfg.get("lambda_vel", 0.1)) * loss_next_vel
+            + float(loss_cfg.get("lambda_consistency", 0.05)) * loss_consistency
+            + float(loss_cfg.get("lambda_latent", 0.25)) * loss_latent
+        )
+        components.update(
+            {
+                "loss_next_vel": loss_next_vel.detach(),
+                "loss_consistency": loss_consistency.detach(),
+                "loss_total_one_step": total.detach(),
+            }
+        )
     return total, components
 
 
@@ -346,7 +367,9 @@ def compute_rollout_loss_version_c(
 
     loss_cfg = config["loss_weights"]
     delta_scale = float(config["model"].get("delta_scale", 0.05))
-    velocity_scale = float(config["model"].get("velocity_scale", 1.0))
+    model_type = resolve_model_type(config.get("model", {}))
+    model_version = resolve_model_version(model_type, config.get("model", {}))
+    world_delta_only = is_version_c_world_delta(model_type, model_version)
     max_rollout_index = min(horizon, batch["obstacle_pos"].shape[1] - 1)
     goal = batch.get("goal")
 
@@ -397,21 +420,25 @@ def compute_rollout_loss_version_c(
             use_posterior=True,
         )
         mask = batch["valid_mask"][:, step_index]
+        delta_target_key = "delta_world" if world_delta_only else "delta_rel"
+        delta_output_scaled_key = "pred_delta_world_scaled" if world_delta_only else "pred_delta_rel_scaled"
         step_loss = float(loss_cfg.get("lambda_delta", 1.0)) * masked_huber(
-            outputs["pred_delta_rel_scaled"][:, None],
-            (batch["delta_rel"][:, step_index] / delta_scale)[:, None],
+            outputs[delta_output_scaled_key][:, None],
+            (batch[delta_target_key][:, step_index] / delta_scale)[:, None],
             mask[:, None],
         )
-        step_loss = step_loss + float(loss_cfg.get("lambda_vel", 0.1)) * masked_huber(
-            outputs["pred_next_rel_vel_scaled"][:, None],
-            (batch["target_next_obstacle_vel"][:, step_index] / max(velocity_scale, 1e-9))[:, None],
-            mask[:, None],
-        )
-        step_loss = step_loss + float(loss_cfg.get("lambda_consistency", 0.05)) * masked_huber(
-            outputs["pred_next_rel_vel"][:, None],
-            (outputs["pred_delta_rel"] / (batch["dt"][:, None, None] + 1e-6))[:, None],
-            mask[:, None],
-        )
+        if not world_delta_only:
+            velocity_scale = float(config["model"].get("velocity_scale", 1.0))
+            step_loss = step_loss + float(loss_cfg.get("lambda_vel", 0.1)) * masked_huber(
+                outputs["pred_next_rel_vel_scaled"][:, None],
+                (batch["target_next_obstacle_vel"][:, step_index] / max(velocity_scale, 1e-9))[:, None],
+                mask[:, None],
+            )
+            step_loss = step_loss + float(loss_cfg.get("lambda_consistency", 0.05)) * masked_huber(
+                outputs["pred_next_rel_vel"][:, None],
+                (outputs["pred_delta_rel"] / (batch["dt"][:, None, None] + 1e-6))[:, None],
+                mask[:, None],
+            )
         grounded_losses.append(step_loss)
         latent_losses.append(masked_mse(outputs["prior_latent"], target_outputs["posterior_latent"].detach(), mask))
         prev_context = version_c_prev_context(model, batch, step_index)
@@ -459,8 +486,12 @@ def compute_metrics(
     outputs: Mapping[str, torch.Tensor],
     batch: Mapping[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
+    model_version = str(batch.get("model_version", ""))
+    world_delta_only = is_version_c_world_delta(model_type, model_version)
     mask = batch["valid_mask"]
-    delta_error = outputs["pred_delta_rel"] - batch["delta_rel"]
+    delta_output_key = "pred_delta_world" if world_delta_only and "pred_delta_world" in outputs else "pred_delta_rel"
+    delta_target_key = "delta_world" if world_delta_only else "delta_rel"
+    delta_error = outputs[delta_output_key] - batch[delta_target_key]
     while mask.ndim < delta_error.ndim:
         mask = mask.unsqueeze(-1)
     mask_float = mask.to(delta_error.dtype)
@@ -471,7 +502,7 @@ def compute_metrics(
         "delta_mae": delta_mae.detach(),
         "delta_rmse": delta_rmse.detach(),
     }
-    if "pred_next_rel_vel" in outputs and "target_next_obstacle_vel" in batch:
+    if not world_delta_only and "pred_next_rel_vel" in outputs and "target_next_obstacle_vel" in batch:
         vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
         vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
         vel_denom = torch.clamp(torch.sum(vel_mask) * vel_error.shape[-2] * vel_error.shape[-1], min=1.0)
@@ -504,6 +535,7 @@ def run_epoch(
     should_add_rollout = rollout_enabled and (model_type != VERSION_C_MODEL_TYPE or training_stage == "stage2")
     for batch in iterator:
         batch = move_batch_to_device(batch, device)
+        batch["model_version"] = resolve_model_version(model_type, config.get("model", {}))
         with torch.set_grad_enabled(training):
             outputs = model.forward_sequence(
                 obstacle_pos=batch["obstacle_pos"],
@@ -742,6 +774,7 @@ def main() -> None:
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
+        model_type=model_type,
     )
     val_dataset = StructuredSequenceDataset(
         val_paths,
@@ -750,6 +783,7 @@ def main() -> None:
         use_goal=bool(model_cfg.get("use_goal", True)),
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
+        model_type=model_type,
     )
     if len(train_dataset) == 0 or len(val_dataset) == 0:
         raise ValueError("Train/val datasets must both have at least one sequence")

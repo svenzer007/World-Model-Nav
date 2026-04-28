@@ -1,59 +1,60 @@
 # World-Model Version-C Training
 
-This branch trains the Version-C / RSSM obstacle world model. It is still the same latent prior/posterior family, but the practical learned-model path is now motion-only:
+This branch keeps the `structured_obstacle_rssm_vc` world-model family and its stage-1 / stage-2 RSSM training structure.
 
-- obstacle inputs: robot-relative position, robot-relative finite-difference velocity, radius
-- obstacle outputs: delta relative position, next-step robot-relative finite-difference velocity
-- no risk head
-- no collision auxiliary heads
+The current practical Version-C path now uses causal world-frame obstacle semantics:
 
-See [README_v4_dynamic_state_data.md](/home/stavan/s4/rnl/world_model/README_v4_dynamic_state_data.md) for the detailed field and frame semantics.
+- obstacle inputs: world position, causal world velocity, radius
+- obstacle outputs: world-frame delta only
+- latent prior/posterior rollout remains intact
 
-## Model path
+For the detailed field and frame semantics, see [dynamic_state_data.md](/home/stavan/s4/rnl/world_model/dynamic_state_data.md).
 
-The active Version-C model is `structured_obstacle_rssm_vc` with:
+## Active Version-C model
 
-- shared per-obstacle encoder over `[x_rel, y_rel, vx_rel_fd, vy_rel_fd, radius]`
-- action and optional goal context encoder
-- deterministic RSSM-style history update with prior/posterior latent state
-- shared per-obstacle decoder heads for:
-  - `pred_delta_rel`
-  - `pred_next_rel_vel`
-
-The practical cleaned-up config version is:
+The active cleaned-up config is:
 
 ```text
-model_version: version_c_motion_v2
+model_type: structured_obstacle_rssm_vc
+model_version: version_c_world_delta_v3
 ```
 
-Old checkpoints with the previous output definition are intentionally incompatible with this version and are rejected explicitly.
+The RSSM structure is preserved:
+
+- shared per-obstacle encoder
+- deterministic history update
+- posterior/prior latent state
+- shared decoder for practical motion prediction
+
+The practical decoder target is now world-frame delta only.
+
+## Action and goal interface
+
+Action and goal tensors remain in the public interface to keep churn low.
+
+But the cleaned-up world-frame Version-C path should be interpreted as obstacle-dynamics-first rather than action-driven obstacle prediction:
+
+- action/goal plumbing remains available
+- the semantic target is obstacle world motion
+- future robot-relative geometry is handled analytically in the controller
 
 ## Losses
 
-Stage 1 and Stage 2 both keep one-step supervision active:
+For `version_c_world_delta_v3`, Stage 1 and Stage 2 both keep:
 
 - `loss_delta`
-- `loss_next_vel`
-- `loss_consistency`
 - `loss_latent`
 
-where:
+Stage 2 additionally adds rollout supervision on the prior chain:
 
-```text
-loss_consistency: pred_next_rel_vel ~= pred_delta_rel / dt
-```
-
-Stage 2 additionally adds rollout loss on the prior chain:
-
-- rollout delta supervision
-- rollout next-velocity supervision
+- rollout world-delta supervision
 - rollout latent consistency
 
-Risk and collision auxiliaries were removed from the Version-C learned-model path.
+There is no explicit next-velocity head and no velocity consistency loss in the world-frame Version-C path.
 
 ## Training stages
 
-Stage 1 is one-step RSSM training only:
+Stage 1:
 
 ```bash
 cd /home/stavan/s4/rnl/world_model
@@ -61,7 +62,7 @@ python train_structured_world_model.py \
   --config configs/structured_world_model_version_c_stage1.yaml
 ```
 
-Stage 2 resumes from a Stage-1 checkpoint through `training.init_checkpoint` and adds rollout curriculum:
+Stage 2:
 
 ```bash
 cd /home/stavan/s4/rnl/world_model
@@ -69,7 +70,26 @@ python train_structured_world_model.py \
   --config configs/structured_world_model_version_c_stage2.yaml
 ```
 
-Resume the current run in-place:
+### Stage 2 initialization
+
+`configs/structured_world_model_version_c_stage2.yaml` is the intended warm-start
+Stage 2 config. It uses:
+
+```yaml
+training:
+  init_checkpoint: ./artifacts/structured_world_model_version_c_stage1/best.pt
+```
+
+That means a fresh Stage 2 launch initializes model weights from the Stage 1
+checkpoint before starting rollout training.
+
+`training.init_checkpoint` and `--resume` are different:
+
+- `training.init_checkpoint` starts a new Stage 2 run from an earlier checkpoint
+- `--resume` continues an existing Stage 2 run from checkpoints already written
+  into that run's own `training.output_dir`
+
+Resume the current run in place:
 
 ```bash
 cd /home/stavan/s4/rnl/world_model
@@ -78,16 +98,9 @@ python train_structured_world_model.py \
   --resume
 ```
 
-The default CLI config is now the stage-1 Version-C config. The default eval config is the stage-2 Version-C config.
-
 ## Evaluation
 
-Evaluation now focuses on motion metrics:
-
-- `delta_mae`, `delta_rmse`
-- `vel_mae`, `vel_rmse`
-- rollout delta/velocity metrics when rollout eval is enabled
-- normalized action sensitivity
+Evaluation focuses on world-frame delta metrics and rollout delta metrics.
 
 Example:
 
@@ -98,7 +111,15 @@ python eval_structured_world_model.py \
   --checkpoint artifacts/structured_world_model_version_c_stage2/best.pt
 ```
 
-## Notes
+## Compatibility
 
-- Existing older datasets remain trainable because the loader derives the new finite-difference velocity fields from stored robot-relative positions.
-- If you regenerate data with the updated simulator, the dataset schema becomes `v4_dynamic_state_data_2` and stores the practical motion fields explicitly.
+The world-frame cleanup uses a new explicit model version:
+
+- `version_c_world_delta_v3`
+
+That keeps old `version_c_motion_v2` checkpoints recoverable while preventing them from silently loading into the new semantics.
+
+Older datasets remain usable because the loader can synthesize causal world velocity from:
+
+- snapshot velocity at the first episode step
+- previous/current world positions afterward

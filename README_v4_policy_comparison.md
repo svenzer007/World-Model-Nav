@@ -3,7 +3,7 @@
 This runner compares two closed-loop controllers on identical sampled V4 scenarios:
 
 - `baseline_structured`: analytic robot rollout plus true cloned dynamic-obstacle rollout
-- `learned_structured`: analytic robot rollout plus V4 GRU-predicted robot-relative obstacle rollout
+- `learned_structured`: analytic robot rollout plus Version-C world-model-predicted obstacle world rollout, transformed into the rolled-out robot frame for scoring
 
 Both controllers use the same repeated-action candidate set:
 
@@ -55,10 +55,11 @@ The default comparison horizon is `10`, which better matches the dataset expert'
 
 - Robot rollout: world frame
 - Static collision/clearance: world frame
-- Learned obstacle rollout: robot-relative frame
-- Dynamic collision/clearance: robot-relative frame
+- Learned obstacle rollout state: world frame
+- Dynamic collision/clearance: robot-relative frame after transforming predicted obstacle world positions into the rolled-out robot frame
 
-The learned controller never mixes world-frame obstacle positions into learned dynamic collision checks.
+The active `version_c_world_delta_v3` controller keeps obstacle prediction in the
+world frame and derives robot-relative geometry analytically for dynamic scoring.
 
 ## Learned Rollout
 
@@ -67,11 +68,14 @@ The learned controller loads a full structured-dynamics checkpoint, rejects `use
 Per rollout step:
 
 ```text
-pos_rel_next = pos_rel_current + pred_delta_rel
-vel_rel_next = (pos_rel_next - pos_rel_current) / dt
+pos_world_next = pos_world_current + pred_delta_world
+vel_world_next = (pos_world_next - pos_world_current) / dt
+pos_rel_next = transform(pos_world_next, rolled_robot_pose)
 ```
 
-Predicted relative positions are interpreted relative to the rolled robot pose at that rollout step. Dynamic collision checks use those same predicted robot-frame positions directly.
+Predicted obstacle world positions are rolled forward by the learned model.
+At each candidate rollout step they are transformed into the rolled robot frame,
+and dynamic collision checks use that derived robot-relative geometry.
 
 Hidden-state rules:
 
@@ -85,9 +89,6 @@ Hidden-state cloning helper supports:
 - `None`
 - tensor hidden state
 - tuple/list of tensors, including `(h_tensor,)`
-
-The learned controller's initial relative-velocity construction now explicitly matches the training convention:
-obstacle world velocity minus zero robot translational velocity, then rotated into robot frame.
 
 ## Obstacle Ordering
 
@@ -108,33 +109,29 @@ Both controllers log per step:
 
 The learned controller also logs:
 
-- predicted obstacle positions over horizon
-- predicted relative velocities
+- predicted obstacle positions over horizon in robot-frame scoring coordinates
+- predicted relative velocities in robot-frame scoring coordinates
 - predicted dynamic clearances
 - true horizon obstacle positions for analysis
 - true dynamic clearances for analysis
 - drift `||pos_rel_pred - pos_rel_true||`
-- `pred_risk`
-- collision-head probabilities
-
-The learned heads are logging-only and do not drive decisions.
 
 The only intended difference between controllers is future dynamic-obstacle rollout source:
 
 - `baseline_structured`: true cloned dynamic-obstacle rollout
-- `learned_structured`: GRU-predicted future robot-relative obstacle rollout
+- `learned_structured`: Version-C world-model-predicted future obstacle world rollout, transformed into robot-relative geometry for scoring
 
 The learned controller still maintains real hidden state only through true executed transitions in `commit_step(...)`.
 
 ## Smoke Run
 
 ```bash
-cd /home/stavan/s4/rnl/4proj
+cd /home/stavan/s4/rnl/world_model
 python run_policy_comparison_v4.py \
   --num_episodes 2 \
   --max_steps 80 \
   --horizon 10 \
-  --checkpoint artifacts/structured_world_model_rollout_from_epoch_10/best.pt \
+  --checkpoint artifacts/structured_world_model_version_c_stage2/best.pt \
   --output_dir artifacts/policy_comparison_v4_smoke \
   --save_previews
 ```

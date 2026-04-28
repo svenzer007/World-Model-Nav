@@ -16,6 +16,7 @@ from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths,
 from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, build_model, resolve_model_type
 from train_structured_world_model import (
     detach_recurrent_state,
+    is_version_c_world_delta,
     load_yaml_config,
     move_batch_to_device,
     resolve_device,
@@ -109,6 +110,8 @@ def compute_rollout_delta_metrics_version_c(
     batch: Mapping[str, torch.Tensor],
     horizon: int,
 ) -> dict[str, float]:
+    model_version = str(batch.get("model_version", ""))
+    world_delta_only = is_version_c_world_delta(VERSION_C_MODEL_TYPE, model_version)
     max_rollout_index = min(int(horizon), batch["obstacle_pos"].shape[1] - 1)
     if max_rollout_index <= 0:
         return {"rollout_delta_mae": 0.0, "rollout_delta_rmse": 0.0}
@@ -143,22 +146,26 @@ def compute_rollout_delta_metrics_version_c(
             prev_context=prev_context,
             use_posterior=False,
         )
-        error = outputs["pred_delta_rel"] - batch["delta_rel"][:, step_index]
-        vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"][:, step_index]
+        delta_output_key = "pred_delta_world" if world_delta_only and "pred_delta_world" in outputs else "pred_delta_rel"
+        delta_target_key = "delta_world" if world_delta_only else "delta_rel"
+        error = outputs[delta_output_key] - batch[delta_target_key][:, step_index]
         mask = batch["valid_mask"][:, step_index].to(error.dtype)[:, None, None]
         abs_sum += float(torch.sum(torch.abs(error) * mask).detach().cpu())
         sq_sum += float(torch.sum((error**2) * mask).detach().cpu())
         count += float(torch.sum(mask).detach().cpu()) * error.shape[-2] * error.shape[-1]
-        vel_abs_sum += float(torch.sum(torch.abs(vel_error) * mask).detach().cpu())
-        vel_sq_sum += float(torch.sum((vel_error**2) * mask).detach().cpu())
+        if not world_delta_only:
+            vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"][:, step_index]
+            vel_abs_sum += float(torch.sum(torch.abs(vel_error) * mask).detach().cpu())
+            vel_sq_sum += float(torch.sum((vel_error**2) * mask).detach().cpu())
         prev_context = version_c_prev_context(model, batch, step_index)
         rollout_state = detach_recurrent_state(rollout_state)
     metrics = {
         "rollout_delta_mae": abs_sum / max(count, 1.0),
         "rollout_delta_rmse": (sq_sum / max(count, 1.0)) ** 0.5,
     }
-    metrics["rollout_vel_mae"] = vel_abs_sum / max(count, 1.0)
-    metrics["rollout_vel_rmse"] = (vel_sq_sum / max(count, 1.0)) ** 0.5
+    if not world_delta_only:
+        metrics["rollout_vel_mae"] = vel_abs_sum / max(count, 1.0)
+        metrics["rollout_vel_rmse"] = (vel_sq_sum / max(count, 1.0)) ** 0.5
     return metrics
 
 
@@ -206,6 +213,7 @@ def main() -> None:
         stride=int(data_cfg.get("stride", 1)),
         use_goal=bool(model_config.get("use_goal", True)),
         use_lidar=bool(model_config.get("use_lidar", False)),
+        model_type=model_type,
     )
     if len(dataset) == 0:
         raise ValueError("Validation dataset has no sequences")
@@ -235,6 +243,7 @@ def main() -> None:
     with torch.no_grad():
         for batch in tqdm(loader, desc="eval", leave=False, dynamic_ncols=True):
             batch = move_batch_to_device(batch, device)
+            batch["model_version"] = resolve_model_version(model_type, model_config)
             outputs = model.forward_sequence(
                 obstacle_pos=batch["obstacle_pos"],
                 obstacle_vel=batch["obstacle_vel"],
@@ -244,16 +253,20 @@ def main() -> None:
                 goal=batch.get("goal"),
                 lidar=batch.get("lidar"),
             )
-            delta_error = outputs["pred_delta_rel"] - batch["delta_rel"]
+            world_delta_only = is_version_c_world_delta(model_type, str(batch["model_version"]))
+            delta_output_key = "pred_delta_world" if world_delta_only and "pred_delta_world" in outputs else "pred_delta_rel"
+            delta_target_key = "delta_world" if world_delta_only else "delta_rel"
+            delta_error = outputs[delta_output_key] - batch[delta_target_key]
             delta_mask = batch["valid_mask"][:, :, None, None].to(delta_error.dtype)
             delta_abs += float(torch.sum(torch.abs(delta_error) * delta_mask).detach().cpu())
             delta_sq += float(torch.sum((delta_error**2) * delta_mask).detach().cpu())
             delta_count += float(torch.sum(delta_mask).detach().cpu()) * delta_error.shape[-2] * delta_error.shape[-1]
-            vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
-            vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
-            vel_abs += float(torch.sum(torch.abs(vel_error) * vel_mask).detach().cpu())
-            vel_sq += float(torch.sum((vel_error**2) * vel_mask).detach().cpu())
-            vel_count += float(torch.sum(vel_mask).detach().cpu()) * vel_error.shape[-2] * vel_error.shape[-1]
+            if not world_delta_only:
+                vel_error = outputs["pred_next_rel_vel"] - batch["target_next_obstacle_vel"]
+                vel_mask = batch["valid_mask"][:, :, None, None].to(vel_error.dtype)
+                vel_abs += float(torch.sum(torch.abs(vel_error) * vel_mask).detach().cpu())
+                vel_sq += float(torch.sum((vel_error**2) * vel_mask).detach().cpu())
+                vel_count += float(torch.sum(vel_mask).detach().cpu()) * vel_error.shape[-2] * vel_error.shape[-1]
 
             sensitivity_sum += float(
                 compute_action_sensitivity(
@@ -282,11 +295,12 @@ def main() -> None:
         "threshold": threshold,
         "delta_mae": delta_abs / max(delta_count, 1.0),
         "delta_rmse": (delta_sq / max(delta_count, 1.0)) ** 0.5,
-        "vel_mae": vel_abs / max(vel_count, 1.0),
-        "vel_rmse": (vel_sq / max(vel_count, 1.0)) ** 0.5,
         "normalized_action_sensitivity": sensitivity_sum / max(sensitivity_batches, 1),
         "action_sensitivity_eps": 1e-6,
     }
+    if vel_count > 0.0:
+        metrics["vel_mae"] = vel_abs / max(vel_count, 1.0)
+        metrics["vel_rmse"] = (vel_sq / max(vel_count, 1.0)) ** 0.5
     if rollout_batches:
         for key, value in rollout_totals.items():
             metrics[key] = value / rollout_batches

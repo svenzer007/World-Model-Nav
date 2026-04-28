@@ -6,7 +6,12 @@ from dataclasses import fields
 from typing import Any, Mapping
 
 from .structured_dynamics_model import StructuredDynamicsConfig, StructuredDynamicsModel
-from .structured_obstacle_rssm import StructuredObstacleRSSMConfig, StructuredObstacleRSSMModel
+from .structured_obstacle_rssm import (
+    StructuredObstacleRSSMConfig,
+    StructuredObstacleRSSMModel,
+    VERSION_C_MOTION_MODEL_VERSION,
+    VERSION_C_WORLD_DELTA_MODEL_VERSION,
+)
 
 BASELINE_MODEL_TYPE = "structured_dynamics_v4"
 VERSION_C_MODEL_TYPE = "structured_obstacle_rssm_vc"
@@ -38,6 +43,8 @@ def build_model(model_config: Mapping[str, Any]) -> StructuredDynamicsModel | St
 __all__ = [
     "BASELINE_MODEL_TYPE",
     "VERSION_C_MODEL_TYPE",
+    "VERSION_C_MOTION_MODEL_VERSION",
+    "VERSION_C_WORLD_DELTA_MODEL_VERSION",
     "StructuredDynamicsConfig",
     "StructuredDynamicsModel",
     "StructuredObstacleRSSMConfig",

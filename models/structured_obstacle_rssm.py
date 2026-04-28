@@ -8,6 +8,14 @@ import torch
 from torch import nn
 
 
+VERSION_C_MOTION_MODEL_VERSION = "version_c_motion_v2"
+VERSION_C_WORLD_DELTA_MODEL_VERSION = "version_c_world_delta_v3"
+SUPPORTED_VERSION_C_MODEL_VERSIONS = {
+    VERSION_C_MOTION_MODEL_VERSION,
+    VERSION_C_WORLD_DELTA_MODEL_VERSION,
+}
+
+
 def _mlp(input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.0) -> nn.Sequential:
     layers: list[nn.Module] = [
         nn.Linear(input_dim, hidden_dim),
@@ -27,7 +35,7 @@ def _mlp(input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.0)
 @dataclass
 class StructuredObstacleRSSMConfig:
     model_type: str = "structured_obstacle_rssm_vc"
-    model_version: str = "version_c_motion_v2"
+    model_version: str = VERSION_C_WORLD_DELTA_MODEL_VERSION
     num_dynamic_obstacles: int = 4
     obstacle_feature_dim: int = 5
     obstacle_embed_dim: int = 32
@@ -53,12 +61,18 @@ class StructuredObstacleRSSMModel(nn.Module):
         super().__init__()
         if bool(config.use_lidar):
             raise ValueError("StructuredObstacleRSSMModel does not support use_lidar=true")
+        if str(config.model_version) not in SUPPORTED_VERSION_C_MODEL_VERSIONS:
+            raise ValueError(
+                f"Unsupported model_version={config.model_version!r}; "
+                f"expected one of {sorted(SUPPORTED_VERSION_C_MODEL_VERSIONS)}"
+            )
         self.config = config
         self.delta_scale = float(config.delta_scale)
         self.velocity_scale = float(config.velocity_scale)
         self.num_dynamic_obstacles = int(config.num_dynamic_obstacles)
         self.hidden_dim = int(config.hidden_dim)
         self.latent_dim = int(config.latent_dim)
+        self.world_delta_only = str(config.model_version) == VERSION_C_WORLD_DELTA_MODEL_VERSION
 
         self.obstacle_encoder = _mlp(
             input_dim=int(config.obstacle_feature_dim),
@@ -101,7 +115,9 @@ class StructuredObstacleRSSMModel(nn.Module):
             dropout=float(config.dropout),
         )
         self.delta_head = nn.Linear(int(config.head_hidden_dim), 2)
-        self.next_velocity_head = nn.Linear(int(config.head_hidden_dim), 2)
+        self.next_velocity_head: nn.Module | None = None
+        if not self.world_delta_only:
+            self.next_velocity_head = nn.Linear(int(config.head_hidden_dim), 2)
 
     def initial_state(
         self,
@@ -247,6 +263,8 @@ class StructuredObstacleRSSMModel(nn.Module):
         action_cont: torch.Tensor,
         goal: torch.Tensor | None,
     ) -> torch.Tensor:
+        if self.world_delta_only:
+            return torch.zeros(action_index.shape[0], self.context_dim, device=action_index.device, dtype=action_cont.dtype)
         pieces = [self.action_embedding(action_index.long()), action_cont]
         if self.goal_encoder is not None:
             if goal is None:
@@ -306,11 +324,22 @@ class StructuredObstacleRSSMModel(nn.Module):
         decoder_input = torch.cat([history, latent, context_expanded], dim=-1)
         body = self.decoder_body(decoder_input.reshape(batch_size * n_dyn, -1)).reshape(batch_size, n_dyn, -1)
         pred_delta_scaled = self.delta_head(body)
-        pred_next_rel_vel_scaled = self.next_velocity_head(body)
+        pred_delta = pred_delta_scaled * self.delta_scale
         outputs = {
             "pred_delta_rel_scaled": pred_delta_scaled,
-            "pred_delta_rel": pred_delta_scaled * self.delta_scale,
-            "pred_next_rel_vel_scaled": pred_next_rel_vel_scaled,
-            "pred_next_rel_vel": pred_next_rel_vel_scaled * self.velocity_scale,
+            "pred_delta_rel": pred_delta,
         }
+        if self.world_delta_only:
+            outputs["pred_delta_world_scaled"] = pred_delta_scaled
+            outputs["pred_delta_world"] = pred_delta
+            return outputs
+        if self.next_velocity_head is None:
+            raise RuntimeError("next_velocity_head is required for non-world-delta Version C models")
+        pred_next_rel_vel_scaled = self.next_velocity_head(body)
+        outputs.update(
+            {
+                "pred_next_rel_vel_scaled": pred_next_rel_vel_scaled,
+                "pred_next_rel_vel": pred_next_rel_vel_scaled * self.velocity_scale,
+            }
+        )
         return outputs
