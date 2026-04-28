@@ -1,4 +1,4 @@
-"""Learned V4 controller using recurrent obstacle rollout for dynamic scoring."""
+"""Learned V4 controller using recurrent world-frame obstacle rollout for dynamic scoring."""
 
 from __future__ import annotations
 

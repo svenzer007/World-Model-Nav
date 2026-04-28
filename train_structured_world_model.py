@@ -268,8 +268,8 @@ def compute_rollout_loss(
             if hidden is not None:
                 hidden = hidden.detach()
             continue
-        # Rollout velocity targets must use the same finite-difference robot-frame
-        # convention as the predicted rollout velocity, especially during turning.
+        # Legacy rollout branches keep the same finite-difference robot-frame
+        # velocity convention they were trained with so old checkpoints remain comparable.
         target_vel = (
             batch["target_next_obstacle_vel"][:, target_index]
             if "pred_next_rel_vel" in outputs

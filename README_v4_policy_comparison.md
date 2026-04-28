@@ -11,14 +11,14 @@ It compares:
 
 The learned controller loads a trained structured world-model checkpoint. The documented example checkpoint for this branch is:
 
-- `/home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt`
+- `/home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt`
 
 ## What The Script Does
 
 For each sampled simulator episode, the script runs both controllers on the same scenario:
 
 - `baseline_structured`: analytic robot rollout plus true cloned dynamic-obstacle rollout
-- `learned_structured`: analytic robot rollout plus learned robot-relative obstacle rollout from the checkpoint
+- `learned_structured`: analytic robot rollout plus learned obstacle world rollout from the checkpoint, transformed into the rolled-out robot frame for scoring
 
 Both controllers evaluate the same repeated-action candidate set:
 
@@ -63,7 +63,7 @@ python run_policy_comparison_v4.py \
   --num_episodes 2 \
   --max_steps 80 \
   --horizon 10 \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_rollout_from_epoch_10/epoch_015.pt \
+  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --output_dir /home/stavan/s4/rnl/longer_horizons/artifacts/policy_comparison_v4_smoke \
   --save_previews
 ```
@@ -118,7 +118,7 @@ The learned controller additionally writes rollout diagnostics:
 
 These files summarize:
 
-- position/velocity rollout error versus true robot-relative obstacle rollout
+- position/velocity rollout error after transforming learned obstacle world rollouts into the robot frame
 - clearance error
 - dynamic collision confusion statistics
 - horizon-growth summaries
@@ -143,7 +143,7 @@ If results look inconsistent:
 
 The script still ships with generic defaults such as:
 
-- `--checkpoint artifacts/structured_world_model_rollout_from_epoch_10/best.pt`
+- `--checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt`
 - `--output_dir artifacts/policy_comparison_v4_h10`
 
 For this branch’s documented workflow, prefer explicitly passing the checkpoint path and output directory you want, as shown above.

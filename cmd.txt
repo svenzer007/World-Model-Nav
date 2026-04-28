@@ -17,7 +17,7 @@ If you want to evaluate the new checkpoint afterward:
 cd /home/stavan/s4/rnl/longer_horizons
 python eval_structured_world_model.py \
   --config configs/structured_world_model_stage2.yaml \
-  --checkpoint artifacts/structured_world_model_factorized_v2_stage2/best.pt
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
 If you want the cleaner regenerated dataset anyway, use:
 
 cd /home/stavan/s4/rnl/longer_horizons
