@@ -1,140 +1,186 @@
-# V4 Checkpoint Evaluation
+# Longer-Horizons Evaluation
 
-This README covers offline evaluation of a trained structured world-model checkpoint on a dataset:
+This is the main evaluation guide for the current `longer_horizons` branch.
 
-- `eval_structured_world_model.py`
+The active branch uses:
 
-The documented example checkpoint for this branch is:
+- `model_type: factorized_world_v3`
+- world-frame obstacle prediction
+- causal world velocity input
+- delta-only target
+- analytic robot rollout in the controller, with predicted obstacle world positions transformed into robot-relative geometry for scoring
 
-- `/home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt`
+For exact state semantics and required fields, see [dynamic_state_data.md](./dynamic_state_data.md).
+For training, see [README_v4_training.md](./README_v4_training.md).
+For compare-two-runs details, see [README_v4_policy_comparison.md](./README_v4_policy_comparison.md).
 
-For the dataset format expected by evaluation, see [dynamic_state_data.md](./dynamic_state_data.md).
+## Workflow
 
-## What The Evaluation Script Does
+The current workflow has three entrypoints:
 
-The evaluation script:
+1. `eval_structured_world_model.py`
+2. `run_policy_eval.py`
+3. `compare_policy_eval_runs.py`
 
-- loads a full training checkpoint
-- reconstructs the model from checkpoint/config model settings
-- loads the validation split from the dataset configured in `data.data_dir`
-- computes offline metrics over the validation windows
+Use the same checkpoint for offline model eval and policy eval.
 
-Current metrics for the active `factorized_world_v3` branch include:
+## Offline Model Eval
 
-- `delta_mae`
-- `delta_rmse`
-- `normalized_action_sensitivity`
-- optional rollout metrics when `rollout.eval_enabled: true`:
-  - `rollout_delta_mae`
-  - `rollout_delta_rmse`
+Use `eval_structured_world_model.py` to evaluate the world model on saved dataset windows from `data.data_dir`.
 
-This is checkpoint evaluation on saved data. It is not closed-loop policy evaluation.
+Example:
 
-## Required Inputs
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python eval_structured_world_model.py \
+  --config configs/structured_world_model_stage2.yaml \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
+```
 
-The script requires:
-
-- `--config`
-- `--checkpoint`
-
-Optional arguments:
-
-- `--output`
-- `--threshold`
-
-The dataset path comes from the config:
+To evaluate on a new dataset, point the config at the dataset root:
 
 ```yaml
 data:
-  data_dir: ./dataset
+  data_dir: /path/to/your/dataset
 ```
 
-The evaluation loader expects:
+Accepted dataset layout:
 
 - `<data_dir>/episodes/episode_*.pkl`
-- or `data_dir` to point directly at the `episodes/` directory
+- or `data_dir` itself as the `episodes/` directory
 
-## Example Command
+## Policy Eval
+
+Use `run_policy_eval.py` to evaluate one learned controller:
+
+- `learned_structured`
+
+In this branch, “model + policy in tandem” means:
+
+1. the learned model predicts obstacle world motion
+2. the controller rolls out robot pose analytically under candidate actions
+3. predicted obstacle world positions are transformed into the rolled-out robot frame
+4. dynamic clearance and collision scoring happen in that derived robot-relative geometry
+
+### Mode 1: Simulator Default
+
+If `--episode_source` is omitted, policy eval uses the branch’s current simulator-sampled episode distribution.
+
+The main controls are:
+
+- `--num_episodes`
+- `--seed`
+- `--max_steps`
+- `--num_dynamic_obstacles`
+
+Example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
-python eval_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --seed 1000 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_h10
 ```
 
-Example with an explicit output path:
+### Mode 2: Saved-Episode Replay Override
+
+If `--episode_source PATH` is provided, policy eval replays saved episode **starts** from an existing dataset or episodes directory.
+
+Accepted source layout:
+
+- `<episode_source>/episodes/episode_*.pkl`
+- or `episode_source` itself as the `episodes/` directory
+
+Replay mode uses each saved episode only as a scenario definition:
+
+- stored map
+- stored path
+- stored start pose
+- stored goal
+- stored dynamic obstacle routes
+
+It does **not** replay the recorded expert actions. The learned controller runs from scratch on the reconstructed scenario.
+
+Example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
-python eval_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
-  --output /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/eval_metrics_best.json
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --episode_source ./dataset \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_dataset_h10
 ```
 
-Example with a custom classification threshold:
+Replay-mode notes:
+
+- `--num_episodes` is an optional cap on the number of resolved `episode_*.pkl` files
+- if `--num_episodes <= 0`, all resolved saved episodes are used
+- `--seed` remains meaningful for simulator mode, but it is not used to choose replay episodes
+
+### Policy-Eval Outputs
+
+`run_policy_eval.py` writes a self-contained output directory containing:
+
+- `summary.json`
+- `episode_results/episode_*.json`
+- `decision_logs/episode_*.json`
+- `rollout_error_stats/episode_*_rollout_error_stats.json`
+- `rollout_error_stats_summary.json`
+- optional `episodes/`, `preview/`, `gif/`, `video/`
+
+`summary.json` records the source mode in an `episode_source` block:
+
+- simulator mode:
+  - `mode: simulator_sampled`
+- replay mode:
+  - `mode: saved_episode_replay`
+  - `path`
+  - `resolved_episode_count`
+  - `used_episode_files`
+
+## Policy Comparison
+
+Use `compare_policy_eval_runs.py` to compare two completed policy-eval output directories.
+
+Example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
-python eval_structured_world_model.py \
-  --config configs/structured_world_model.yaml \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
-  --threshold 0.5
+python compare_policy_eval_runs.py \
+  --run_a artifacts/policy_eval_h10_a \
+  --run_b artifacts/policy_eval_h10_b \
+  --label_a checkpoint_a \
+  --label_b checkpoint_b \
+  --output_dir artifacts/policy_eval_comparison_h10
 ```
 
-## Checkpoint And Config Requirements
+It reads the two completed policy-eval directories and writes:
 
-The script loads:
+- `comparison_summary.json`
 
-- the full checkpoint from `--checkpoint`
-- the config from `--config`
+## Recommended Order
 
-Model construction uses:
+If you want to evaluate a checkpoint thoroughly:
 
-- `checkpoint["config"]["model"]` if present
-- otherwise `config["model"]`
+1. run offline model eval on dataset windows with `eval_structured_world_model.py`
+2. run policy eval with `run_policy_eval.py`
+3. compare two completed policy-eval runs with `compare_policy_eval_runs.py` if you want checkpoint-to-checkpoint or setting-to-setting comparison
 
-The data split and evaluation settings come from the config file, including:
+## Action-Space Source Of Truth
 
-- `data.data_dir`
-- `data.sequence_length`
-- `data.stride`
-- `data.train_fraction`
-- `evaluation.threshold`
-- `evaluation.output_path`
+For the active `factorized_world_v3` branch, the runtime action space is defined in one place:
 
-Because the script uses the config for dataset loading, make sure `data.data_dir` points at the intended dataset before running evaluation.
+- `sim2d/config.py::ACTIONS`
 
-## Outputs
+For this active branch:
 
-If `--output` is omitted, the script writes to:
+- policy eval candidate enumeration uses runtime `ACTIONS`
+- offline eval action-sensitivity enumeration uses runtime `ACTIONS`
+- runtime `(v, omega)` values come from `ACTIONS`
 
-```text
-evaluation.output_path
-```
-
-For this branch, that default should now resolve into:
-
-```text
-./artifacts/structured_world_model_factorized_world_v3/eval_metrics.json
-```
-
-The script also prints the metrics JSON to stdout.
-
-## Troubleshooting
-
-Common issues:
-
-- Wrong dataset path:
-  - `data.data_dir` must lead to `episodes/episode_*.pkl`
-- Empty validation split:
-  - very small datasets can leave no validation windows after the deterministic split
-- Checkpoint/config mismatch:
-  - model shape settings in the checkpoint and config must match the intended codepath
-- Missing expected fields:
-  - the evaluation loader requires the fields documented in `dynamic_state_data.md`
-
-If `use_goal: true`, the dataset must provide `goal_t`.
-
-If `use_lidar: true`, the dataset must provide `lidar_t`.
+`evaluation.action_cont_values` remains only as backward-compatible fallback for older or non-active paths.

@@ -18,6 +18,35 @@ cd /home/stavan/s4/rnl/longer_horizons
 python eval_structured_world_model.py \
   --config configs/structured_world_model_stage2.yaml \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
+
+If you want a learned closed-loop policy eval:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_h10
+
+If you want a learned policy eval on saved episodes from an existing dataset:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --episode_source ./dataset \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_dataset_h10
+
+If you want to compare two completed policy-eval runs:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python compare_policy_eval_runs.py \
+  --run_a artifacts/policy_eval_h10_a \
+  --run_b artifacts/policy_eval_h10_b \
+  --label_a checkpoint_a \
+  --label_b checkpoint_b \
+  --output_dir artifacts/policy_eval_comparison_h10
 If you want the cleaner regenerated dataset anyway, use:
 
 cd /home/stavan/s4/rnl/longer_horizons

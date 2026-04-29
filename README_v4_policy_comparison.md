@@ -1,103 +1,71 @@
-# V4 Policy Comparison
+# Longer-Horizons Policy Comparison
 
-This README covers the closed-loop controller comparison runner:
+This README covers the comparison step for the current `longer_horizons` workflow.
 
-- `run_policy_comparison_v4.py`
+Policy comparison is a compare-two-output-dirs workflow:
 
-It compares:
+1. run `run_policy_eval.py` once for the first checkpoint or setting
+2. run `run_policy_eval.py` again for the second checkpoint or setting
+3. compare the two completed output directories with `compare_policy_eval_runs.py`
 
-- `baseline_structured`
-- `learned_structured`
+For the full workflow, including simulator-default policy eval and saved-episode replay, see [README_v4_evaluation.md](./README_v4_evaluation.md).
 
-The learned controller loads a trained structured world-model checkpoint. The documented example checkpoint for this branch is:
+## Inputs
 
-- `/home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt`
+`compare_policy_eval_runs.py` takes:
 
-## What The Script Does
-
-For each sampled simulator episode, the script runs both controllers on the same scenario:
-
-- `baseline_structured`: analytic robot rollout plus true cloned dynamic-obstacle rollout
-- `learned_structured`: analytic robot rollout plus learned obstacle world rollout from the checkpoint, transformed into the rolled-out robot frame for scoring
-
-Both controllers evaluate the same repeated-action candidate set:
-
-- `stop`
-- `forward`
-- `forward_left`
-- `forward_right`
-- `slow_left`
-- `slow_right`
-- `backward`
-
-The script samples scenarios internally through the simulator. It does not read the training dataset directory directly.
-
-## Required Inputs
-
-The main required input is the learned checkpoint:
-
-```bash
---checkpoint /path/to/checkpoint.pt
-```
-
-Useful runtime arguments from the current script:
-
+- `--run_a`
+- `--run_b`
+- optional `--label_a`
+- optional `--label_b`
 - `--output_dir`
-- `--num_episodes`
-- `--seed`
-- `--max_steps`
-- `--num_dynamic_obstacles`
-- `--device`
-- `--horizon`
-- `--save_episodes`
-- `--save_previews`
-- `--save_gifs`
-- `--save_videos`
 
-This branch’s default policy-comparison horizon is `10`, and the default output directory is `artifacts/policy_comparison_v4_h10`.
-
-## Smoke Test
+Example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
-python run_policy_comparison_v4.py \
-  --num_episodes 2 \
-  --max_steps 80 \
-  --horizon 10 \
-  --checkpoint /home/stavan/s4/rnl/longer_horizons/artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
-  --output_dir /home/stavan/s4/rnl/longer_horizons/artifacts/policy_comparison_v4_smoke \
-  --save_previews
+python compare_policy_eval_runs.py \
+  --run_a artifacts/policy_eval_h10_a \
+  --run_b artifacts/policy_eval_h10_b \
+  --label_a checkpoint_a \
+  --label_b checkpoint_b \
+  --output_dir artifacts/policy_eval_comparison_h10
 ```
+
+## Expected Policy-Eval Run Layout
+
+Each input run directory should come from `run_policy_eval.py` and contain:
+
+- `summary.json`
+- `episode_results/episode_*.json`
+- `decision_logs/episode_*.json`
+- `rollout_error_stats_summary.json`
+- optional `rollout_error_stats/episode_*_rollout_error_stats.json`
+- optional visual artifacts
+
+The comparison utility also tolerates the older nested learned-controller layout when that is trivial to read.
 
 ## Outputs
 
-The runner always writes:
+The comparison utility writes:
 
-- `<output_dir>/summary.json`
-- `<output_dir>/baseline_structured/decision_logs/episode_*.json`
-- `<output_dir>/baseline_structured/episode_results/episode_*.json`
-- `<output_dir>/learned_structured/decision_logs/episode_*.json`
-- `<output_dir>/learned_structured/episode_results/episode_*.json`
-- `<output_dir>/learned_structured/rollout_error_stats/episode_*_rollout_error_stats.json`
-- `<output_dir>/learned_structured/rollout_error_stats_summary.json`
+- `comparison_summary.json`
 
-Optional outputs are controlled by flags:
+It also prints a short terminal summary for the main aggregate metrics.
 
-- `--save_episodes` writes `episodes/episode_*.pkl`
-- `--save_previews` writes `preview/episode_*.png`
-- `--save_gifs` writes `gif/episode_*.gif`
-- `--save_videos` writes `video/episode_*.mp4`
+The comparison payload includes:
 
-## Summary Output
+- run labels and paths
+- checkpoint references
+- aggregate metric comparisons
+- action-distribution comparisons
+- mean score-component comparisons
+- rollout-error metric comparisons when both runs provide rollout summaries
+- per-episode deltas when both runs provide episode results
 
-`summary.json` includes:
+## Compared Metrics
 
-- checkpoint path
-- run config
-- aggregated controller metrics
-- per-episode compact results for each controller
-
-The per-controller aggregates include:
+The current comparison step includes:
 
 - success rate
 - dynamic collision rate
@@ -105,46 +73,31 @@ The per-controller aggregates include:
 - timeout rate
 - average path length
 - average progress
-- average minimum dynamic/static clearance
+- average min dynamic clearance
+- average min static clearance
 - stop fraction
 - action distribution
 - mean score components
+- learned rollout-error summary metrics when present
 
-## Learned Rollout Error Stats
+## Relationship To Policy Eval
 
-The learned controller additionally writes rollout diagnostics:
+`run_policy_eval.py` is the script that runs the learned controller in closed loop.
 
-- per-episode `rollout_error_stats/episode_*_rollout_error_stats.json`
-- cross-episode `rollout_error_stats_summary.json`
+`compare_policy_eval_runs.py` does not rerun the simulator or the controller. It compares two completed policy-eval outputs after the fact.
 
-These files summarize:
+## Changing The Action Space
 
-- position/velocity rollout error after transforming learned obstacle world rollouts into the robot frame
-- clearance error
-- dynamic collision confusion statistics
-- horizon-growth summaries
-- action-conditioned rollout error summaries
+For the active `factorized_world_v3` branch, the canonical runtime action definition lives in:
 
-## Troubleshooting
+- `sim2d/config.py::ACTIONS`
 
-If the run fails immediately, check:
+That is the normal single place to edit when you want to change the runtime action space again.
 
-- the checkpoint path exists and is a full training checkpoint
-- the Python environment has the dependencies needed by the learned controller
-- the output directory is writable
-- the checkpoint matches the structured world-model codepath in this repo
+For the current branch:
 
-If results look inconsistent:
+- policy eval candidate enumeration comes from the controllers, and both controllers derive candidates from `ACTIONS`
+- action names, action indices, and runtime `(v, omega)` values come from `ACTIONS`
+- changing `ACTIONS` changes policy-eval candidate enumeration and debug labels automatically
 
-- remember the script defaults to `--horizon 10` unless you override it
-- remember policy comparison uses internally sampled simulator scenarios, not a dataset root
-- remember the learned-only rollout diagnostics are written under `learned_structured/rollout_error_stats/`
-
-## Note On Defaults
-
-The script still ships with generic defaults such as:
-
-- `--checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt`
-- `--output_dir artifacts/policy_comparison_v4_h10`
-
-For this branch’s documented workflow, prefer explicitly passing the checkpoint path and output directory you want, as shown above.
+The learned world-frame branch is action-agnostic in the effective obstacle-dynamics path, so runtime action changes here should not require retraining the learned obstacle model.

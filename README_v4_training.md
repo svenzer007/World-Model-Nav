@@ -1,6 +1,6 @@
 # Longer-Horizons Practical Training
 
-This README covers the practical recurrent learned-model branch under `/home/stavan/s4/rnl/longer_horizons`.
+This README covers training for the current practical recurrent learned-model branch under `/home/stavan/s4/rnl/longer_horizons`.
 
 The current recommended practical branch is the world-frame redesign:
 
@@ -10,6 +10,7 @@ model:
 ```
 
 For the detailed state semantics and causal-velocity definition, see [dynamic_state_data.md](/home/stavan/s4/rnl/longer_horizons/dynamic_state_data.md).
+For how trained checkpoints are evaluated and used in the current model-eval / policy-eval / compare-two-runs workflow, see [README_v4_evaluation.md](/home/stavan/s4/rnl/longer_horizons/README_v4_evaluation.md).
 
 ## Current practical model
 
@@ -126,23 +127,15 @@ So the practical rule is:
 - use `init_checkpoint` for Stage 1 -> Stage 2 warm start
 - use `--resume` to continue an interrupted Stage 2 run
 
-The shared rollout-enabled config remains:
+## After Training
 
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python train_structured_world_model.py --config configs/structured_world_model.yaml
-```
+After training a checkpoint, use [README_v4_evaluation.md](/home/stavan/s4/rnl/longer_horizons/README_v4_evaluation.md) for:
 
-## Evaluation
-
-Example evaluation command:
-
-```bash
-cd /home/stavan/s4/rnl/longer_horizons
-python eval_structured_world_model.py \
-  --config configs/structured_world_model_stage2.yaml \
-  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt
-```
+- offline checkpoint evaluation on a dataset
+- closed-loop policy evaluation with `run_policy_eval.py`
+  - simulator-sampled default mode
+  - saved-episode replay override with `--episode_source`
+- comparison of two completed policy-eval outputs with `compare_policy_eval_runs.py`
 
 ## Compatibility
 
@@ -150,7 +143,7 @@ The world-frame redesign uses a new explicit model type:
 
 - `factorized_world_v3`
 
-That keeps old robot-frame factorized checkpoints recoverable and prevents them from silently loading into the new semantics.
+That keeps old robot-frame factorized checkpoints recoverable and prevents them from silently loading into the current semantics.
 
 ## Dataset expectations
 
