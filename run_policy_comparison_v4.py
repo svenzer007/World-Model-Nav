@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
 from controllers.learned_structured_controller import LearnedStructuredController
-from sim2d.config import DatasetConfig
+from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dataset import save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
 from sim2d.maps import GeneratedMap
@@ -25,7 +25,7 @@ from sim2d.waypoint import compute_local_subgoal
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_factorized_v2/best.pt")
+    parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_factorized_world_v3_stage2/best.pt")
     parser.add_argument("--output_dir", type=str, default="artifacts/policy_comparison_v4_h10")
     parser.add_argument("--num_episodes", type=int, default=10)
     parser.add_argument("--seed", type=int, default=1000)
@@ -119,7 +119,7 @@ def _score_components_from_debug(chosen_debug: dict[str, object]) -> dict[str, f
 
 
 def _safe_action_family(action_name: str) -> str:
-    families = {"stop", "forward", "forward_left", "forward_right", "slow_left", "slow_right"}
+    families = {str(action["name"]) for action in ACTIONS.values()}
     return action_name if action_name in families else "unknown"
 
 

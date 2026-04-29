@@ -13,6 +13,7 @@ from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths, split_episode_paths
 from models import FACTOR_WORLD_MODEL_TYPE, LEGACY_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
+from sim2d.config import ACTIONS
 from train_structured_world_model import load_yaml_config, move_batch_to_device, resolve_device, save_json
 
 
@@ -84,6 +85,13 @@ def compute_action_sensitivity(
     normalized = variance / (mean_norm + eps)
     valid = batch["valid_mask"].to(normalized.dtype)
     return torch.sum(normalized * valid) / torch.clamp(torch.sum(valid), min=1.0)
+
+
+def runtime_action_cont_values(model_type: str, eval_cfg: Mapping[str, Any]) -> list[list[float]] | None:
+    if model_type == FACTOR_WORLD_MODEL_TYPE:
+        return [[float(action["v"]), float(action["omega"])] for _, action in sorted(ACTIONS.items())]
+    values = eval_cfg.get("action_cont_values")
+    return list(values) if values is not None else None
 
 
 def compute_rollout_delta_metrics(
@@ -263,8 +271,8 @@ def main() -> None:
                 compute_action_sensitivity(
                     model,
                     batch,
-                    int(model_config.get("action_vocab_size", 6)),
-                    eval_cfg.get("action_cont_values"),
+                    len(ACTIONS) if str(model.config.model_type) == FACTOR_WORLD_MODEL_TYPE else int(model_config.get("action_vocab_size", 6)),
+                    runtime_action_cont_values(str(model.config.model_type), eval_cfg),
                 )
                 .detach()
                 .cpu()

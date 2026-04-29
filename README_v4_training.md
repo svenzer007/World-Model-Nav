@@ -79,6 +79,53 @@ cd /home/stavan/s4/rnl/longer_horizons
 python train_structured_world_model.py --config configs/structured_world_model_stage2.yaml
 ```
 
+### Stage 2 initialization
+
+`configs/structured_world_model_stage2.yaml` does not automatically know which
+Stage 1 checkpoint to use.
+
+There are two different mechanisms:
+
+- `training.init_checkpoint`
+- `--resume`
+
+They do different things.
+
+`training.init_checkpoint` is used when you want to start a fresh Stage 2 run
+from a previously trained Stage 1 checkpoint.
+
+If `training.init_checkpoint: null`, then a fresh Stage 2 launch starts from
+random initialization.
+
+For the intended two-stage workflow, set it explicitly, for example:
+
+```yaml
+training:
+  init_checkpoint: ./artifacts/structured_world_model_factorized_world_v3_stage1/best.pt
+```
+
+Then launch Stage 2 normally:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model_stage2.yaml
+```
+
+`--resume` is different. It resumes an existing Stage 2 run from checkpoints
+already written inside that run's own `training.output_dir`.
+
+Example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python train_structured_world_model.py --config configs/structured_world_model_stage2.yaml --resume
+```
+
+So the practical rule is:
+
+- use `init_checkpoint` for Stage 1 -> Stage 2 warm start
+- use `--resume` to continue an interrupted Stage 2 run
+
 The shared rollout-enabled config remains:
 
 ```bash

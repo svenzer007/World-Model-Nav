@@ -28,6 +28,7 @@ Both controllers evaluate the same repeated-action candidate set:
 - `forward_right`
 - `slow_left`
 - `slow_right`
+- `backward`
 
 The script samples scenarios internally through the simulator. It does not read the training dataset directory directly.
 

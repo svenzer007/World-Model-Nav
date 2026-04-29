@@ -69,8 +69,9 @@ evaluation:
   output_path: ./artifacts/structured_world_model_factorized_world_v3_stage2/eval_metrics.json
   action_cont_values:
     - [0.0, 0.0]
-    - [0.4, 0.0]
-    - [0.4, 1.0]
-    - [0.4, -1.0]
-    - [0.15, 1.0]
-    - [0.15, -1.0]
+    - [0.8, 0.0]
+    - [0.8, 1.0]
+    - [0.8, -1.0]
+    - [0.5, 1.0]
+    - [0.5, -1.0]
+    - [-0.5, 0.0]
