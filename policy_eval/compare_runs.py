@@ -157,13 +157,15 @@ def build_comparison_payload(
         "run_a": {
             "label": label_a,
             "path": str(run_a),
-            "checkpoint": str(summary_a.get("checkpoint", "")),
+            "controller": str(summary_a.get("controller", "")),
+            "checkpoint": summary_a.get("checkpoint"),
             "aggregate": aggregate_a,
         },
         "run_b": {
             "label": label_b,
             "path": str(run_b),
-            "checkpoint": str(summary_b.get("checkpoint", "")),
+            "controller": str(summary_b.get("controller", "")),
+            "checkpoint": summary_b.get("checkpoint"),
             "aggregate": aggregate_b,
         },
         "aggregate_metrics": _compare_scalar_block(aggregate_a, aggregate_b, SELECTED_AGGREGATE_METRICS),

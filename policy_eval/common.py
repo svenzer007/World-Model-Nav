@@ -10,8 +10,7 @@ from typing import Any
 import numpy as np
 from tqdm import tqdm
 
-from controllers.baseline_structured_controller import StructuredControllerConfig
-from controllers.learned_structured_controller import LearnedStructuredController
+from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dataset import load_episode_pickle, save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
@@ -1206,6 +1205,25 @@ def _validate_runtime_override_args(args: argparse.Namespace) -> None:
         )
 
 
+def _build_policy_eval_controller(
+    *,
+    args: argparse.Namespace,
+    config: DatasetConfig,
+    controller_cfg: StructuredControllerConfig,
+) -> tuple[Any, str | None]:
+    controller_name = str(args.controller)
+    if controller_name == "baseline_structured":
+        return BaselineStructuredController(config, controller_cfg), None
+    if controller_name == "learned_structured":
+        checkpoint_path = Path(args.checkpoint)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
+        from controllers.learned_structured_controller import LearnedStructuredController
+
+        return LearnedStructuredController(checkpoint_path, config, controller_cfg, device=str(args.device)), str(checkpoint_path)
+    raise ValueError(f"Unsupported controller: {controller_name}")
+
+
 def _iter_policy_eval_sources(
     *,
     simulator: EpisodeSimulator,
@@ -1251,15 +1269,11 @@ def _iter_policy_eval_sources(
 
 def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     output_dir = Path(args.output_dir)
-    checkpoint_path = Path(args.checkpoint)
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
-
     _validate_runtime_override_args(args)
     config = _dataset_config_from_args(args)
     simulator = EpisodeSimulator(config)
     controller_cfg = _controller_cfg_from_args(args)
-    controller = LearnedStructuredController(checkpoint_path, config, controller_cfg, device=str(args.device))
+    controller, checkpoint_path = _build_policy_eval_controller(args=args, config=config, controller_cfg=controller_cfg)
     source_items, episode_source_details = _iter_policy_eval_sources(simulator=simulator, args=args)
     episodes: list[dict[str, object]] = []
 
@@ -1286,10 +1300,10 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     aggregate = _aggregate_controller_episodes(episodes)
     summary = {
         "schema_version": "v4_policy_eval_1",
-        "checkpoint": str(checkpoint_path),
         "controller": str(controller.name),
         "episode_source": episode_source_details,
         "config": {
+            "controller": str(args.controller),
             "num_episodes": int(len(source_items)),
             "seed": int(args.seed),
             "max_steps": int(args.max_steps),
@@ -1329,8 +1343,10 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
         "aggregate": aggregate,
         "episodes": [_episode_result(episode) for episode in episodes],
     }
+    if checkpoint_path is not None:
+        summary["checkpoint"] = str(checkpoint_path)
     save_json(output_dir / "summary.json", json_safe(summary))
-    if episodes:
+    if episodes and str(controller.name) == "learned_structured":
         save_json(
             output_dir / "rollout_error_stats_summary.json",
             json_safe(_build_rollout_error_stats_from_episodes(episodes)),

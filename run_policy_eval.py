@@ -1,4 +1,4 @@
-"""Run one learned closed-loop policy evaluation."""
+"""Run one closed-loop policy evaluation."""
 
 from __future__ import annotations
 
@@ -21,6 +21,12 @@ def _add_bool_flag(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--controller",
+        type=str,
+        choices=("learned_structured", "baseline_structured"),
+        default="learned_structured",
+    )
     parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_factorized_world_v3_stage2/best.pt")
     parser.add_argument("--output_dir", type=str, default="artifacts/policy_eval")
     parser.add_argument("--episode_source", type=str, default=None)

@@ -23,15 +23,26 @@ If you want a learned closed-loop policy eval:
 
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --horizon 10 \
   --output_dir artifacts/policy_eval_h10
 
+If you want a baseline closed-loop policy eval:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_baseline_h10
+
 If you want a larger runtime map while keeping the default map-family mix:
 
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --map_width 200 \
@@ -43,7 +54,7 @@ If you want to disable backward at policy-eval runtime only:
 
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
-  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --controller learned_structured \
   --num_episodes 10 \
   --disable_backward \
   --horizon 10 \
@@ -53,6 +64,7 @@ If you want a larger runtime map and backward disabled:
 
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --map_width 200 \
@@ -65,11 +77,22 @@ If you want a learned policy eval on saved episodes from an existing dataset:
 
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --episode_source ./dataset \
   --num_episodes 10 \
   --horizon 10 \
   --output_dir artifacts/policy_eval_dataset_h10
+
+If you want a baseline policy eval on saved episodes from an existing dataset:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --episode_source ./dataset \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_baseline_dataset_h10
 
 If you want to compare two completed policy-eval runs:
 

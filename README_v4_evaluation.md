@@ -22,7 +22,7 @@ The current workflow has three entrypoints:
 2. `run_policy_eval.py`
 3. `compare_policy_eval_runs.py`
 
-Use the same checkpoint for offline model eval and policy eval.
+Use the same checkpoint for offline model eval and learned policy eval.
 
 ## Offline Model Eval
 
@@ -51,9 +51,10 @@ Accepted dataset layout:
 
 ## Policy Eval
 
-Use `run_policy_eval.py` to evaluate one learned controller:
+Use `run_policy_eval.py` to evaluate one controller:
 
-- `learned_structured`
+- `learned_structured` (default)
+- `baseline_structured`
 
 In this branch, “model + policy in tandem” means:
 
@@ -79,16 +80,27 @@ The main controls are:
 These are runtime policy-eval overrides only. They do not change the base
 `sim2d` defaults used as the training/data-generation baseline.
 
-Example:
+Learned example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
-  --seed 1000 \
   --horizon 10 \
   --output_dir artifacts/policy_eval_h10
+```
+
+Baseline example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_baseline_h10
 ```
 
 Larger-map example using the same default map-family mix:
@@ -96,6 +108,7 @@ Larger-map example using the same default map-family mix:
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --map_width 200 \
@@ -113,6 +126,7 @@ No-backward example:
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --disable_backward \
@@ -125,6 +139,7 @@ Combined larger-map + no-backward example:
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --num_episodes 10 \
   --map_width 200 \
@@ -151,18 +166,31 @@ Replay mode uses each saved episode only as a scenario definition:
 - stored goal
 - stored dynamic obstacle routes
 
-It does **not** replay the recorded expert actions. The learned controller runs from scratch on the reconstructed scenario.
+It does **not** replay the recorded expert actions. The selected controller runs from scratch on the reconstructed scenario.
 
-Example:
+Learned replay example:
 
 ```bash
 cd /home/stavan/s4/rnl/longer_horizons
 python run_policy_eval.py \
+  --controller learned_structured \
   --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
   --episode_source ./dataset \
   --num_episodes 10 \
   --horizon 10 \
   --output_dir artifacts/policy_eval_dataset_h10
+```
+
+Baseline replay example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --episode_source ./dataset \
+  --num_episodes 10 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_baseline_dataset_h10
 ```
 
 Replay-mode notes:
@@ -180,9 +208,14 @@ Replay-mode notes:
 - `summary.json`
 - `episode_results/episode_*.json`
 - `decision_logs/episode_*.json`
-- `rollout_error_stats/episode_*_rollout_error_stats.json`
-- `rollout_error_stats_summary.json`
+- learned-only: `rollout_error_stats/episode_*_rollout_error_stats.json`
+- learned-only: `rollout_error_stats_summary.json`
 - optional `episodes/`, `preview/`, `gif/`, `video/`
+
+Checkpoint behavior:
+
+- `learned_structured` requires `--checkpoint`
+- `baseline_structured` does not require a checkpoint
 
 `summary.json` records the source mode in an `episode_source` block:
 

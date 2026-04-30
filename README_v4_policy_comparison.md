@@ -39,7 +39,7 @@ Each input run directory should come from `run_policy_eval.py` and contain:
 - `summary.json`
 - `episode_results/episode_*.json`
 - `decision_logs/episode_*.json`
-- `rollout_error_stats_summary.json`
+- learned-only: `rollout_error_stats_summary.json`
 - optional `rollout_error_stats/episode_*_rollout_error_stats.json`
 - optional visual artifacts
 
@@ -56,7 +56,8 @@ It also prints a short terminal summary for the main aggregate metrics.
 The comparison payload includes:
 
 - run labels and paths
-- checkpoint references
+- checkpoint references when present
+- controller names
 - aggregate metric comparisons
 - action-distribution comparisons
 - mean score-component comparisons
@@ -82,7 +83,10 @@ The current comparison step includes:
 
 ## Relationship To Policy Eval
 
-`run_policy_eval.py` is the script that runs the learned controller in closed loop.
+`run_policy_eval.py` is the script that runs either:
+
+- `learned_structured`
+- `baseline_structured`
 
 `compare_policy_eval_runs.py` does not rerun the simulator or the controller. It compares two completed policy-eval outputs after the fact.
 
