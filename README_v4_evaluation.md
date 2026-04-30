@@ -72,6 +72,12 @@ The main controls are:
 - `--seed`
 - `--max_steps`
 - `--num_dynamic_obstacles`
+- `--map_width`
+- `--map_height`
+- `--disable_backward`
+
+These are runtime policy-eval overrides only. They do not change the base
+`sim2d` defaults used as the training/data-generation baseline.
 
 Example:
 
@@ -83,6 +89,49 @@ python run_policy_eval.py \
   --seed 1000 \
   --horizon 10 \
   --output_dir artifacts/policy_eval_h10
+```
+
+Larger-map example using the same default map-family mix:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --map_width 200 \
+  --map_height 200 \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_map20_h10
+```
+
+With the current `resolution=0.1`, `--map_width 200 --map_height 200` means a
+20m x 20m runtime map. The generator family mix stays the same; corridors and
+gaps become wider because the current generators scale those quantities from map size.
+
+No-backward example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --disable_backward \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_no_backward_h10
+```
+
+Combined larger-map + no-backward example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --map_width 200 \
+  --map_height 200 \
+  --disable_backward \
+  --horizon 10 \
+  --output_dir artifacts/policy_eval_map20_no_backward_h10
 ```
 
 ### Mode 2: Saved-Episode Replay Override
@@ -121,6 +170,8 @@ Replay-mode notes:
 - `--num_episodes` is an optional cap on the number of resolved `episode_*.pkl` files
 - if `--num_episodes <= 0`, all resolved saved episodes are used
 - `--seed` remains meaningful for simulator mode, but it is not used to choose replay episodes
+- `--map_width` and `--map_height` are rejected in replay mode, because replay uses
+  saved map geometry and planning occupancy from the episode pickle
 
 ### Policy-Eval Outputs
 
@@ -179,8 +230,10 @@ For the active `factorized_world_v3` branch, the runtime action space is defined
 
 For this active branch:
 
-- policy eval candidate enumeration uses runtime `ACTIONS`
+- policy eval candidate enumeration starts from runtime `ACTIONS`
 - offline eval action-sensitivity enumeration uses runtime `ACTIONS`
 - runtime `(v, omega)` values come from `ACTIONS`
+- `--disable_backward` applies a runtime-only filter on top of `ACTIONS` for policy eval;
+  it does not change the base action table or training/data-generation defaults
 
 `evaluation.action_cont_values` remains only as backward-compatible fallback for older or non-active paths.

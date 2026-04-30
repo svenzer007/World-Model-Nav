@@ -15,6 +15,7 @@ from controllers.learned_structured_controller import LearnedStructuredControlle
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dataset import load_episode_pickle, save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
+from sim2d.obstacles import DynamicObstacle
 from sim2d.simulator import EpisodeSimulator
 from sim2d.utils import euclidean, json_safe, path_length, save_json, seed_sequence
 from sim2d.visualize import save_episode_gif, save_episode_preview_png, save_episode_video
@@ -997,6 +998,27 @@ def _build_decision_log(episode: dict[str, object]) -> dict[str, object]:
 
 def _episode_result(episode: dict[str, object]) -> dict[str, object]:
     stats = episode["episode_stats"]
+    backward_selected_count = 0
+    backward_gated_count = 0
+    backward_allowed_count = 0
+    backward_penalties: list[float] = []
+    backward_action_name = "backward"
+    for step in episode["steps"]:
+        controller_debug = dict(step.get("controller_debug", {}))
+        backward_cfg = dict(controller_debug.get("backward_policy_config", {}))
+        backward_action_name = str(backward_cfg.get("backward_action_name", backward_action_name))
+        if str(step.get("action_name", "")) == backward_action_name:
+            backward_selected_count += 1
+        for candidate in list(controller_debug.get("candidates", [])):
+            candidate_dict = dict(candidate)
+            if not bool(candidate_dict.get("is_backward_action", False)):
+                continue
+            if bool(candidate_dict.get("backward_gated", False)):
+                backward_gated_count += 1
+            if bool(candidate_dict.get("backward_allowed", False)):
+                backward_allowed_count += 1
+            if bool(candidate_dict.get("backward_penalty_applied", False)):
+                backward_penalties.append(float(candidate_dict.get("backward_penalty_value", 0.0)))
     return {
         "episode_id": int(episode["episode_id"]),
         "seed": int(episode["seed"]),
@@ -1012,6 +1034,10 @@ def _episode_result(episode: dict[str, object]) -> dict[str, object]:
         "min_static_clearance": float(stats["min_static_clearance"]),
         "min_dynamic_clearance": float(stats["min_dynamic_clearance"]),
         "stop_fraction": float(stats["stop_fraction"]),
+        "backward_selected_count": int(backward_selected_count),
+        "backward_gated_count": int(backward_gated_count),
+        "backward_allowed_count": int(backward_allowed_count),
+        "average_backward_penalty_applied": _mean_finite(backward_penalties),
     }
 
 
@@ -1044,6 +1070,11 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
     progresses: list[float] = []
     min_dyn_clearances: list[float] = []
     min_static_clearances: list[float] = []
+    backward_selected_counts: list[float] = []
+    backward_gated_counts: list[float] = []
+    backward_allowed_counts: list[float] = []
+    backward_penalties: list[float] = []
+    backward_action_name = "backward"
 
     for episode in episodes:
         stats = episode["episode_stats"]
@@ -1053,9 +1084,19 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         progresses.append(float(stats["total_progress"]))
         min_dyn_clearances.append(float(stats["min_dynamic_clearance"]))
         min_static_clearances.append(float(stats["min_static_clearance"]))
+        episode_result = _episode_result(episode)
         for step in episode["steps"]:
+            controller_debug = dict(step.get("controller_debug", {}))
+            backward_cfg = dict(controller_debug.get("backward_policy_config", {}))
+            backward_action_name = str(backward_cfg.get("backward_action_name", backward_action_name))
             for key, value in step.get("score_components", {}).items():
                 score_components[str(key)].append(float(value))
+        backward_selected_counts.append(float(episode_result["backward_selected_count"]))
+        backward_gated_counts.append(float(episode_result["backward_gated_count"]))
+        backward_allowed_counts.append(float(episode_result["backward_allowed_count"]))
+        backward_penalty_value = float(episode_result["average_backward_penalty_applied"])
+        if np.isfinite(backward_penalty_value):
+            backward_penalties.append(backward_penalty_value)
 
     total_actions = max(1, sum(action_counts.values()))
     return {
@@ -1071,6 +1112,11 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         "stop_fraction": _mean_finite(stop_fractions),
         "action_distribution": {action: float(count / total_actions) for action, count in sorted(action_counts.items())},
         "mean_score_components": {key: _mean_finite(values) for key, values in sorted(score_components.items())},
+        "backward_action_fraction": float(action_counts.get(backward_action_name, 0) / total_actions),
+        "backward_selected_count": float(np.sum(backward_selected_counts)),
+        "backward_gated_count": float(np.sum(backward_gated_counts)),
+        "backward_allowed_count": float(np.sum(backward_allowed_counts)),
+        "average_backward_penalty_applied": _mean_finite(backward_penalties),
     }
 
 
@@ -1115,6 +1161,13 @@ def _controller_cfg_from_args(args: argparse.Namespace) -> StructuredControllerC
         dynamic_collision_penalty=float(args.dynamic_collision_penalty),
         dynamic_risk_tau=float(args.dynamic_risk_tau),
         min_clearance_clip=float(args.min_clearance_clip),
+        backward_penalty_enabled=bool(args.backward_penalty_enabled),
+        backward_action_name=str(args.backward_action_name),
+        backward_penalty=float(args.backward_penalty),
+        backward_gate_enabled=bool(args.backward_gate_enabled),
+        dynamic_stop_clearance_threshold=float(args.dynamic_stop_clearance_threshold),
+        backward_dynamic_margin=float(args.backward_dynamic_margin),
+        action_indices=_effective_runtime_action_indices(args),
     )
 
 
@@ -1123,7 +1176,34 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
     config = DatasetConfig(num_episodes=resolved_num_episodes, seed=int(args.seed), max_steps=int(args.max_steps))
     if args.num_dynamic_obstacles is not None:
         config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
+    if args.map_width is not None:
+        config.map_config.width = int(args.map_width)
+    if args.map_height is not None:
+        config.map_config.height = int(args.map_height)
     return config
+
+
+def _effective_runtime_action_indices(args: argparse.Namespace) -> tuple[int, ...]:
+    action_indices = [int(action_index) for action_index in ACTIONS]
+    if bool(getattr(args, "disable_backward", False)):
+        backward_name = str(getattr(args, "backward_action_name", "backward"))
+        action_indices = [
+            action_index
+            for action_index in action_indices
+            if str(ACTIONS[int(action_index)]["name"]) != backward_name
+        ]
+    if not action_indices:
+        raise ValueError("Runtime action filtering removed every action; check --disable_backward and action settings")
+    return tuple(action_indices)
+
+
+def _validate_runtime_override_args(args: argparse.Namespace) -> None:
+    has_map_override = args.map_width is not None or args.map_height is not None
+    if getattr(args, "episode_source", None) and has_map_override:
+        raise ValueError(
+            "Map-size overrides are only supported for simulator-sampled policy eval; "
+            "saved-episode replay already uses map geometry from the episode pickle"
+        )
 
 
 def _iter_policy_eval_sources(
@@ -1144,6 +1224,8 @@ def _iter_policy_eval_sources(
             "num_episodes": int(args.num_episodes),
             "max_steps": int(args.max_steps),
             "num_dynamic_obstacles": int(simulator.config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "map_width": int(simulator.config.map_config.width),
+            "map_height": int(simulator.config.map_config.height),
         }
         return items, details
 
@@ -1173,6 +1255,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
 
+    _validate_runtime_override_args(args)
     config = _dataset_config_from_args(args)
     simulator = EpisodeSimulator(config)
     controller_cfg = _controller_cfg_from_args(args)
@@ -1211,7 +1294,19 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "seed": int(args.seed),
             "max_steps": int(args.max_steps),
             "num_dynamic_obstacles": int(config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "map_width": int(config.map_config.width),
+            "map_height": int(config.map_config.height),
             "horizon": int(args.horizon),
+            "disable_backward": bool(args.disable_backward),
+            "effective_runtime_actions": [
+                {
+                    "index": int(action_index),
+                    "name": str(ACTIONS[int(action_index)]["name"]),
+                    "v": float(ACTIONS[int(action_index)]["v"]),
+                    "omega": float(ACTIONS[int(action_index)]["omega"]),
+                }
+                for action_index in controller_cfg.action_indices
+            ],
             "weights": {
                 "progress": float(args.w_progress),
                 "heading": float(args.w_heading),
@@ -1224,6 +1319,12 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "dynamic_collision_penalty": float(args.dynamic_collision_penalty),
             "dynamic_risk_tau": float(args.dynamic_risk_tau),
             "min_clearance_clip": float(args.min_clearance_clip),
+            "backward_penalty_enabled": bool(args.backward_penalty_enabled),
+            "backward_penalty": float(args.backward_penalty),
+            "backward_gate_enabled": bool(args.backward_gate_enabled),
+            "dynamic_stop_clearance_threshold": float(args.dynamic_stop_clearance_threshold),
+            "backward_dynamic_margin": float(args.backward_dynamic_margin),
+            "backward_action_name": str(args.backward_action_name),
         },
         "aggregate": aggregate,
         "episodes": [_episode_result(episode) for episode in episodes],

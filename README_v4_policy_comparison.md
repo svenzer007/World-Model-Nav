@@ -99,5 +99,7 @@ For the current branch:
 - policy eval candidate enumeration comes from the controllers, and both controllers derive candidates from `ACTIONS`
 - action names, action indices, and runtime `(v, omega)` values come from `ACTIONS`
 - changing `ACTIONS` changes policy-eval candidate enumeration and debug labels automatically
+- `run_policy_eval.py --disable_backward` is a runtime-only filter on top of `ACTIONS`
+  for evaluation experiments; it does not change the baseline action table
 
 The learned world-frame branch is action-agnostic in the effective obstacle-dynamics path, so runtime action changes here should not require retraining the learned obstacle model.
