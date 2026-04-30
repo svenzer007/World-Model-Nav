@@ -8,6 +8,7 @@ from typing import Any, Sequence
 import numpy as np
 import torch
 
+from policy_eval.robustness import RobotPoseEKF, covariance_summary, generate_rollout_noise_sequences
 from controllers.baseline_structured_controller import (
     StructuredControllerConfig,
     apply_backward_policy,
@@ -81,12 +82,34 @@ class LearnedStructuredController:
         self.model_type = str(model_cfg.get("model_type"))
         self.h_real = None
         self.canonical_ids: list[str] | None = None
-        self.current_true_state: dict[str, np.ndarray] | None = None
+        self.current_state_estimate: dict[str, np.ndarray] | None = None
+        self.ekf = RobotPoseEKF.from_pose(np.zeros((3,), dtype=float))
+        self.last_ekf_debug: dict[str, object] = {
+            "estimated_pose_mean": self.ekf.mean.copy().tolist(),
+            "ekf_covariance": covariance_summary(self.ekf.covariance),
+        }
+        self.rollout_rng = np.random.default_rng()
 
-    def reset(self) -> None:
+    def reset(self, *, initial_pose: np.ndarray | None = None, seed: int | None = None) -> None:
         self.h_real = None
         self.canonical_ids = None
-        self.current_true_state = None
+        self.current_state_estimate = None
+        pose = np.zeros((3,), dtype=float) if initial_pose is None else np.asarray(initial_pose, dtype=float)
+        self.ekf = RobotPoseEKF.from_pose(pose)
+        self.last_ekf_debug = {
+            "estimated_pose_mean": self.ekf.mean.copy().tolist(),
+            "ekf_covariance": covariance_summary(self.ekf.covariance),
+            "commanded_control": None,
+            "pose_observation": pose.astype(float).tolist(),
+            "innovation": [0.0, 0.0, 0.0],
+        }
+        self.rollout_rng = np.random.default_rng(seed)
+
+    def current_pose_estimate(self) -> np.ndarray:
+        return np.asarray(self.ekf.mean, dtype=float).copy()
+
+    def ekf_debug(self) -> dict[str, object]:
+        return dict(self.last_ekf_debug)
 
     def select_action(
         self,
@@ -103,22 +126,48 @@ class LearnedStructuredController:
     ) -> dict[str, object]:
         ordered_obstacles = self._order_obstacle_objects(dynamic_obstacles)
         current_state = self._current_state_for_decision(robot_pose=robot_pose, path_world=path_world, dynamic_obstacles=ordered_obstacles)
-        candidates = [
-            self._evaluate_candidate(
-                action_index=action_index,
-                robot_pose=robot_pose,
-                current_subgoal_world=current_subgoal_world,
-                path_world=path_world,
-                planning_occupancy=planning_occupancy,
-                true_occupancy=true_occupancy,
-                resolution=resolution,
-                origin=origin,
-                occupied_points=occupied_points,
-                dynamic_obstacles=ordered_obstacles,
-                current_state=current_state,
+        rollout_noise_sequences = None
+        if self.controller_cfg.execution_noise_enabled:
+            rollout_noise_sequences = generate_rollout_noise_sequences(
+                self.rollout_rng,
+                num_stochastic_rollouts=int(self.controller_cfg.num_stochastic_rollouts),
+                horizon=int(self.controller_cfg.horizon),
+                execution_noise_enabled=True,
+                sigma_v=float(self.controller_cfg.sigma_v),
+                sigma_omega=float(self.controller_cfg.sigma_omega),
             )
-            for action_index in effective_runtime_actions(self.controller_cfg)
-        ]
+        candidates = []
+        for action_index in effective_runtime_actions(self.controller_cfg):
+            if rollout_noise_sequences is None:
+                candidate = self._evaluate_candidate(
+                    action_index=action_index,
+                    robot_pose=robot_pose,
+                    current_subgoal_world=current_subgoal_world,
+                    path_world=path_world,
+                    planning_occupancy=planning_occupancy,
+                    true_occupancy=true_occupancy,
+                    resolution=resolution,
+                    origin=origin,
+                    occupied_points=occupied_points,
+                    dynamic_obstacles=ordered_obstacles,
+                    current_state=current_state,
+                )
+            else:
+                candidate = self._evaluate_candidate_stochastic(
+                    action_index=action_index,
+                    robot_pose=robot_pose,
+                    current_subgoal_world=current_subgoal_world,
+                    path_world=path_world,
+                    planning_occupancy=planning_occupancy,
+                    true_occupancy=true_occupancy,
+                    resolution=resolution,
+                    origin=origin,
+                    occupied_points=occupied_points,
+                    dynamic_obstacles=ordered_obstacles,
+                    current_state=current_state,
+                    rollout_noise_sequences=rollout_noise_sequences,
+                )
+            candidates.append(candidate)
         backward_debug = apply_backward_policy(candidates, self.controller_cfg)
         feasible_non_stop = [
             candidate for candidate in candidates if bool(candidate["feasible"]) and int(candidate["action_index"]) != 0
@@ -155,6 +204,16 @@ class LearnedStructuredController:
                 "min_clearance_clip": float(self.controller_cfg.min_clearance_clip),
                 "static_collision_penalty": float(self.controller_cfg.static_collision_penalty),
                 "dynamic_collision_penalty": float(self.controller_cfg.dynamic_collision_penalty),
+                "stochastic_planning_active": bool(rollout_noise_sequences is not None),
+                "num_stochastic_rollouts": int(self.controller_cfg.num_stochastic_rollouts),
+                "risk_beta": float(self.controller_cfg.risk_beta),
+                "collision_rate_threshold": float(self.controller_cfg.collision_rate_threshold),
+                "common_random_rollout_control_noise_sequences": rollout_noise_sequences.tolist()
+                if rollout_noise_sequences is not None
+                else None,
+                "estimated_pose_mean": self.current_pose_estimate().tolist(),
+                "ekf_covariance": covariance_summary(self.ekf.covariance),
+                "last_ekf_update": self.ekf_debug(),
                 "num_feasible_non_stop": int(len(feasible_non_stop)),
                 "num_feasible_all": int(len(feasible_all)),
                 "selection_mode": selection_mode,
@@ -171,6 +230,8 @@ class LearnedStructuredController:
         *,
         robot_pose_t,
         robot_pose_t1,
+        robot_pose_est_t,
+        pose_observation,
         dynamic_obstacles_t,
         dynamic_obstacles_t1,
         action_index,
@@ -179,17 +240,41 @@ class LearnedStructuredController:
     ) -> None:
         ordered_t = self._order_snapshot_dicts(dynamic_obstacles_t)
         ordered_t1 = self._order_snapshot_dicts(dynamic_obstacles_t1)
-        if self.model_type == FACTOR_WORLD_MODEL_TYPE and self.current_true_state is not None:
+        self.ekf.mean = np.asarray(robot_pose_est_t, dtype=float).copy()
+        prediction_debug = self.ekf.predict(
+            commanded_control=np.asarray(action_cont, dtype=float),
+            dt=float(self.config.robot_config.dt),
+            execution_noise_enabled=bool(self.controller_cfg.execution_noise_enabled),
+            sigma_v=float(self.controller_cfg.sigma_v),
+            sigma_omega=float(self.controller_cfg.sigma_omega),
+        )
+        correction_debug = self.ekf.correct(
+            pose_observation=np.asarray(pose_observation, dtype=float),
+            pose_observation_noise_enabled=bool(self.controller_cfg.pose_observation_noise_enabled),
+            sigma_obs_x=float(self.controller_cfg.sigma_obs_x),
+            sigma_obs_y=float(self.controller_cfg.sigma_obs_y),
+            sigma_obs_theta=float(self.controller_cfg.sigma_obs_theta),
+        )
+        robot_pose_est_t1 = self.current_pose_estimate()
+        self.last_ekf_debug = {
+            "estimated_pose_mean": robot_pose_est_t1.copy().tolist(),
+            "ekf_covariance": covariance_summary(self.ekf.covariance),
+            "predicted_pose_mean": np.asarray(prediction_debug["predicted_mean"], dtype=float).tolist(),
+            "pose_observation": np.asarray(correction_debug["observation"], dtype=float).tolist(),
+            "innovation": np.asarray(correction_debug["innovation"], dtype=float).tolist(),
+            "commanded_control": np.asarray(action_cont, dtype=float).tolist(),
+        }
+        if self.model_type == FACTOR_WORLD_MODEL_TYPE and self.current_state_estimate is not None:
             state_t = {
-                "pos_world": np.asarray(self.current_true_state["pos_world"], dtype=np.float32).copy(),
-                "vel_world": np.asarray(self.current_true_state["vel_world"], dtype=np.float32).copy(),
-                "radii": np.asarray(self.current_true_state["radii"], dtype=np.float32).copy(),
-                "goal": np.asarray(self.current_true_state["goal"], dtype=np.float32).copy(),
+                "pos_world": np.asarray(self.current_state_estimate["pos_world"], dtype=np.float32).copy(),
+                "vel_world": np.asarray(self.current_state_estimate["vel_world"], dtype=np.float32).copy(),
+                "radii": np.asarray(self.current_state_estimate["radii"], dtype=np.float32).copy(),
+                "goal": np.asarray(self.current_state_estimate["goal"], dtype=np.float32).copy(),
             }
         else:
             state_t = self._state_from_transition(
-                robot_pose_prev=np.asarray(robot_pose_t, dtype=float),
-                robot_pose_curr=np.asarray(robot_pose_t1, dtype=float),
+                robot_pose_prev=np.asarray(robot_pose_est_t, dtype=float),
+                robot_pose_curr=np.asarray(robot_pose_est_t1, dtype=float),
                 current_snapshots=ordered_t,
                 future_snapshots=ordered_t1,
                 path_world=path_world,
@@ -218,19 +303,19 @@ class LearnedStructuredController:
             )
         self.h_real = detach_hidden_state(new_hidden)
         if self.model_type == FACTOR_WORLD_MODEL_TYPE:
-            self.current_true_state = self._next_world_state_from_snapshots(
+            self.current_state_estimate = self._next_world_state_from_snapshots(
                 current_snapshots=ordered_t,
                 next_snapshots=ordered_t1,
                 path_world=path_world,
-                robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
+                robot_pose_t1=np.asarray(robot_pose_est_t1, dtype=float),
             )
         else:
-            self.current_true_state = self._next_state_from_snapshots(
+            self.current_state_estimate = self._next_state_from_snapshots(
                 next_snapshots=ordered_t1,
                 current_vel_rel=state_t["vel_rel"],
                 path_world=path_world,
-                robot_pose_t=np.asarray(robot_pose_t, dtype=float),
-                robot_pose_t1=np.asarray(robot_pose_t1, dtype=float),
+                robot_pose_t=np.asarray(robot_pose_est_t, dtype=float),
+                robot_pose_t1=np.asarray(robot_pose_est_t1, dtype=float),
             )
 
     def _evaluate_candidate(
@@ -247,6 +332,7 @@ class LearnedStructuredController:
         occupied_points: np.ndarray,
         dynamic_obstacles: Sequence[DynamicObstacle],
         current_state: dict[str, np.ndarray],
+        control_noise_sequence: np.ndarray | None = None,
     ) -> dict[str, Any]:
         action = ACTIONS[int(action_index)]
         pose = np.asarray(robot_pose, dtype=float).copy()
@@ -291,11 +377,16 @@ class LearnedStructuredController:
         action_index_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
         action_cont_tensor = torch.tensor([[float(action["v"]), float(action["omega"])]], dtype=torch.float32, device=self.device)
 
-        for _ in range(int(self.controller_cfg.horizon)):
+        for horizon_index in range(int(self.controller_cfg.horizon)):
+            step_noise = (
+                np.asarray(control_noise_sequence[horizon_index], dtype=float)
+                if control_noise_sequence is not None
+                else np.zeros((2,), dtype=float)
+            )
             pose = unicycle_step(
                 pose,
-                float(action["v"]),
-                float(action["omega"]),
+                float(action["v"]) + float(step_noise[0]),
+                float(action["omega"]) + float(step_noise[1]),
                 float(self.config.robot_config.dt),
             )
             waypoint = compute_local_subgoal(pose, path_world, self.config.lookahead_distance)
@@ -452,6 +543,104 @@ class LearnedStructuredController:
             "is_backward_action": bool(_is_backward_candidate({"action_name": str(action["name"])}, self.controller_cfg)),
         }
 
+    def _evaluate_candidate_stochastic(
+        self,
+        *,
+        action_index: int,
+        robot_pose: np.ndarray,
+        current_subgoal_world: np.ndarray,
+        path_world: np.ndarray,
+        planning_occupancy: np.ndarray,
+        true_occupancy: np.ndarray,
+        resolution: float,
+        origin: Sequence[float],
+        occupied_points: np.ndarray,
+        dynamic_obstacles: Sequence[DynamicObstacle],
+        current_state: dict[str, np.ndarray],
+        rollout_noise_sequences: np.ndarray,
+    ) -> dict[str, Any]:
+        sample_payloads = [
+            self._evaluate_candidate(
+                action_index=action_index,
+                robot_pose=robot_pose,
+                current_subgoal_world=current_subgoal_world,
+                path_world=path_world,
+                planning_occupancy=planning_occupancy,
+                true_occupancy=true_occupancy,
+                resolution=resolution,
+                origin=origin,
+                occupied_points=occupied_points,
+                dynamic_obstacles=dynamic_obstacles,
+                current_state=current_state,
+                control_noise_sequence=np.asarray(rollout_noise_sequences[sample_index], dtype=float),
+            )
+            for sample_index in range(int(rollout_noise_sequences.shape[0]))
+        ]
+        sample_costs = [float(sample["total_cost"]) for sample in sample_payloads]
+        collision_flags = [
+            bool(any(reason in {"planning_collision", "static_collision", "dynamic_collision"} for reason in sample["infeasible_reasons"]))
+            for sample in sample_payloads
+        ]
+        collision_rate = float(np.mean(collision_flags)) if collision_flags else 0.0
+        mean_cost = float(np.mean(sample_costs)) if sample_costs else float("nan")
+        std_cost = float(np.std(sample_costs)) if sample_costs else float("nan")
+        stochastic_score = float(mean_cost + float(self.controller_cfg.risk_beta) * std_cost)
+        accepted = bool(collision_rate <= float(self.controller_cfg.collision_rate_threshold))
+        first_sample = sample_payloads[0]
+        horizon = int(self.controller_cfg.horizon)
+        planning_collisions = [
+            bool(any(bool(sample["planning_collisions"][step_index]) for sample in sample_payloads))
+            for step_index in range(horizon)
+        ]
+        static_collisions = [
+            bool(any(bool(sample["static_collisions"][step_index]) for sample in sample_payloads))
+            for step_index in range(horizon)
+        ]
+        dynamic_collisions = [
+            bool(any(bool(sample["dynamic_collisions"][step_index]) for sample in sample_payloads))
+            for step_index in range(horizon)
+        ]
+        return {
+            "action_index": int(first_sample["action_index"]),
+            "action_name": str(first_sample["action_name"]),
+            "v": float(first_sample["v"]),
+            "omega": float(first_sample["omega"]),
+            "total_cost_before_backward_penalty": float(stochastic_score),
+            "total_cost_after_backward_penalty": float(stochastic_score),
+            "total_cost": float(stochastic_score),
+            "goal_progress_cost": float(np.mean([float(sample["goal_progress_cost"]) for sample in sample_payloads])),
+            "heading_cost": float(np.mean([float(sample["heading_cost"]) for sample in sample_payloads])),
+            "path_distance_cost": float(np.mean([float(sample["path_distance_cost"]) for sample in sample_payloads])),
+            "path_tangent_penalty": float(np.mean([float(sample["path_tangent_penalty"]) for sample in sample_payloads])),
+            "path_cost": float(np.mean([float(sample["path_cost"]) for sample in sample_payloads])),
+            "velocity_cost": float(np.mean([float(sample["velocity_cost"]) for sample in sample_payloads])),
+            "clearance_cost": float(np.mean([float(sample["clearance_cost"]) for sample in sample_payloads])),
+            "infeasibility_penalty": float(np.mean([float(sample["infeasibility_penalty"]) for sample in sample_payloads])),
+            "planning_collisions": planning_collisions,
+            "static_collisions": static_collisions,
+            "dynamic_collisions": dynamic_collisions,
+            "min_static_clearance": float(min(float(sample["min_static_clearance"]) for sample in sample_payloads)),
+            "min_dynamic_clearance": float(min(float(sample["min_dynamic_clearance"]) for sample in sample_payloads)),
+            "min_combined_clearance": float(min(float(sample["min_combined_clearance"]) for sample in sample_payloads)),
+            "feasible": bool(accepted),
+            "accepted": bool(accepted),
+            "rejection_reason": None if accepted else "stochastic_collision_rate",
+            "infeasible_reasons": [] if accepted else ["stochastic_collision_rate"],
+            "mean_cost": mean_cost,
+            "std_cost": std_cost,
+            "collision_rate": collision_rate,
+            "stochastic_score": float(stochastic_score),
+            "num_stochastic_rollouts": int(len(sample_payloads)),
+            "stochastic_sample_costs": [float(value) for value in sample_costs],
+            "stochastic_sample_collision_flags": [bool(value) for value in collision_flags],
+            "backward_penalty_applied": False,
+            "backward_penalty_value": 0.0,
+            "backward_gated": False,
+            "backward_allowed": True,
+            "backward_gate_reason": "not_backward_action",
+            "is_backward_action": bool(_is_backward_candidate({"action_name": str(first_sample["action_name"])}, self.controller_cfg)),
+        }
+
     def _current_state_for_decision(
         self,
         *,
@@ -459,19 +648,19 @@ class LearnedStructuredController:
         path_world: np.ndarray,
         dynamic_obstacles: Sequence[DynamicObstacle],
     ) -> dict[str, np.ndarray]:
-        if self.current_true_state is not None:
+        if self.current_state_estimate is not None:
             if self.model_type == FACTOR_WORLD_MODEL_TYPE:
                 return {
-                    "pos_world": np.asarray(self.current_true_state["pos_world"], dtype=np.float32).copy(),
-                    "vel_world": np.asarray(self.current_true_state["vel_world"], dtype=np.float32).copy(),
-                    "radii": np.asarray(self.current_true_state["radii"], dtype=np.float32).copy(),
-                    "goal": np.asarray(self.current_true_state["goal"], dtype=np.float32).copy(),
+                    "pos_world": np.asarray(self.current_state_estimate["pos_world"], dtype=np.float32).copy(),
+                    "vel_world": np.asarray(self.current_state_estimate["vel_world"], dtype=np.float32).copy(),
+                    "radii": np.asarray(self.current_state_estimate["radii"], dtype=np.float32).copy(),
+                    "goal": np.asarray(self.current_state_estimate["goal"], dtype=np.float32).copy(),
                 }
             return {
-                "pos_rel": np.asarray(self.current_true_state["pos_rel"], dtype=np.float32).copy(),
-                "vel_rel": np.asarray(self.current_true_state["vel_rel"], dtype=np.float32).copy(),
-                "radii": np.asarray(self.current_true_state["radii"], dtype=np.float32).copy(),
-                "goal": np.asarray(self.current_true_state["goal"], dtype=np.float32).copy(),
+                "pos_rel": np.asarray(self.current_state_estimate["pos_rel"], dtype=np.float32).copy(),
+                "vel_rel": np.asarray(self.current_state_estimate["vel_rel"], dtype=np.float32).copy(),
+                "radii": np.asarray(self.current_state_estimate["radii"], dtype=np.float32).copy(),
+                "goal": np.asarray(self.current_state_estimate["goal"], dtype=np.float32).copy(),
             }
 
         positions_world = np.asarray([obstacle.position.copy() for obstacle in dynamic_obstacles], dtype=float)

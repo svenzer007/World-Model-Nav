@@ -94,6 +94,33 @@ python run_policy_eval.py \
   --horizon 10 \
   --output_dir artifacts/policy_eval_baseline_dataset_h10
 
+If you want a learned robustness eval with execution noise, pose observation noise, and EKF-based planning:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller learned_structured \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --execution_noise_enabled \
+  --pose_observation_noise_enabled \
+  --num_stochastic_rollouts 8 \
+  --risk_beta 1.0 \
+  --collision_rate_threshold 0.15 \
+  --output_dir artifacts/policy_eval_robust_learned
+
+If you want a baseline robustness eval with the same runtime-noise settings:
+
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --num_episodes 10 \
+  --execution_noise_enabled \
+  --pose_observation_noise_enabled \
+  --num_stochastic_rollouts 8 \
+  --risk_beta 1.0 \
+  --collision_rate_threshold 0.15 \
+  --output_dir artifacts/policy_eval_robust_baseline
+
 If you want to compare two completed policy-eval runs:
 
 cd /home/stavan/s4/rnl/longer_horizons

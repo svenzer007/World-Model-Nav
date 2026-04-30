@@ -1,0 +1,20 @@
+{
+  "average_backward_penalty_applied": 10.0,
+  "backward_allowed_count": 3,
+  "backward_gated_count": 217,
+  "backward_selected_count": 4,
+  "controller": "learned_structured",
+  "done_reason": "goal_reached",
+  "dynamic_collision": false,
+  "episode_id": 17,
+  "min_dynamic_clearance": 0.030776885227832562,
+  "min_static_clearance": 0.16947274051303607,
+  "num_steps": 220,
+  "robot_path_length": 14.717440329189083,
+  "seed": 1184706118,
+  "static_collision": false,
+  "stop_fraction": 0.11818181818181818,
+  "success": true,
+  "timeout": false,
+  "total_progress": 0.6584144234657288
+}

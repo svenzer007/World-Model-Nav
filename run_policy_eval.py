@@ -67,6 +67,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dynamic_stop_clearance_threshold", type=float, default=0.20)
     parser.add_argument("--backward_dynamic_margin", type=float, default=0.10)
     parser.add_argument("--backward_action_name", type=str, default="backward")
+    _add_bool_flag(
+        parser,
+        name="execution_noise_enabled",
+        default=False,
+        enable_help="Enable Gaussian execution noise and stochastic candidate rollouts during policy eval",
+        disable_help="Disable execution noise and keep deterministic candidate rollouts",
+    )
+    parser.add_argument("--sigma_v", type=float, default=0.05)
+    parser.add_argument("--sigma_omega", type=float, default=0.1)
+    _add_bool_flag(
+        parser,
+        name="pose_observation_noise_enabled",
+        default=False,
+        enable_help="Enable Gaussian noisy pose observations for EKF correction",
+        disable_help="Disable pose-observation noise and use exact pose observations",
+    )
+    parser.add_argument("--sigma_obs_x", type=float, default=0.03)
+    parser.add_argument("--sigma_obs_y", type=float, default=0.03)
+    parser.add_argument("--sigma_obs_theta", type=float, default=0.05)
+    parser.add_argument("--num_stochastic_rollouts", type=int, default=8)
+    parser.add_argument("--risk_beta", type=float, default=1.0)
+    parser.add_argument("--collision_rate_threshold", type=float, default=0.15)
     parser.add_argument("--save_episodes", action="store_true")
     parser.add_argument("--save_previews", action="store_true")
     parser.add_argument("--save_gifs", action="store_true")

@@ -39,7 +39,7 @@ Each input run directory should come from `run_policy_eval.py` and contain:
 - `summary.json`
 - `episode_results/episode_*.json`
 - `decision_logs/episode_*.json`
-- learned-only: `rollout_error_stats_summary.json`
+- learned-only in deterministic learned runs: `rollout_error_stats_summary.json`
 - optional `rollout_error_stats/episode_*_rollout_error_stats.json`
 - optional visual artifacts
 
@@ -63,6 +63,8 @@ The comparison payload includes:
 - mean score-component comparisons
 - rollout-error metric comparisons when both runs provide rollout summaries
 - per-episode deltas when both runs provide episode results
+
+If one or both input runs used robustness mode with stochastic planning enabled, learned rollout-error summaries may be absent by design. The comparison utility still compares the standard aggregate and per-episode policy metrics in that case.
 
 ## Compared Metrics
 

@@ -19,6 +19,7 @@ from sim2d.simulator import EpisodeSimulator
 from sim2d.utils import euclidean, json_safe, path_length, save_json, seed_sequence
 from sim2d.visualize import save_episode_gif, save_episode_preview_png, save_episode_video
 from sim2d.waypoint import compute_local_subgoal
+from .robustness import sample_executed_control, sample_pose_observation
 from .sources import resolve_episode_source_paths, scenario_from_saved_episode
 
 
@@ -792,14 +793,15 @@ def _run_controller_episode(
     occupancy = map_bundle.occupancy
     planning_occupancy = scenario["planning_occupancy"]
     occupied_points = scenario["occupied_points"]
-    robot_pose = scenario["start_pose"].copy()
+    robot_pose_true = scenario["start_pose"].copy()
     goal_point = scenario["goal_point"].copy()
     path_world = scenario["path_world"].copy()
     dyn_obstacles = [obstacle.clone() for obstacle in scenario["dynamic_obstacles"]]
+    runtime_rng = np.random.default_rng(seed)
 
-    controller.reset()
+    controller.reset(initial_pose=robot_pose_true.copy(), seed=seed)
     steps: list[dict[str, object]] = []
-    robot_trajectory = [robot_pose.copy()]
+    robot_trajectory = [robot_pose_true.copy()]
     dynamic_trajectories: dict[str, list[np.ndarray]] = {
         obstacle.obstacle_id: [obstacle.position.copy()] for obstacle in dyn_obstacles
     }
@@ -807,12 +809,15 @@ def _run_controller_episode(
     dynamic_clearance_history: list[float] = []
     combined_clearance_history: list[float] = []
     done_reason = "timeout"
+    stochastic_planning_active = bool(getattr(controller.controller_cfg, "execution_noise_enabled", False))
 
     for step_index in range(int(config.max_steps)):
-        waypoint_now = compute_local_subgoal(robot_pose, path_world, config.lookahead_distance)
+        robot_pose_est = np.asarray(controller.current_pose_estimate(), dtype=float)
+        waypoint_now_est = compute_local_subgoal(robot_pose_est, path_world, config.lookahead_distance)
+        waypoint_now_true = compute_local_subgoal(robot_pose_true, path_world, config.lookahead_distance)
         decision = controller.select_action(
-            robot_pose=robot_pose,
-            current_subgoal_world=waypoint_now["selected_subgoal_world"],
+            robot_pose=robot_pose_est,
+            current_subgoal_world=waypoint_now_est["selected_subgoal_world"],
             path_world=path_world,
             planning_occupancy=planning_occupancy,
             true_occupancy=occupancy,
@@ -823,24 +828,43 @@ def _run_controller_episode(
         )
 
         dynamic_t = _snapshot_obstacles(dyn_obstacles)
-        robot_pose_next = simulator._apply_action(robot_pose, float(decision["v"]), float(decision["omega"]))
+        commanded_control = np.array([float(decision["v"]), float(decision["omega"])], dtype=float)
+        executed_control = sample_executed_control(
+            runtime_rng,
+            commanded_control,
+            execution_noise_enabled=bool(getattr(controller.controller_cfg, "execution_noise_enabled", False)),
+            sigma_v=float(getattr(controller.controller_cfg, "sigma_v", 0.0)),
+            sigma_omega=float(getattr(controller.controller_cfg, "sigma_omega", 0.0)),
+        )
+        robot_pose_next_true = simulator._apply_action(robot_pose_true, float(executed_control[0]), float(executed_control[1]))
         for obstacle in dyn_obstacles:
             obstacle.step(config.robot_config.dt)
         dynamic_t1 = _snapshot_obstacles(dyn_obstacles)
+        pose_observation = sample_pose_observation(
+            runtime_rng,
+            robot_pose_next_true,
+            pose_observation_noise_enabled=bool(getattr(controller.controller_cfg, "pose_observation_noise_enabled", False)),
+            sigma_obs_x=float(getattr(controller.controller_cfg, "sigma_obs_x", 0.0)),
+            sigma_obs_y=float(getattr(controller.controller_cfg, "sigma_obs_y", 0.0)),
+            sigma_obs_theta=float(getattr(controller.controller_cfg, "sigma_obs_theta", 0.0)),
+        )
 
         controller.commit_step(
-            robot_pose_t=robot_pose.copy(),
-            robot_pose_t1=robot_pose_next.copy(),
+            robot_pose_t=robot_pose_true.copy(),
+            robot_pose_t1=robot_pose_next_true.copy(),
+            robot_pose_est_t=robot_pose_est.copy(),
+            pose_observation=pose_observation.copy(),
             dynamic_obstacles_t=dynamic_t,
             dynamic_obstacles_t1=dynamic_t1,
             action_index=int(decision["action_index"]),
-            action_cont=np.array([float(decision["v"]), float(decision["omega"])], dtype=np.float32),
+            action_cont=commanded_control.astype(np.float32),
             path_world=path_world,
         )
+        robot_pose_next_est = np.asarray(controller.current_pose_estimate(), dtype=float)
 
         static_collision = bool(
             disk_collides_with_occupancy(
-                robot_pose_next[:2],
+                robot_pose_next_true[:2],
                 config.robot_config.radius,
                 occupancy,
                 map_bundle.resolution,
@@ -849,12 +873,12 @@ def _run_controller_episode(
         )
         dynamic_collision = bool(
             any(
-                np.linalg.norm(robot_pose_next[:2] - np.asarray(obstacle.position, dtype=float))
+                np.linalg.norm(robot_pose_next_true[:2] - np.asarray(obstacle.position, dtype=float))
                 <= config.robot_config.radius + float(obstacle.radius)
                 for obstacle in dyn_obstacles
             )
         )
-        goal_reached = euclidean(robot_pose_next[:2], goal_point) <= config.robot_config.goal_tolerance
+        goal_reached = euclidean(robot_pose_next_true[:2], goal_point) <= config.robot_config.goal_tolerance
 
         if goal_reached:
             done_reason = "goal_reached"
@@ -865,16 +889,16 @@ def _run_controller_episode(
         elif step_index == int(config.max_steps) - 1:
             done_reason = "timeout"
 
-        waypoint_next = compute_local_subgoal(robot_pose_next, path_world, config.lookahead_distance)
+        waypoint_next_true = compute_local_subgoal(robot_pose_next_true, path_world, config.lookahead_distance)
         static_clearance = float(
             minimum_static_clearance(
-                robot_pose_next[:2],
+                robot_pose_next_true[:2],
                 config.robot_config.radius,
                 occupied_points,
                 map_bundle.resolution,
             )
         )
-        dynamic_clearance = float(minimum_dynamic_clearance(robot_pose_next[:2], config.robot_config.radius, dyn_obstacles))
+        dynamic_clearance = float(minimum_dynamic_clearance(robot_pose_next_true[:2], config.robot_config.radius, dyn_obstacles))
         combined_clearance = float(min(static_clearance, dynamic_clearance))
         static_clearance_history.append(static_clearance)
         dynamic_clearance_history.append(dynamic_clearance)
@@ -886,18 +910,25 @@ def _run_controller_episode(
             {
                 "t": int(step_index),
                 "dt": float(config.robot_config.dt),
-                "robot_pose": robot_pose.copy(),
-                "robot_pose_t": robot_pose.copy(),
-                "robot_pose_t1": robot_pose_next.copy(),
-                "goal_t": waypoint_now["goal_features"].copy(),
-                "goal_t1": waypoint_next["goal_features"].copy(),
-                "selected_subgoal_world": waypoint_now["selected_subgoal_world"].copy(),
+                "robot_pose": robot_pose_true.copy(),
+                "robot_pose_t": robot_pose_true.copy(),
+                "robot_pose_t1": robot_pose_next_true.copy(),
+                "robot_pose_true_t": robot_pose_true.copy(),
+                "robot_pose_true_t1": robot_pose_next_true.copy(),
+                "robot_pose_est_t": robot_pose_est.copy(),
+                "robot_pose_est_t1": robot_pose_next_est.copy(),
+                "pose_observation_t1": pose_observation.copy(),
+                "goal_t": waypoint_now_true["goal_features"].copy(),
+                "goal_t1": waypoint_next_true["goal_features"].copy(),
+                "selected_subgoal_world": waypoint_now_est["selected_subgoal_world"].copy(),
                 "action_index": int(decision["action_index"]),
                 "action_name": str(decision["action_name"]),
                 "v": float(decision["v"]),
                 "omega": float(decision["omega"]),
                 "v_t": float(decision["v"]),
                 "omega_t": float(decision["omega"]),
+                "commanded_control": commanded_control.copy(),
+                "executed_control": executed_control.copy(),
                 "collision_t1": bool(static_collision or dynamic_collision),
                 "static_collision_t1": bool(static_collision),
                 "dynamic_collision_t1": bool(dynamic_collision),
@@ -905,7 +936,7 @@ def _run_controller_episode(
                 "done_reason_t1": str(done_reason),
                 "dynamic_obstacles_t": dynamic_t,
                 "dynamic_obstacles_t1": dynamic_t1,
-                "progress_to_subgoal": float(waypoint_now["goal_features"][2] - waypoint_next["goal_features"][2]),
+                "progress_to_subgoal": float(waypoint_now_true["goal_features"][2] - waypoint_next_true["goal_features"][2]),
                 "min_static_clearance_t1": static_clearance,
                 "min_dynamic_clearance_t1": dynamic_clearance,
                 "min_total_clearance_t1": combined_clearance,
@@ -916,8 +947,8 @@ def _run_controller_episode(
             }
         )
 
-        robot_pose = robot_pose_next
-        robot_trajectory.append(robot_pose.copy())
+        robot_pose_true = robot_pose_next_true
+        robot_trajectory.append(robot_pose_true.copy())
         for obstacle in dyn_obstacles:
             dynamic_trajectories[obstacle.obstacle_id].append(obstacle.position.copy())
         if goal_reached or static_collision or dynamic_collision or step_index == int(config.max_steps) - 1:
@@ -954,7 +985,7 @@ def _run_controller_episode(
             "timeout": bool(done_reason == "timeout"),
             "astar_path_length": float(path_length(path_world)),
             "robot_path_length": float(path_length(trajectory_array[:, :2])),
-            "final_distance_to_goal": float(euclidean(robot_pose[:2], goal_point)),
+            "final_distance_to_goal": float(euclidean(robot_pose_true[:2], goal_point)),
             "total_progress": float(sum(float(step["progress_to_subgoal"]) for step in steps)),
             "stop_fraction": _episode_stop_fraction(steps),
             "min_static_clearance": float(np.min(static_clearance_history)) if static_clearance_history else float("inf"),
@@ -966,6 +997,7 @@ def _run_controller_episode(
             "dynamic_trajectories": {obstacle_id: np.array(points, dtype=float) for obstacle_id, points in dynamic_trajectories.items()},
             "action_counts": _step_action_histogram(steps),
         },
+        "stochastic_planning_active": bool(stochastic_planning_active),
     }
 
 
@@ -983,6 +1015,13 @@ def _build_decision_log(episode: dict[str, object]) -> dict[str, object]:
                 "action_name": str(step["action_name"]),
                 "v": float(step["v"]),
                 "omega": float(step["omega"]),
+                "robot_pose_true_t": step.get("robot_pose_true_t", step.get("robot_pose_t")),
+                "robot_pose_true_t1": step.get("robot_pose_true_t1", step.get("robot_pose_t1")),
+                "robot_pose_est_t": step.get("robot_pose_est_t"),
+                "robot_pose_est_t1": step.get("robot_pose_est_t1"),
+                "pose_observation_t1": step.get("pose_observation_t1"),
+                "commanded_control": step.get("commanded_control"),
+                "executed_control": step.get("executed_control"),
                 "collision_t1": bool(step["collision_t1"]),
                 "static_collision_t1": bool(step["static_collision_t1"]),
                 "dynamic_collision_t1": bool(step["dynamic_collision_t1"]),
@@ -1134,7 +1173,7 @@ def _save_episode_artifacts(
     stem = f"episode_{int(episode['episode_id']):06d}"
     save_json(controller_dir / "decision_logs" / f"{stem}.json", _build_decision_log(episode))
     save_json(controller_dir / "episode_results" / f"{stem}.json", _episode_result(episode))
-    if str(episode["controller"]) == "learned_structured":
+    if str(episode["controller"]) == "learned_structured" and not bool(episode.get("stochastic_planning_active", False)):
         rollout_error_stats = _build_learned_rollout_error_stats(episode)
         save_json(controller_dir / "rollout_error_stats" / f"{stem}_rollout_error_stats.json", json_safe(rollout_error_stats))
     if save_episodes:
@@ -1167,6 +1206,16 @@ def _controller_cfg_from_args(args: argparse.Namespace) -> StructuredControllerC
         dynamic_stop_clearance_threshold=float(args.dynamic_stop_clearance_threshold),
         backward_dynamic_margin=float(args.backward_dynamic_margin),
         action_indices=_effective_runtime_action_indices(args),
+        execution_noise_enabled=bool(args.execution_noise_enabled),
+        sigma_v=float(args.sigma_v),
+        sigma_omega=float(args.sigma_omega),
+        pose_observation_noise_enabled=bool(args.pose_observation_noise_enabled),
+        sigma_obs_x=float(args.sigma_obs_x),
+        sigma_obs_y=float(args.sigma_obs_y),
+        sigma_obs_theta=float(args.sigma_obs_theta),
+        num_stochastic_rollouts=int(args.num_stochastic_rollouts),
+        risk_beta=float(args.risk_beta),
+        collision_rate_threshold=float(args.collision_rate_threshold),
     )
 
 
@@ -1339,6 +1388,18 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "dynamic_stop_clearance_threshold": float(args.dynamic_stop_clearance_threshold),
             "backward_dynamic_margin": float(args.backward_dynamic_margin),
             "backward_action_name": str(args.backward_action_name),
+            "execution_noise_enabled": bool(args.execution_noise_enabled),
+            "sigma_v": float(args.sigma_v),
+            "sigma_omega": float(args.sigma_omega),
+            "pose_observation_noise_enabled": bool(args.pose_observation_noise_enabled),
+            "sigma_obs_x": float(args.sigma_obs_x),
+            "sigma_obs_y": float(args.sigma_obs_y),
+            "sigma_obs_theta": float(args.sigma_obs_theta),
+            "num_stochastic_rollouts": int(args.num_stochastic_rollouts),
+            "risk_beta": float(args.risk_beta),
+            "collision_rate_threshold": float(args.collision_rate_threshold),
+            "stochastic_planning_active": bool(args.execution_noise_enabled),
+            "rollout_error_stats_suppressed": bool(args.execution_noise_enabled and controller.name == "learned_structured"),
         },
         "aggregate": aggregate,
         "episodes": [_episode_result(episode) for episode in episodes],
@@ -1346,7 +1407,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     if checkpoint_path is not None:
         summary["checkpoint"] = str(checkpoint_path)
     save_json(output_dir / "summary.json", json_safe(summary))
-    if episodes and str(controller.name) == "learned_structured":
+    if episodes and str(controller.name) == "learned_structured" and not bool(args.execution_noise_enabled):
         save_json(
             output_dir / "rollout_error_stats_summary.json",
             json_safe(_build_rollout_error_stats_from_episodes(episodes)),

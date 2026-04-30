@@ -76,6 +76,11 @@ The main controls are:
 - `--map_width`
 - `--map_height`
 - `--disable_backward`
+- `--execution_noise_enabled`
+- `--pose_observation_noise_enabled`
+- `--num_stochastic_rollouts`
+- `--risk_beta`
+- `--collision_rate_threshold`
 
 These are runtime policy-eval overrides only. They do not change the base
 `sim2d` defaults used as the training/data-generation baseline.
@@ -149,6 +154,73 @@ python run_policy_eval.py \
   --output_dir artifacts/policy_eval_map20_no_backward_h10
 ```
 
+### Runtime Robustness Mode
+
+Policy eval now also supports an opt-in runtime robustness mode with:
+
+- noisy true execution
+- noisy pose observation
+- EKF robot pose estimation
+- stochastic candidate rollouts scored with `mean_cost + risk_beta * std_cost`
+
+This is a policy-eval-only runtime upgrade. It does not change:
+
+- training
+- dataset generation
+- checkpoint format
+- learned obstacle prediction semantics
+
+The main robustness flags are:
+
+- `--execution_noise_enabled`
+- `--sigma_v` default `0.05`
+- `--sigma_omega` default `0.1`
+- `--pose_observation_noise_enabled`
+- `--sigma_obs_x` default `0.03`
+- `--sigma_obs_y` default `0.03`
+- `--sigma_obs_theta` default `0.05`
+- `--num_stochastic_rollouts` default `8`
+- `--risk_beta` default `1.0`
+- `--collision_rate_threshold` default `0.15`
+
+When robustness is enabled:
+
+- true simulator motion uses noisy executed control
+- the controller plans from its EKF-estimated pose, not the true pose
+- dynamic obstacle world state remains perfectly observed
+- all candidate actions in one decision step reuse the same sampled rollout-noise sequences
+
+Noise-enabled learned example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller learned_structured \
+  --checkpoint artifacts/structured_world_model_factorized_world_v3_stage2/best.pt \
+  --num_episodes 10 \
+  --execution_noise_enabled \
+  --pose_observation_noise_enabled \
+  --num_stochastic_rollouts 8 \
+  --risk_beta 1.0 \
+  --collision_rate_threshold 0.15 \
+  --output_dir artifacts/policy_eval_robust_learned
+```
+
+Noise-enabled baseline example:
+
+```bash
+cd /home/stavan/s4/rnl/longer_horizons
+python run_policy_eval.py \
+  --controller baseline_structured \
+  --num_episodes 10 \
+  --execution_noise_enabled \
+  --pose_observation_noise_enabled \
+  --num_stochastic_rollouts 8 \
+  --risk_beta 1.0 \
+  --collision_rate_threshold 0.15 \
+  --output_dir artifacts/policy_eval_robust_baseline
+```
+
 ### Mode 2: Saved-Episode Replay Override
 
 If `--episode_source PATH` is provided, policy eval replays saved episode **starts** from an existing dataset or episodes directory.
@@ -208,8 +280,8 @@ Replay-mode notes:
 - `summary.json`
 - `episode_results/episode_*.json`
 - `decision_logs/episode_*.json`
-- learned-only: `rollout_error_stats/episode_*_rollout_error_stats.json`
-- learned-only: `rollout_error_stats_summary.json`
+- learned-only in deterministic mode: `rollout_error_stats/episode_*_rollout_error_stats.json`
+- learned-only in deterministic mode: `rollout_error_stats_summary.json`
 - optional `episodes/`, `preview/`, `gif/`, `video/`
 
 Checkpoint behavior:
@@ -226,6 +298,30 @@ Checkpoint behavior:
   - `path`
   - `resolved_episode_count`
   - `used_episode_files`
+
+`summary.json` also records the robustness settings in its `config` block, including:
+
+- `execution_noise_enabled`
+- `pose_observation_noise_enabled`
+- `sigma_v`
+- `sigma_omega`
+- `sigma_obs_x`
+- `sigma_obs_y`
+- `sigma_obs_theta`
+- `num_stochastic_rollouts`
+- `risk_beta`
+- `collision_rate_threshold`
+- `rollout_error_stats_suppressed`
+
+When robustness is enabled, decision logs include:
+
+- true robot pose
+- EKF-estimated pose
+- pose observation
+- commanded control
+- executed control
+- EKF covariance summary
+- per-candidate stochastic fields such as `mean_cost`, `std_cost`, `collision_rate`, and `stochastic_score`
 
 ## Policy Comparison
 
