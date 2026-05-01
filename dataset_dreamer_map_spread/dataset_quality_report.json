@@ -1,0 +1,350 @@
+{
+  "actions": {
+    "backward": {
+      "count": 3944,
+      "percentage": 0.46258503401360546
+    },
+    "forward": {
+      "count": 3714,
+      "percentage": 0.43560872624912034
+    },
+    "forward_left": {
+      "count": 149,
+      "percentage": 0.01747595589960122
+    },
+    "forward_right": {
+      "count": 138,
+      "percentage": 0.01618578465869106
+    },
+    "slow_left": {
+      "count": 266,
+      "percentage": 0.031198686371100164
+    },
+    "slow_right": {
+      "count": 283,
+      "percentage": 0.033192587379779495
+    },
+    "stop": {
+      "count": 32,
+      "percentage": 0.003753225428102275
+    },
+    "stop_fraction": 0.003753225428102275,
+    "unknown_action_count": 0
+  },
+  "basic": {
+    "avg_steps_per_episode": 426.3,
+    "num_episodes": 20,
+    "total_steps": 8526
+  },
+  "clearance": {
+    "fraction_clearance_lt_0_3": 0.35948862303542106,
+    "histogram_counts": {
+      "0_2_to_0_3": 1747,
+      "0_3_to_0_5": 2387,
+      "gt_0_5": 3074,
+      "lt_0_2": 1318
+    },
+    "mean_clearance": 0.4984067202555404,
+    "num_clearance_samples": 8526
+  },
+  "episode_lengths": {
+    "max_episode_length": 450,
+    "mean_episode_length": 426.3,
+    "median_episode_length": 450.0,
+    "min_episode_length": 195
+  },
+  "feasibility": {
+    "avg_feasible_actions_per_step": 6.115411681914145,
+    "avg_feasible_non_stop_actions_per_step": 5.132418484635234,
+    "fraction_only_stop_feasible": 0.003753225428102275,
+    "fraction_zero_non_stop_actions_feasible": 0.005277973258268825,
+    "num_feasibility_samples": 8526
+  },
+  "goal_features": {
+    "angle_bins": {
+      "front": 7973,
+      "large": 31,
+      "moderate": 522
+    },
+    "distance": {
+      "max": 2.3292083740234375,
+      "mean": 1.0659243504213332,
+      "min": 0.40813660621643066
+    },
+    "num_goal_samples": 8526
+  },
+  "maneuver_diversity": {
+    "avg_unique_actions_per_episode": 5.6,
+    "turning_action_fraction": 0.09805301430917195
+  },
+  "map_distribution": {
+    "fixed_map": {
+      "count": 20,
+      "fraction": 1.0
+    }
+  },
+  "path_complexity": {
+    "directness_ratio": {
+      "count": 20,
+      "max": 1.375928297299535,
+      "mean": 1.1370476403873264,
+      "min": 1.054053283186491,
+      "p05": 1.058702257756753,
+      "p50": 1.1245535392529116,
+      "p95": 1.2940150997895468,
+      "std": 0.07625267587125423
+    },
+    "turn_angle_sum": {
+      "count": 20,
+      "max": 48.694686130643625,
+      "mean": 21.71625921794182,
+      "min": 2.35619449019421,
+      "p05": 3.8484510006490242,
+      "p50": 18.456856839843155,
+      "p95": 44.21791659928026,
+      "std": 13.58142833533833
+    }
+  },
+  "stop_persistence": {
+    "avg_longest_stop_run": 1.15,
+    "episodes_with_stop_run_gt_10": 0,
+    "episodes_with_stop_run_gt_20": 0,
+    "max_longest_stop_run": 7,
+    "num_episodes": 20
+  },
+  "termination": {
+    "dynamic_collision": {
+      "count": 1,
+      "percentage": 0.05
+    },
+    "goal_reached": {
+      "count": 3,
+      "percentage": 0.15
+    },
+    "static_collision": {
+      "count": 0,
+      "percentage": 0.0
+    },
+    "timeout": {
+      "count": 16,
+      "percentage": 0.8
+    }
+  },
+  "trajectory_quality": {
+    "avg_displacement": 7.065996056158655,
+    "avg_path_length": 27.173000000000002,
+    "episodes_with_path_length_lt_1_0": 0
+  },
+  "v2_base_labels": {
+    "clearance": {
+      "dynamic_t1": {
+        "count": 8526,
+        "max": 7.1834852751749505,
+        "mean": 1.3251207661338833,
+        "min": -0.045187852604284595,
+        "p05": 0.275320552060842,
+        "p50": 1.0962705087764069,
+        "p95": 3.033357715307664,
+        "std": 0.9492473147779946
+      },
+      "static_t1": {
+        "count": 8526,
+        "max": 3.11269944477262,
+        "mean": 0.8666234168765395,
+        "min": 0.09308365094246054,
+        "p05": 0.27504754286603994,
+        "p50": 0.6830950235119164,
+        "p95": 2.145217829619482,
+        "std": 0.590952905281618
+      },
+      "total_t1": {
+        "count": 8526,
+        "max": 2.756695608599809,
+        "mean": 0.6320928947528728,
+        "min": -0.045187852604284595,
+        "p05": 0.23633626394229734,
+        "p50": 0.5349810720077528,
+        "p95": 1.2622641748340584,
+        "std": 0.34977034001499535
+      }
+    },
+    "collision_t1": {
+      "count": 1,
+      "fraction": 0.0001172882946281961
+    },
+    "collision_within_3": {
+      "count": 3,
+      "fraction": 0.0003518648838845883
+    },
+    "collision_within_5": {
+      "count": 5,
+      "fraction": 0.0005864414731409805
+    },
+    "distance_to_path": {
+      "t": {
+        "count": 8526,
+        "max": 1.8831284305784681,
+        "mean": 0.2658609784897187,
+        "min": 0.0,
+        "p05": 0.014862680369583539,
+        "p50": 0.20620713091581727,
+        "p95": 0.820219610197802,
+        "std": 0.2816074044612701
+      },
+      "t1": {
+        "count": 8526,
+        "max": 1.8831284305784681,
+        "mean": 0.266689803442654,
+        "min": 7.072936413443642e-05,
+        "p05": 0.015047013340944382,
+        "p50": 0.20620713091582826,
+        "p95": 0.8212787115929101,
+        "std": 0.28195036832062637
+      }
+    },
+    "heading_error_abs": {
+      "count": 8526,
+      "max": 2.1346827164197877,
+      "mean": 0.21472095011984307,
+      "min": 5.0038583090185745e-05,
+      "p05": 0.0017287463118609194,
+      "p50": 0.16771059033999938,
+      "p95": 0.5500079072483763,
+      "std": 0.20471127258904137
+    },
+    "num_steps": 8526,
+    "progress_to_subgoal": {
+      "count": 8526,
+      "max": 0.3531312942504883,
+      "mean": 3.1259399385427663e-05,
+      "min": -0.3553544282913208,
+      "p05": -0.050000011920928955,
+      "p50": 0.0026633143424987793,
+      "p95": 0.06285566091537476,
+      "std": 0.039444236584273214
+    },
+    "risk_t1": {
+      "count": 8526,
+      "max": 1.0,
+      "mean": 0.33932403057485144,
+      "min": 0.004032409393828971,
+      "p05": 0.08009608601258922,
+      "p50": 0.34302151566021605,
+      "p95": 0.6233341624330402,
+      "std": 0.1736946490194662
+    }
+  },
+  "v4_dynamic_labels": {
+    "dynamic_collision_t1": {
+      "count": 1,
+      "fraction": 0.0001172882946281961
+    },
+    "dynamic_collision_within_3": {
+      "count": 3,
+      "fraction": 0.0003518648838845883
+    },
+    "dynamic_collision_within_5": {
+      "count": 5,
+      "fraction": 0.0005864414731409805
+    },
+    "dynamic_event_step_t": {
+      "count": 4611,
+      "fraction": 0.5408163265306123
+    },
+    "dynamic_hit_fraction_t": {
+      "count": 8526,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0,
+      "p05": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "std": 0.0
+    },
+    "dynamic_residual_energy_t": {
+      "count": 8526,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0,
+      "p05": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "std": 0.0
+    },
+    "dynamic_residual_nonzero_beam_fraction": 0.0,
+    "dynamic_risk_t1": {
+      "count": 8526,
+      "max": 1.0,
+      "mean": 0.1800140227072981,
+      "min": 5.761080826579924e-07,
+      "p05": 0.0023187951085292687,
+      "p50": 0.11163273304391566,
+      "p95": 0.5765800461595222,
+      "std": 0.18785882034878537
+    },
+    "dynamic_visible_t": {
+      "count": 4611,
+      "fraction": 0.5408163265306123
+    },
+    "lidar_dynamic_visible_t": {
+      "count": 0,
+      "fraction": 0.0
+    },
+    "min_dynamic_clearance_t1": {
+      "count": 8526,
+      "max": 7.1834852751749505,
+      "mean": 1.3251207661338833,
+      "min": -0.045187852604284595,
+      "p05": 0.275320552060842,
+      "p50": 1.0962705087764069,
+      "p95": 3.033357715307664,
+      "std": 0.9492473147779946
+    },
+    "num_steps": 8526
+  },
+  "v4_structured_state": {
+    "delta_world_norm_t": {
+      "count": 34104,
+      "max": 0.050000002305300086,
+      "mean": 0.04978506350290033,
+      "min": 0.0007947533052013152,
+      "p05": 0.04999999832492981,
+      "p50": 0.050000000082496845,
+      "p95": 0.05000000163829075,
+      "std": 0.002479003111545146
+    },
+    "ids_consistent": true,
+    "num_dynamic_obstacles_values": [
+      4
+    ],
+    "obstacle_clearance_robot_frame_t": {
+      "count": 34104,
+      "max": 24.1459577392836,
+      "mean": 5.226255195741316,
+      "min": 0.0007418413000374047,
+      "p05": 0.5301144436275546,
+      "p50": 4.731592326248705,
+      "p95": 11.748356926458188,
+      "std": 3.7130495949186058
+    },
+    "obstacle_distance_robot_frame_t": {
+      "count": 34104,
+      "max": 25.045957739283597,
+      "mean": 6.126255195741315,
+      "min": 0.9007418413000374,
+      "p05": 1.4301144436275544,
+      "p50": 5.631592326248706,
+      "p95": 12.648356926458188,
+      "std": 3.7130495949186058
+    },
+    "shape_counts": {
+      "radii(4,)": 8526,
+      "robot_t(4, 2)": 8526,
+      "world_t(4, 2)": 8526
+    },
+    "world_t1_to_next_world_t_consistent": true
+  },
+  "warnings": [
+    "Dynamic residual beam coverage is very low."
+  ]
+}
