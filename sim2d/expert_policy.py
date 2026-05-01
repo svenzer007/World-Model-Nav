@@ -53,9 +53,11 @@ class DWAExpertPolicy:
         feasible_non_stop: list[dict[str, object]] = []
         feasible_all: list[dict[str, object]] = []
 
-        for action_index, action in ACTIONS.items():
+        for action_index in self.config.action_indices:
+            if int(action_index) not in ACTIONS:
+                raise ValueError(f"Unknown expert action index: {action_index}")
             candidate_log = self._evaluate_action(
-                action_index=action_index,
+                action_index=int(action_index),
                 robot_pose=robot_pose,
                 current_subgoal_world=current_subgoal_world,
                 path_world=path_world,

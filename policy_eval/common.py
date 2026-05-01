@@ -1175,6 +1175,8 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
     config = DatasetConfig(num_episodes=resolved_num_episodes, seed=int(args.seed), max_steps=int(args.max_steps))
     if args.num_dynamic_obstacles is not None:
         config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
+    if getattr(args, "robot_radius", None) is not None:
+        config.robot_config.radius = float(args.robot_radius)
     if args.map_width is not None:
         config.map_config.width = int(args.map_width)
     if args.map_height is not None:
@@ -1242,6 +1244,7 @@ def _iter_policy_eval_sources(
             "num_episodes": int(args.num_episodes),
             "max_steps": int(args.max_steps),
             "num_dynamic_obstacles": int(simulator.config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "robot_radius": float(simulator.config.robot_config.radius),
             "map_width": int(simulator.config.map_config.width),
             "map_height": int(simulator.config.map_config.height),
         }
@@ -1308,6 +1311,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "seed": int(args.seed),
             "max_steps": int(args.max_steps),
             "num_dynamic_obstacles": int(config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "robot_radius": float(config.robot_config.radius),
             "map_width": int(config.map_config.width),
             "map_height": int(config.map_config.height),
             "horizon": int(args.horizon),

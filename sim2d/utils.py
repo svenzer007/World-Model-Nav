@@ -10,6 +10,46 @@ from typing import Iterable, Sequence
 import numpy as np
 
 
+class StaticObstacleIndex:
+    """Read-only nearest-neighbor index for static occupied-cell centers."""
+
+    def __init__(self, points: np.ndarray):
+        self.points = np.asarray(points, dtype=float)
+        self._tree = None
+        if len(self.points) > 0:
+            try:
+                from scipy.spatial import cKDTree
+            except ModuleNotFoundError:
+                self._tree = None
+            else:
+                self._tree = cKDTree(self.points)
+
+    @property
+    def size(self) -> int:
+        return int(self.points.size)
+
+    def copy(self) -> "StaticObstacleIndex":
+        return StaticObstacleIndex(self.points.copy())
+
+    def query_distance(self, point_xy: Sequence[float]) -> float:
+        if self.points.size == 0:
+            return float("inf")
+        point = np.asarray(point_xy, dtype=float)
+        if self._tree is not None:
+            distance, _ = self._tree.query(point, k=1)
+            return float(distance)
+        distances = np.linalg.norm(self.points - point[None, :], axis=1)
+        return float(np.min(distances))
+
+    def __array__(self, dtype=None) -> np.ndarray:
+        return np.asarray(self.points, dtype=dtype)
+
+
+def build_static_obstacle_index(points: np.ndarray) -> StaticObstacleIndex:
+    """Build a nearest-neighbor index for static occupied-cell centers."""
+    return StaticObstacleIndex(points)
+
+
 def ensure_rng(seed: int | np.random.Generator | None) -> np.random.Generator:
     """Return a reproducible NumPy generator."""
     if isinstance(seed, np.random.Generator):
@@ -180,6 +220,32 @@ def occupied_cell_centers(grid: np.ndarray, resolution: float, origin: Sequence[
         dtype=float,
     )
     return points
+
+
+def occupied_boundary_cell_centers(grid: np.ndarray, resolution: float, origin: Sequence[float]) -> np.ndarray:
+    """Return world coordinates for occupied cells adjacent to free space."""
+    occupied = np.asarray(grid) > 0
+    if not np.any(occupied):
+        return np.zeros((0, 2), dtype=float)
+
+    padded = np.pad(occupied, pad_width=1, mode="constant", constant_values=False)
+    neighbor_all_occupied = np.ones_like(occupied, dtype=bool)
+    for row_offset in range(3):
+        for col_offset in range(3):
+            if row_offset == 1 and col_offset == 1:
+                continue
+            neighbor_all_occupied &= padded[
+                row_offset : row_offset + occupied.shape[0],
+                col_offset : col_offset + occupied.shape[1],
+            ]
+    boundary = occupied & ~neighbor_all_occupied
+    occupied_indices = np.argwhere(boundary)
+    if len(occupied_indices) == 0:
+        occupied_indices = np.argwhere(occupied)
+    return np.array(
+        [grid_to_world(int(row), int(col), resolution, origin) for row, col in occupied_indices],
+        dtype=float,
+    )
 
 
 def sample_heading_toward(start_xy: Sequence[float], goal_xy: Sequence[float], noise_std: float, rng: np.random.Generator) -> float:

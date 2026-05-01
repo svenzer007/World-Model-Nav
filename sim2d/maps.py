@@ -1,11 +1,19 @@
-"""Map generators for V4 10m-scale dynamic-obstacle environments."""
+"""Map generators and fixed-map loaders for V4 dynamic-obstacle environments."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
+import yaml
+
+try:
+    import imageio.v2 as imageio
+except ModuleNotFoundError:  # pragma: no cover - requirements include imageio.
+    imageio = None
 
 from .config import MapConfig
 from .utils import ensure_rng
@@ -18,6 +26,129 @@ class GeneratedMap:
     occupancy: np.ndarray
     resolution: float
     origin: tuple[float, float]
+
+
+def load_map_yaml(map_yaml: str | Path, *, unknown_as_occupied: bool = True) -> GeneratedMap:
+    """Load a ROS-style occupancy map using the Dreamer map-publisher convention."""
+    yaml_path = Path(map_yaml).expanduser().resolve()
+    cached = _load_map_yaml_cached(str(yaml_path), bool(unknown_as_occupied))
+    return GeneratedMap(
+        map_id=cached.map_id,
+        map_type=cached.map_type,
+        occupancy=cached.occupancy.copy(),
+        resolution=cached.resolution,
+        origin=cached.origin,
+    )
+
+
+@lru_cache(maxsize=8)
+def _load_map_yaml_cached(map_yaml: str, unknown_as_occupied: bool) -> GeneratedMap:
+    yaml_path = Path(map_yaml)
+    with yaml_path.open("r", encoding="utf-8") as handle:
+        metadata = yaml.safe_load(handle)
+    if not isinstance(metadata, dict):
+        raise TypeError(f"Map YAML must be a mapping: {yaml_path}")
+
+    image_path = Path(str(metadata["image"]))
+    if not image_path.is_absolute():
+        image_path = yaml_path.parent / image_path
+
+    image = _read_image(image_path)
+    gray, alpha = _split_gray_alpha(image)
+    occupancy = _image_to_binary_occupancy(
+        gray=gray,
+        alpha=alpha,
+        negate=int(metadata.get("negate", 0)),
+        occupied_thresh=float(metadata.get("occupied_thresh", 0.65)),
+        free_thresh=float(metadata.get("free_thresh", 0.196)),
+        unknown_as_occupied=unknown_as_occupied,
+    )
+
+    origin_values = metadata.get("origin", [0.0, 0.0, 0.0])
+    if len(origin_values) > 2 and abs(float(origin_values[2])) > 1e-9:
+        raise ValueError(
+            f"Map origin yaw is {float(origin_values[2])}, but sim2d fixed-map loading only supports yaw=0"
+        )
+
+    return GeneratedMap(
+        map_id=yaml_path.stem,
+        map_type="fixed_map",
+        occupancy=occupancy,
+        resolution=float(metadata["resolution"]),
+        origin=(float(origin_values[0]), float(origin_values[1])),
+    )
+
+
+def _read_image(image_path: Path) -> np.ndarray:
+    """Read a map image with imageio when available, falling back to Pillow/matplotlib."""
+    if imageio is not None:
+        return np.asarray(imageio.imread(image_path))
+    try:
+        from PIL import Image
+    except ModuleNotFoundError:
+        try:
+            from matplotlib import image as mpimg
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError("Install imageio, Pillow, or matplotlib to load fixed occupancy maps") from exc
+        return np.asarray(mpimg.imread(str(image_path)))
+
+    with Image.open(image_path) as image:
+        return np.asarray(image.copy())
+
+
+def _split_gray_alpha(image: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    """Return grayscale and optional alpha arrays from an imageio-loaded image."""
+    image_array = np.asarray(image)
+    if image_array.ndim == 2:
+        return _normalize_gray(image_array), None
+    if image_array.ndim != 3 or image_array.shape[2] < 3:
+        raise ValueError(f"Unsupported map image shape: {image_array.shape}")
+
+    rgb = image_array[:, :, :3].astype(float)
+    gray = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+    alpha = image_array[:, :, 3] if image_array.shape[2] >= 4 else None
+    return _normalize_gray(gray), alpha
+
+
+def _normalize_gray(gray: np.ndarray) -> np.ndarray:
+    gray_float = np.asarray(gray, dtype=float)
+    if gray_float.size and float(np.nanmax(gray_float)) <= 1.0:
+        gray_float = gray_float * 255.0
+    return np.clip(gray_float, 0.0, 255.0)
+
+
+def _image_to_binary_occupancy(
+    *,
+    gray: np.ndarray,
+    alpha: np.ndarray | None,
+    negate: int,
+    occupied_thresh: float,
+    free_thresh: float,
+    unknown_as_occupied: bool,
+) -> np.ndarray:
+    """Convert image pixels to a row-major binary grid matching map_publisher.py."""
+    gray_map_rows = gray[::-1, :]
+    occupancy_prob = gray_map_rows / 255.0 if int(negate) else (255.0 - gray_map_rows) / 255.0
+
+    occupied_mask = occupancy_prob > float(occupied_thresh)
+    free_mask = occupancy_prob < float(free_thresh)
+    unknown_mask = ~(occupied_mask | free_mask)
+    if alpha is not None:
+        alpha_map_rows = np.asarray(alpha)[::-1, :]
+        unknown_mask = unknown_mask | (alpha_map_rows == 0)
+
+    grid = np.zeros(gray.shape, dtype=np.uint8)
+    grid[occupied_mask] = 1
+    if unknown_as_occupied:
+        grid[unknown_mask] = 1
+    return grid
+
+
+def _apply_loaded_map_metadata(config: MapConfig, map_bundle: GeneratedMap) -> None:
+    """Keep downstream config summaries and sampling helpers aligned with fixed-map metadata."""
+    config.height, config.width = int(map_bundle.occupancy.shape[0]), int(map_bundle.occupancy.shape[1])
+    config.resolution = float(map_bundle.resolution)
+    config.origin = tuple(float(value) for value in map_bundle.origin)
 
 
 def _draw_rect(grid: np.ndarray, row0: int, row1: int, col0: int, col1: int, value: int = 1) -> None:
@@ -252,6 +383,17 @@ MAP_GENERATORS: dict[str, Callable[[MapConfig, np.random.Generator, int], Genera
 
 def generate_map(config: MapConfig, seed: int, map_index: int, map_type: str | None = None) -> GeneratedMap:
     """Generate a map using one of the built-in V4 local layout families."""
+    if config.map_yaml:
+        map_bundle = load_map_yaml(config.map_yaml)
+        _apply_loaded_map_metadata(config, map_bundle)
+        return GeneratedMap(
+            map_id=map_bundle.map_id,
+            map_type=map_bundle.map_type,
+            occupancy=map_bundle.occupancy.copy(),
+            resolution=map_bundle.resolution,
+            origin=map_bundle.origin,
+        )
+
     rng = ensure_rng(seed)
     chosen_type = map_type or str(rng.choice(config.generator_types))
     if chosen_type not in MAP_GENERATORS:

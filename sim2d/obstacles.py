@@ -112,32 +112,71 @@ def sample_dynamic_obstacles(
     radius_min, radius_max = dynamic_config.radius_range
     speed_min, speed_max = dynamic_config.speed_range
     route_len_min, route_len_max = dynamic_config.route_length_range
+    global_route_points = [np.asarray(point, dtype=float) for point in avoid_points]
     for obstacle_index in range(count):
         radius = float(rng.uniform(radius_min, radius_max))
         speed = float(rng.uniform(speed_min, speed_max))
         route_length = int(rng.integers(int(route_len_min), int(route_len_max) + 1))
         route: list[np.ndarray] = []
 
-        anchor_idx = int(rng.integers(max(1, len(path_world) // 6), max(2, len(path_world) - len(path_world) // 6)))
+        anchor_idx = _spread_anchor_index(path_world, obstacle_index, count, rng)
         anchor = path_world[min(anchor_idx, len(path_world) - 1)]
+        route_radius = float(
+            dynamic_config.route_radius
+            if dynamic_config.route_radius is not None
+            else np.clip(min(occupancy.shape) * resolution * 0.18, 1.0, 1.8)
+        )
+        min_spacing = max(float(dynamic_config.route_point_spacing), 2.0 * radius + 0.3)
         max_attempts = 200
-        for _ in range(route_length):
-            candidate = _sample_route_point(
+
+        if float(dynamic_config.route_crossing_probability) > 0.0 and rng.random() < float(
+            dynamic_config.route_crossing_probability
+        ):
+            route = _sample_crossing_route(
                 rng=rng,
+                path_world=path_world,
+                anchor_index=anchor_idx,
                 anchor=anchor,
                 occupancy=occupancy,
                 resolution=resolution,
                 origin=origin,
                 radius=radius,
-                avoid_points=avoid_points,
-                existing_routes=[point for point in route],
+                route_radius=route_radius,
+                min_spacing=min_spacing,
+                avoid_points=global_route_points,
             )
-            if candidate is not None:
-                route.append(candidate)
 
         if len(route) < 2:
+            route = []
+            for _ in range(route_length):
+                candidate = _sample_route_point(
+                    rng=rng,
+                    anchor=anchor,
+                    occupancy=occupancy,
+                    resolution=resolution,
+                    origin=origin,
+                    radius=radius,
+                    route_radius=route_radius,
+                    min_spacing=min_spacing,
+                    avoid_points=global_route_points,
+                    existing_routes=route,
+                )
+                if candidate is not None:
+                    route.append(candidate)
+
+        if len(route) < 2:
+            route = []
             for _ in range(max_attempts):
-                point = _sample_uniform_free_point(rng, occupancy, resolution, origin, radius, avoid_points)
+                point = _sample_uniform_free_point(
+                    rng,
+                    occupancy,
+                    resolution,
+                    origin,
+                    radius,
+                    global_route_points,
+                    route,
+                    min_spacing=min_spacing,
+                )
                 if point is not None:
                     route.append(point)
                 if len(route) >= 2:
@@ -156,8 +195,77 @@ def sample_dynamic_obstacles(
             route_index=1 % len(route),
         )
         obstacles.append(obstacle)
-        avoid_points = list(avoid_points) + [start_position]
+        global_route_points.extend(point.copy() for point in route)
     return obstacles
+
+
+def _spread_anchor_index(
+    path_world: np.ndarray,
+    obstacle_index: int,
+    count: int,
+    rng: np.random.Generator,
+) -> int:
+    """Choose anchors across the usable path span instead of clustering all obstacles."""
+    if len(path_world) <= 2:
+        return 0
+    usable_start = max(1, int(round(0.12 * len(path_world))))
+    usable_stop = max(usable_start + 1, int(round(0.88 * len(path_world))))
+    fraction = (float(obstacle_index) + 0.5) / max(float(count), 1.0)
+    base = usable_start + fraction * float(usable_stop - usable_start)
+    jitter = max(1, int(round(0.08 * len(path_world))))
+    return int(np.clip(round(base + rng.integers(-jitter, jitter + 1)), 0, len(path_world) - 1))
+
+
+def _sample_crossing_route(
+    rng: np.random.Generator,
+    path_world: np.ndarray,
+    anchor_index: int,
+    anchor: np.ndarray,
+    occupancy: np.ndarray,
+    resolution: float,
+    origin: Sequence[float],
+    radius: float,
+    route_radius: float,
+    min_spacing: float,
+    avoid_points: Sequence[np.ndarray],
+) -> list[np.ndarray]:
+    """Sample a long back-and-forth route crossing near the path anchor."""
+    if len(path_world) < 2:
+        return []
+    prev_index = max(0, min(anchor_index - 2, len(path_world) - 1))
+    next_index = max(0, min(anchor_index + 2, len(path_world) - 1))
+    tangent = path_world[next_index] - path_world[prev_index]
+    tangent_norm = float(np.linalg.norm(tangent))
+    if tangent_norm < 1e-6:
+        tangent = rng.normal(size=2)
+        tangent_norm = float(np.linalg.norm(tangent))
+    tangent = tangent / max(tangent_norm, 1e-6)
+    normal = np.array([-tangent[1], tangent[0]], dtype=float)
+    if rng.random() < 0.5:
+        normal = -normal
+    center_shift = rng.uniform(-0.25 * route_radius, 0.25 * route_radius) * tangent
+
+    for scale in (1.0, 0.85, 0.7):
+        half = float(route_radius) * float(scale)
+        endpoints = [
+            np.asarray(anchor, dtype=float) + center_shift - half * normal,
+            np.asarray(anchor, dtype=float) + center_shift + half * normal,
+        ]
+        if all(
+            _valid_obstacle_point(
+                point,
+                occupancy,
+                resolution,
+                origin,
+                radius,
+                avoid_points,
+                [],
+                min_spacing=min_spacing,
+            )
+            for point in endpoints
+        ):
+            return [point.astype(float) for point in endpoints]
+    return []
 
 
 def _sample_route_point(
@@ -167,15 +275,26 @@ def _sample_route_point(
     resolution: float,
     origin: Sequence[float],
     radius: float,
+    route_radius: float,
+    min_spacing: float,
     avoid_points: Sequence[np.ndarray],
     existing_routes: Sequence[np.ndarray],
 ) -> np.ndarray | None:
-    world_span = min(occupancy.shape) * resolution
-    offset_limit = float(np.clip(world_span * 0.18, 1.0, 1.8))
     for _ in range(100):
-        offset = rng.uniform(-offset_limit, offset_limit, size=2)
+        angle = float(rng.uniform(-np.pi, np.pi))
+        distance = float(rng.uniform(0.25 * route_radius, route_radius))
+        offset = distance * np.array([np.cos(angle), np.sin(angle)], dtype=float)
         point = anchor + offset
-        if _valid_obstacle_point(point, occupancy, resolution, origin, radius, avoid_points, existing_routes):
+        if _valid_obstacle_point(
+            point,
+            occupancy,
+            resolution,
+            origin,
+            radius,
+            avoid_points,
+            existing_routes,
+            min_spacing=min_spacing,
+        ):
             return point.astype(float)
     return None
 
@@ -187,6 +306,8 @@ def _sample_uniform_free_point(
     origin: Sequence[float],
     radius: float,
     avoid_points: Sequence[np.ndarray],
+    existing_routes: Sequence[np.ndarray],
+    min_spacing: float,
 ) -> np.ndarray | None:
     height, width = occupancy.shape
     for _ in range(200):
@@ -196,7 +317,16 @@ def _sample_uniform_free_point(
             [origin[0] + (col + 0.5) * resolution, origin[1] + (row + 0.5) * resolution],
             dtype=float,
         )
-        if _valid_obstacle_point(point, occupancy, resolution, origin, radius, avoid_points, []):
+        if _valid_obstacle_point(
+            point,
+            occupancy,
+            resolution,
+            origin,
+            radius,
+            avoid_points,
+            existing_routes,
+            min_spacing=min_spacing,
+        ):
             return point
     return None
 
@@ -209,13 +339,14 @@ def _valid_obstacle_point(
     radius: float,
     avoid_points: Sequence[np.ndarray],
     existing_routes: Sequence[np.ndarray],
+    min_spacing: float,
 ) -> bool:
     if disk_collides_with_occupancy(point, radius + 0.05, occupancy, resolution, origin):
         return False
     for other in avoid_points:
-        if np.linalg.norm(point - np.asarray(other, dtype=float)) < 0.8:
+        if np.linalg.norm(point - np.asarray(other, dtype=float)) < min_spacing:
             return False
     for other in existing_routes:
-        if np.linalg.norm(point - np.asarray(other, dtype=float)) < 0.7:
+        if np.linalg.norm(point - np.asarray(other, dtype=float)) < min_spacing:
             return False
     return True

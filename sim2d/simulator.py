@@ -21,9 +21,10 @@ from .maps import generate_map
 from .obstacles import sample_dynamic_obstacles
 from .utils import (
     euclidean,
+    build_static_obstacle_index,
     distance_point_to_polyline,
     inflate_occupancy_grid,
-    occupied_cell_centers,
+    occupied_boundary_cell_centers,
     path_length,
     sample_heading_toward,
     world_to_grid,
@@ -37,12 +38,27 @@ class EpisodeSimulator:
     def __init__(self, config: DatasetConfig):
         self.config = config
         self.expert = DWAExpertPolicy(config.expert_config, config.robot_config)
+        self._fixed_map_context = self._build_fixed_map_context() if self.config.map_config.map_yaml else None
+
+    def _build_fixed_map_context(self):
+        """Precompute fixed-map planning data shared by every episode attempt."""
+        map_bundle = generate_map(self.config.map_config, seed=0, map_index=0)
+        inflation = self.config.robot_config.radius + self.config.map_config.inflation_margin
+        planning_occupancy = inflate_occupancy_grid(
+            map_bundle.occupancy,
+            inflation_radius_m=inflation,
+            resolution=map_bundle.resolution,
+        )
+        occupied_points = build_static_obstacle_index(
+            occupied_boundary_cell_centers(map_bundle.occupancy, map_bundle.resolution, map_bundle.origin)
+        )
+        return map_bundle, planning_occupancy, occupied_points
 
     def generate_episode(self, episode_id: int, seed: int) -> dict[str, object]:
         """Generate one accepted V4 episode, resampling dynamically boring rollouts."""
         rng = np.random.default_rng(seed)
         best_episode: dict[str, object] | None = None
-        best_score: tuple[int, float, float] = (-1, -1.0, -1.0)
+        best_score: tuple[int, int, float, float] = (-1, -1, -1.0, -1.0)
         attempts = max(1, int(self.config.dynamic_interaction_resample_limit))
 
         for dynamic_attempt in range(attempts):
@@ -52,7 +68,9 @@ class EpisodeSimulator:
             candidate["candidate_seed"] = int(candidate_seed)
             candidate["dynamic_interaction_attempt"] = int(dynamic_attempt)
             stats = candidate["episode_stats"]
+            trajectory_quality_ok = self._episode_has_trajectory_quality(candidate)
             score = (
+                int(trajectory_quality_ok),
                 int(stats["dynamic_event_steps"]),
                 float(stats["dynamic_risk_fraction"]),
                 float(stats["dynamic_visible_fraction"]),
@@ -60,7 +78,7 @@ class EpisodeSimulator:
             if score > best_score:
                 best_episode = candidate
                 best_score = score
-            if self._episode_has_dynamic_interaction(candidate):
+            if trajectory_quality_ok and self._episode_has_dynamic_interaction(candidate):
                 candidate["episode_stats"]["dynamic_interaction_accepted"] = True
                 candidate["episode_stats"]["dynamic_interaction_fallback"] = False
                 return candidate
@@ -104,23 +122,13 @@ class EpisodeSimulator:
                 map_resolution=map_bundle.resolution,
                 suffix="t",
             )
-            lidar_t = cast_lidar_scan(
-                robot_pose,
-                occupancy,
-                map_bundle.resolution,
-                map_bundle.origin,
-                self.config.lidar_config,
-                dyn_obstacles,
+            lidar_fields_t = self._compute_lidar_fields(
+                robot_pose=robot_pose,
+                occupancy=occupancy,
+                map_bundle=map_bundle,
+                dynamic_obstacles=dyn_obstacles,
+                suffix="t",
             )
-            lidar_static_t = cast_lidar_scan(
-                robot_pose,
-                occupancy,
-                map_bundle.resolution,
-                map_bundle.origin,
-                self.config.lidar_config,
-                (),
-            )
-            dynamic_lidar_t = self._compute_dynamic_lidar_fields(lidar_static_t, lidar_t, suffix="t")
 
             decision = self.expert.select_action(
                 robot_pose=robot_pose,
@@ -182,23 +190,13 @@ class EpisodeSimulator:
                 map_resolution=map_bundle.resolution,
                 suffix="t1",
             )
-            lidar_t1 = cast_lidar_scan(
-                robot_pose_next,
-                occupancy,
-                map_bundle.resolution,
-                map_bundle.origin,
-                self.config.lidar_config,
-                dyn_obstacles,
+            lidar_fields_t1 = self._compute_lidar_fields(
+                robot_pose=robot_pose_next,
+                occupancy=occupancy,
+                map_bundle=map_bundle,
+                dynamic_obstacles=dyn_obstacles,
+                suffix="t1",
             )
-            lidar_static_t1 = cast_lidar_scan(
-                robot_pose_next,
-                occupancy,
-                map_bundle.resolution,
-                map_bundle.origin,
-                self.config.lidar_config,
-                (),
-            )
-            dynamic_lidar_t1 = self._compute_dynamic_lidar_fields(lidar_static_t1, lidar_t1, suffix="t1")
 
             steps.append(
                 {
@@ -207,9 +205,7 @@ class EpisodeSimulator:
                     "robot_pose": robot_pose.copy(),
                     "robot_pose_t": robot_pose.copy(),
                     "robot_pose_t1": robot_pose_next.copy(),
-                    "lidar_t": lidar_t,
-                    "lidar_static_t": lidar_static_t,
-                    **dynamic_lidar_t,
+                    **lidar_fields_t,
                     "goal_t": waypoint_now["goal_features"],
                     "action_index": int(decision.action_index),
                     "action_name": decision.action_name,
@@ -217,9 +213,7 @@ class EpisodeSimulator:
                     "omega": float(decision.omega),
                     "v_t": float(decision.v),
                     "omega_t": float(decision.omega),
-                    "lidar_t1": lidar_t1,
-                    "lidar_static_t1": lidar_static_t1,
-                    **dynamic_lidar_t1,
+                    **lidar_fields_t1,
                     "goal_t1": waypoint_next["goal_features"],
                     "collision_t1": bool(collision_t1),
                     "dynamic_collision_t1": bool(dynamic_collision),
@@ -260,6 +254,8 @@ class EpisodeSimulator:
         self._add_collision_horizon_labels(steps, horizons=(3, 5))
         self._add_dynamic_horizon_and_event_labels(steps, horizons=(3, 5))
         dynamic_stats = self._compute_dynamic_episode_stats(steps)
+        robot_trajectory_array = np.array(robot_trajectory, dtype=float)
+        trajectory_stats = self._compute_trajectory_quality_stats(robot_trajectory_array, path_world, path_distance)
 
         return {
             "episode_id": int(episode_id),
@@ -332,13 +328,43 @@ class EpisodeSimulator:
                 "start_goal_distance": float(direct_distance),
                 "path_directness_ratio": float(path_directness_ratio),
                 "path_turn_angle_sum": float(path_turn_angle_sum),
-                "robot_trajectory": np.array(robot_trajectory, dtype=float),
+                "robot_trajectory": robot_trajectory_array,
                 "dynamic_trajectories": {
                     obstacle_id: np.array(points, dtype=float) for obstacle_id, points in dynamic_trajectories.items()
                 },
                 **dynamic_stats,
+                **trajectory_stats,
             },
         }
+
+    def _compute_trajectory_quality_stats(
+        self,
+        robot_trajectory: np.ndarray,
+        path_world: np.ndarray,
+        astar_path_length: float,
+    ) -> dict[str, float]:
+        robot_path_length = path_length(robot_trajectory[:, :2]) if len(robot_trajectory) else 0.0
+        if len(robot_trajectory) and len(path_world):
+            max_deviation = max(
+                float(distance_point_to_polyline(point, path_world)) for point in robot_trajectory[:, :2]
+            )
+        else:
+            max_deviation = float("inf")
+        return {
+            "robot_path_length": float(robot_path_length),
+            "robot_path_to_astar_ratio": float(robot_path_length / max(float(astar_path_length), 1e-6)),
+            "max_robot_path_deviation": float(max_deviation),
+        }
+
+    def _episode_has_trajectory_quality(self, episode: dict[str, object]) -> bool:
+        stats = episode["episode_stats"]
+        max_deviation = self.config.max_robot_path_deviation
+        if max_deviation is not None and float(stats["max_robot_path_deviation"]) > float(max_deviation):
+            return False
+        max_ratio = self.config.max_robot_trajectory_path_ratio
+        if max_ratio is not None and float(stats["robot_path_to_astar_ratio"]) > float(max_ratio):
+            return False
+        return True
 
     def _sample_episode_context(self, episode_id: int, rng: np.random.Generator):
         generator_types = tuple(self.config.map_config.generator_types)
@@ -347,14 +373,23 @@ class EpisodeSimulator:
         for attempt_index in range(self.config.episode_resample_limit):
             map_seed = int(rng.integers(0, 2**31 - 1))
             map_type = preferred_map_type if attempt_index < preferred_attempts else None
-            map_bundle = generate_map(self.config.map_config, map_seed, episode_id, map_type=map_type)
-            inflation = self.config.robot_config.radius + self.config.map_config.inflation_margin
-            planning_occupancy = inflate_occupancy_grid(
-                map_bundle.occupancy,
-                inflation_radius_m=inflation,
-                resolution=map_bundle.resolution,
-            )
-            occupied_points = occupied_cell_centers(map_bundle.occupancy, map_bundle.resolution, map_bundle.origin)
+            if self._fixed_map_context is not None:
+                map_bundle, planning_occupancy, occupied_points = self._fixed_map_context
+            else:
+                map_bundle = generate_map(self.config.map_config, map_seed, episode_id, map_type=map_type)
+                inflation = self.config.robot_config.radius + self.config.map_config.inflation_margin
+                planning_occupancy = inflate_occupancy_grid(
+                    map_bundle.occupancy,
+                    inflation_radius_m=inflation,
+                    resolution=map_bundle.resolution,
+                )
+                occupied_points = build_static_obstacle_index(
+                    occupied_boundary_cell_centers(
+                        map_bundle.occupancy,
+                        map_bundle.resolution,
+                        map_bundle.origin,
+                    )
+                )
             start_pose, goal_point = self._sample_start_and_goal(planning_occupancy, map_bundle.origin, rng)
             if start_pose is None or goal_point is None:
                 continue
@@ -600,6 +635,52 @@ class EpisodeSimulator:
     def _dynamic_visible_from_clearance(self, clearance: float) -> bool:
         """Return the V4 structured-state visibility flag used for events and acceptance."""
         return bool(float(clearance) < float(self.config.dynamic_visibility_radius))
+
+    def _compute_lidar_fields(
+        self,
+        *,
+        robot_pose: np.ndarray,
+        occupancy: np.ndarray,
+        map_bundle,
+        dynamic_obstacles,
+        suffix: str,
+    ) -> dict[str, object]:
+        """Compute real LiDAR fields only when this dataset is configured to keep LiDAR."""
+        should_cast = bool(
+            self.config.save_static_lidar
+            or self.config.save_dynamic_residual
+            or self.config.visualization_config.draw_lidar_in_gif
+        )
+        if should_cast:
+            lidar_full = cast_lidar_scan(
+                robot_pose,
+                occupancy,
+                map_bundle.resolution,
+                map_bundle.origin,
+                self.config.lidar_config,
+                dynamic_obstacles,
+            )
+            lidar_static = cast_lidar_scan(
+                robot_pose,
+                occupancy,
+                map_bundle.resolution,
+                map_bundle.origin,
+                self.config.lidar_config,
+                (),
+            )
+        else:
+            lidar_full = np.full(
+                (int(self.config.lidar_config.num_beams),),
+                float(self.config.lidar_config.max_range),
+                dtype=np.float32,
+            )
+            lidar_static = lidar_full.copy()
+
+        return {
+            f"lidar_{suffix}": lidar_full.astype(np.float32),
+            f"lidar_static_{suffix}": lidar_static.astype(np.float32),
+            **self._compute_dynamic_lidar_fields(lidar_static, lidar_full, suffix=suffix),
+        }
 
     def _compute_dynamic_lidar_fields(
         self,

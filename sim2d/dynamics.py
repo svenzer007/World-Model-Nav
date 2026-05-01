@@ -72,10 +72,14 @@ def minimum_static_clearance(
     """Approximate clearance to the nearest occupied cell center."""
     if occupied_points.size == 0:
         return float("inf")
-    point = np.asarray(position_xy, dtype=float)
-    distances = np.linalg.norm(occupied_points - point[None, :], axis=1)
+    if hasattr(occupied_points, "query_distance"):
+        min_distance = float(occupied_points.query_distance(position_xy))
+    else:
+        point = np.asarray(position_xy, dtype=float)
+        distances = np.linalg.norm(occupied_points - point[None, :], axis=1)
+        min_distance = float(np.min(distances))
     cell_pad = np.sqrt(2.0) * resolution * 0.5
-    return float(np.min(distances) - radius - cell_pad)
+    return float(min_distance - radius - cell_pad)
 
 
 def minimum_dynamic_clearance(position_xy: Sequence[float], radius: float, dynamic_obstacles: Sequence[object]) -> float:

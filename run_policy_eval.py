@@ -34,6 +34,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=1000)
     parser.add_argument("--max_steps", type=int, default=250)
     parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
+    parser.add_argument("--robot_radius", type=float, default=None)
     parser.add_argument("--map_width", type=int, default=None)
     parser.add_argument("--map_height", type=int, default=None)
     parser.add_argument("--disable_backward", action="store_true")

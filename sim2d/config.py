@@ -21,6 +21,7 @@ ACTIONS: Dict[int, Dict[str, float | str]] = {
 
 @dataclass
 class MapConfig:
+    map_yaml: str | None = None
     width: int = 100
     height: int = 100
     resolution: float = 0.1
@@ -56,11 +57,15 @@ class DynamicObstacleConfig:
     radius_range: tuple[float, float] = (0.17, 0.26)
     speed_range: tuple[float, float] = (0.18, 0.30)
     route_length_range: tuple[int, int] = (2, 4)
+    route_radius: float | None = None
+    route_crossing_probability: float = 0.0
+    route_point_spacing: float = 0.7
 
 
 @dataclass
 class ExpertConfig:
     horizon_seconds: float = 1.0
+    action_indices: tuple[int, ...] = tuple(ACTIONS.keys())
     goal_progress_weight: float = 2.0
     heading_weight: float = 0.8
     clearance_weight: float = 1.4
@@ -97,6 +102,8 @@ class DatasetConfig:
     dynamic_visibility_radius: float = 1.2
     dynamic_residual_epsilon: float = 0.03
     dynamic_visible_min_beams: int = 3
+    max_robot_path_deviation: float | None = None
+    max_robot_trajectory_path_ratio: float | None = None
     min_dynamic_visible_fraction: float = 0.06
     min_dynamic_risk_fraction: float = 0.04
     min_dynamic_event_steps: int = 3

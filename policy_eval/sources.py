@@ -9,7 +9,7 @@ import numpy as np
 
 from sim2d.maps import GeneratedMap
 from sim2d.obstacles import DynamicObstacle
-from sim2d.utils import occupied_cell_centers
+from sim2d.utils import build_static_obstacle_index, occupied_boundary_cell_centers
 
 
 def resolve_episode_source_paths(source_path: str | Path) -> list[Path]:
@@ -50,7 +50,7 @@ def scenario_from_saved_episode(episode: dict[str, object]) -> dict[str, Any]:
     return {
         "map_bundle": map_bundle,
         "planning_occupancy": planning_occupancy,
-        "occupied_points": occupied_cell_centers(occupancy, resolution, origin),
+        "occupied_points": build_static_obstacle_index(occupied_boundary_cell_centers(occupancy, resolution, origin)),
         "start_pose": np.asarray(episode["start_pose"], dtype=float).copy(),
         "goal_point": np.asarray(episode["final_goal"], dtype=float).copy(),
         "path_rc": [tuple(int(value) for value in row_col) for row_col in np.asarray(episode["astar_path_grid"], dtype=int)],
