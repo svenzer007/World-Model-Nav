@@ -7,7 +7,7 @@ conda activate isaac6
 
 ```bash
 python3 -m sim2d.generate_data \
-  --map_yaml ../dreamer_ros2/src/dreamer/map/map.yaml \
+  --map_yaml ./maps/dreamer/map.yaml \
   --output_dir ./dataset_dreamer_map_smoke_spread \
   --num_episodes 20 \
   --max_steps 450 \
@@ -22,7 +22,7 @@ python3 -m sim2d.generate_data \
 
 ```bash
 python3 -m sim2d.generate_data \
-  --map_yaml ../dreamer_ros2/src/dreamer/map/map.yaml \
+  --map_yaml ./maps/dreamer/map.yaml \
   --output_dir ./dataset_dreamer_map_large_spread \
   --num_episodes 2000 \
   --max_steps 450 \
@@ -55,6 +55,7 @@ python3 run_policy_eval.py \
 ```
 
 ```bash
+mkdir -p ./export/world_model_nav_ros2/model
 cp artifacts/structured_world_model_dreamer_map_finetune/best.pt \
-  ../dreamer_ros2/src/world_model_nav_ros2/model/best.pt
+  ./export/world_model_nav_ros2/model/best.pt
 ```
