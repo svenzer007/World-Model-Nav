@@ -8,7 +8,7 @@ conda activate isaac6
 ```bash
 python3 -m sim2d.generate_data \
   --map_yaml ./maps/dreamer/map.yaml \
-  --output_dir ./dataset_dreamer_map_smoke_spread \
+  --output_dir ./dataset_dreamer_map_spread \
   --num_episodes 20 \
   --max_steps 450 \
   --num_dynamic_obstacles 4 \
