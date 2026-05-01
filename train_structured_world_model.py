@@ -59,6 +59,17 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def configure_torch_runtime(training_cfg: Mapping[str, Any], device: torch.device) -> None:
+    if device.type != "cuda":
+        return
+    allow_tf32 = bool(training_cfg.get("allow_tf32", True))
+    torch.backends.cuda.matmul.allow_tf32 = allow_tf32
+    torch.backends.cudnn.allow_tf32 = allow_tf32
+    matmul_precision = training_cfg.get("float32_matmul_precision", "high")
+    if matmul_precision:
+        torch.set_float32_matmul_precision(str(matmul_precision))
+
+
 def move_batch_to_device(batch: Mapping[str, Any], device: torch.device) -> dict[str, Any]:
     return {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
 
@@ -621,6 +632,7 @@ def main() -> None:
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
         model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
+        cache_episodes=bool(data_cfg.get("cache_episodes", False)),
     )
     val_dataset = StructuredSequenceDataset(
         val_paths,
@@ -630,9 +642,13 @@ def main() -> None:
         use_lidar=bool(model_cfg.get("use_lidar", False)),
         rollout_horizon=active_rollout_horizon,
         model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
+        cache_episodes=bool(data_cfg.get("cache_episodes", False)),
     )
     if len(train_dataset) == 0 or len(val_dataset) == 0:
         raise ValueError("Train/val datasets must both have at least one sequence")
+
+    device = resolve_device(str(training_cfg.get("device", "auto")))
+    configure_torch_runtime(training_cfg, device)
 
     sampler = None
     shuffle = True
@@ -640,21 +656,28 @@ def main() -> None:
         sampler = build_weighted_sampler(train_dataset, config.get("sampler", {}))
         shuffle = False
 
+    num_loader_workers = int(training_cfg.get("num_workers", 0))
+    loader_kwargs: dict[str, Any] = {
+        "batch_size": int(training_cfg.get("batch_size", 64)),
+        "num_workers": num_loader_workers,
+        "pin_memory": bool(training_cfg.get("pin_memory", device.type == "cuda")),
+    }
+    if num_loader_workers > 0:
+        loader_kwargs["persistent_workers"] = bool(training_cfg.get("persistent_workers", True))
+        loader_kwargs["prefetch_factor"] = int(training_cfg.get("prefetch_factor", 2))
+
     train_loader = DataLoader(
         train_dataset,
-        batch_size=int(training_cfg.get("batch_size", 64)),
         shuffle=shuffle,
         sampler=sampler,
-        num_workers=int(training_cfg.get("num_workers", 0)),
+        **loader_kwargs,
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=int(training_cfg.get("batch_size", 64)),
         shuffle=False,
-        num_workers=int(training_cfg.get("num_workers", 0)),
+        **loader_kwargs,
     )
 
-    device = resolve_device(str(training_cfg.get("device", "auto")))
     model = StructuredDynamicsModel(StructuredDynamicsConfig(**model_cfg)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg.get("learning_rate", 3e-4)))
     pos_weights_float = configured_pos_weights(config, train_dataset)

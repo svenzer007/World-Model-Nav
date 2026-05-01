@@ -4,7 +4,8 @@ data:
   data_dir: ./dataset_dreamer_map_large_spread
   train_fraction: 0.9
   sequence_length: 20
-  stride: 1
+  stride: 4
+  cache_episodes: true
 
 model:
   model_type: factorized_world_v3
@@ -28,11 +29,16 @@ model:
 
 training:
   stage: stage2
-  batch_size: 64
+  batch_size: 512
   epochs: 12
   learning_rate: 0.00003
   grad_clip_norm: 5.0
-  num_workers: 0
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 4
+  allow_tf32: true
+  float32_matmul_precision: high
   device: auto
   output_dir: ./artifacts/structured_world_model_dreamer_map_finetune
   init_checkpoint: ./artifacts/structured_world_model_factorized_world_v3_stage2/epoch_009.pt
