@@ -5,7 +5,9 @@ data:
   train_fraction: 0.9
   sequence_length: 20
   stride: 4
+  tensor_cache: true
   cache_episodes: true
+  preload_episode_cache: false
 
 model:
   model_type: factorized_world_v3

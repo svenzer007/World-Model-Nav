@@ -15,7 +15,13 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from data.sequence_dataset import StructuredSequenceDataset, _load_episode_cached, list_episode_paths, split_episode_paths
+from data.sequence_dataset import (
+    StructuredSequenceDataset,
+    _load_episode_cached,
+    list_episode_paths,
+    load_or_build_tensorized_dataset,
+    split_episode_paths,
+)
 from data.weighted_sampler import build_weighted_sampler
 from models import (
     FACTOR_MODEL_TYPE,
@@ -599,6 +605,50 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_sequence_dataset(
+    *,
+    split_name: str,
+    episode_paths: list[Path],
+    data_cfg: Mapping[str, Any],
+    model_cfg: Mapping[str, Any],
+    active_rollout_horizon: int,
+) -> StructuredSequenceDataset:
+    sequence_length = int(data_cfg.get("sequence_length", 20))
+    stride = int(data_cfg.get("stride", 1))
+    use_goal = bool(model_cfg.get("use_goal", True))
+    use_lidar = bool(model_cfg.get("use_lidar", False))
+    model_type = str(model_cfg.get("model_type", LEGACY_MODEL_TYPE))
+    if bool(data_cfg.get("tensor_cache", False)):
+        data_root = Path(str(data_cfg["data_dir"]))
+        cache_dir = Path(str(data_cfg.get("tensor_cache_dir", data_root / "sequence_cache")))
+        cache_name = (
+            f"{split_name}_{model_type}_s{sequence_length}_stride{stride}_"
+            f"goal{int(use_goal)}_lidar{int(use_lidar)}.pt"
+        )
+        return load_or_build_tensorized_dataset(
+            episode_paths=episode_paths,
+            cache_path=cache_dir / cache_name,
+            sequence_length=sequence_length,
+            stride=stride,
+            use_goal=use_goal,
+            use_lidar=use_lidar,
+            rollout_horizon=active_rollout_horizon,
+            model_type=model_type,
+            split_name=split_name,
+        )
+    return StructuredSequenceDataset(
+        episode_paths,
+        sequence_length=sequence_length,
+        stride=stride,
+        use_goal=use_goal,
+        use_lidar=use_lidar,
+        rollout_horizon=active_rollout_horizon,
+        model_type=model_type,
+        cache_episodes=bool(data_cfg.get("cache_episodes", False)),
+        preload_episode_cache=bool(data_cfg.get("preload_episode_cache", False)),
+    )
+
+
 def main() -> None:
     args = build_arg_parser().parse_args()
     config = load_yaml_config(args.config)
@@ -624,25 +674,19 @@ def main() -> None:
 
     episode_paths = list_episode_paths(data_cfg["data_dir"])
     train_paths, val_paths = split_episode_paths(episode_paths, float(data_cfg.get("train_fraction", 0.9)))
-    train_dataset = StructuredSequenceDataset(
-        train_paths,
-        sequence_length=int(data_cfg.get("sequence_length", 20)),
-        stride=int(data_cfg.get("stride", 1)),
-        use_goal=bool(model_cfg.get("use_goal", True)),
-        use_lidar=bool(model_cfg.get("use_lidar", False)),
-        rollout_horizon=active_rollout_horizon,
-        model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
-        cache_episodes=bool(data_cfg.get("cache_episodes", False)),
+    train_dataset = build_sequence_dataset(
+        split_name="train",
+        episode_paths=train_paths,
+        data_cfg=data_cfg,
+        model_cfg=model_cfg,
+        active_rollout_horizon=active_rollout_horizon,
     )
-    val_dataset = StructuredSequenceDataset(
-        val_paths,
-        sequence_length=int(data_cfg.get("sequence_length", 20)),
-        stride=int(data_cfg.get("stride", 1)),
-        use_goal=bool(model_cfg.get("use_goal", True)),
-        use_lidar=bool(model_cfg.get("use_lidar", False)),
-        rollout_horizon=active_rollout_horizon,
-        model_type=str(model_cfg.get("model_type", LEGACY_MODEL_TYPE)),
-        cache_episodes=bool(data_cfg.get("cache_episodes", False)),
+    val_dataset = build_sequence_dataset(
+        split_name="val",
+        episode_paths=val_paths,
+        data_cfg=data_cfg,
+        model_cfg=model_cfg,
+        active_rollout_horizon=active_rollout_horizon,
     )
     if len(train_dataset) == 0 or len(val_dataset) == 0:
         raise ValueError("Train/val datasets must both have at least one sequence")

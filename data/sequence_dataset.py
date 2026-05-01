@@ -6,11 +6,12 @@ import pickle
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from tqdm.auto import tqdm
 
 from models import FACTOR_WORLD_MODEL_TYPE, LEGACY_MODEL_TYPE
 
@@ -69,6 +70,8 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         rollout_horizon: int = 0,
         model_type: str = LEGACY_MODEL_TYPE,
         cache_episodes: bool = False,
+        preload_episode_cache: bool = False,
+        progress_desc: str | None = None,
     ):
         if sequence_length <= 0:
             raise ValueError("sequence_length must be positive")
@@ -82,12 +85,19 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         self.rollout_horizon = max(0, int(rollout_horizon))
         self.model_type = str(model_type)
         self.cache_episodes = bool(cache_episodes)
+        self.preload_episode_cache = bool(preload_episode_cache)
+        self.progress_desc = progress_desc
         self.windows: list[SequenceWindow] = []
         self._episode_arrays: dict[str, dict[str, object]] = {}
         self._build_index()
 
     def _build_index(self) -> None:
-        for path in self.episode_paths:
+        path_iterable = (
+            tqdm(self.episode_paths, desc=self.progress_desc, dynamic_ncols=True)
+            if self.progress_desc
+            else self.episode_paths
+        )
+        for path in path_iterable:
             episode = _load_episode_cached(str(path))
             steps = episode.get("steps", [])
             if not isinstance(steps, list):
@@ -121,7 +131,7 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
                         ),
                     )
                 )
-            if self.cache_episodes:
+            if self.cache_episodes and self.preload_episode_cache:
                 self._episode_arrays[str(path)] = self._build_episode_arrays(episode)
 
     def __len__(self) -> int:
@@ -130,9 +140,12 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
     def __getitem__(self, index: int) -> dict[str, object]:
         window = self.windows[index]
         if self.cache_episodes:
-            cached = self._episode_arrays.get(str(window.episode_path))
-            if cached is not None:
-                return self._cached_item(window, cached)
+            path_key = str(window.episode_path)
+            cached = self._episode_arrays.get(path_key)
+            if cached is None:
+                cached = self._build_episode_arrays(_load_episode_cached(path_key))
+                self._episode_arrays[path_key] = cached
+            return self._cached_item(window, cached)
 
         episode = _load_episode_cached(str(window.episode_path))
         steps = episode["steps"][window.start_step : window.start_step + window.sequence_length]
@@ -411,3 +424,120 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         current_world = np.asarray(step["dynamic_obstacles_world_t"], dtype=np.float32)
         previous_world = np.asarray(previous_step["dynamic_obstacles_world_t"], dtype=np.float32)
         return (current_world - previous_world) / dt
+
+
+class TensorizedSequenceDataset(Dataset[dict[str, object]]):
+    """A prebuilt tensor dataset for fast repeated training over fixed sequence windows."""
+
+    def __init__(
+        self,
+        tensors: dict[str, torch.Tensor],
+        windows: Sequence[SequenceWindow],
+        metadata: dict[str, object],
+    ):
+        if not tensors:
+            raise ValueError("TensorizedSequenceDataset requires at least one tensor")
+        lengths = {int(tensor.shape[0]) for tensor in tensors.values()}
+        if len(lengths) != 1:
+            raise ValueError(f"Tensorized tensors disagree on leading dimension: {sorted(lengths)}")
+        self.tensors = tensors
+        self.windows = list(windows)
+        self.metadata = dict(metadata)
+
+    def __len__(self) -> int:
+        return next(iter(self.tensors.values())).shape[0]
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        return {key: tensor[index] for key, tensor in self.tensors.items()}
+
+
+def load_or_build_tensorized_dataset(
+    *,
+    episode_paths: Sequence[str | Path],
+    cache_path: str | Path,
+    sequence_length: int,
+    stride: int,
+    use_goal: bool,
+    use_lidar: bool,
+    rollout_horizon: int,
+    model_type: str,
+    split_name: str,
+) -> TensorizedSequenceDataset:
+    cache_file = Path(cache_path)
+    metadata = _tensor_cache_metadata(
+        episode_paths=episode_paths,
+        sequence_length=sequence_length,
+        stride=stride,
+        use_goal=use_goal,
+        use_lidar=use_lidar,
+        model_type=model_type,
+        split_name=split_name,
+    )
+    if cache_file.exists():
+        payload = torch.load(cache_file, map_location="cpu", weights_only=False)
+        if isinstance(payload, dict) and payload.get("metadata") == metadata:
+            tensors = payload.get("tensors")
+            windows = payload.get("windows")
+            if isinstance(tensors, dict) and isinstance(windows, list):
+                print(f"Loaded tensorized {split_name} dataset from {cache_file} ({len(windows)} windows).", flush=True)
+                return TensorizedSequenceDataset(tensors=tensors, windows=windows, metadata=metadata)
+        print(f"Ignoring stale tensorized {split_name} cache at {cache_file}; rebuilding.", flush=True)
+
+    print(f"Building tensorized {split_name} dataset cache at {cache_file}...", flush=True)
+    base_dataset = StructuredSequenceDataset(
+        episode_paths=episode_paths,
+        sequence_length=sequence_length,
+        stride=stride,
+        use_goal=use_goal,
+        use_lidar=use_lidar,
+        rollout_horizon=rollout_horizon,
+        model_type=model_type,
+        cache_episodes=True,
+        preload_episode_cache=True,
+        progress_desc=f"Indexing {split_name}",
+    )
+    tensor_lists: dict[str, list[torch.Tensor]] = {}
+    for index in tqdm(range(len(base_dataset)), desc=f"Tensorizing {split_name}", dynamic_ncols=True):
+        sample = base_dataset[index]
+        for key, value in sample.items():
+            if torch.is_tensor(value):
+                tensor_lists.setdefault(key, []).append(value.detach().clone())
+    tensors = {key: torch.stack(values, dim=0) for key, values in sorted(tensor_lists.items())}
+    dataset = TensorizedSequenceDataset(tensors=tensors, windows=base_dataset.windows, metadata=metadata)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"metadata": metadata, "tensors": tensors, "windows": base_dataset.windows}, cache_file)
+    print(f"Saved tensorized {split_name} dataset to {cache_file} ({len(dataset)} windows).", flush=True)
+    return dataset
+
+
+def _tensor_cache_metadata(
+    *,
+    episode_paths: Sequence[str | Path],
+    sequence_length: int,
+    stride: int,
+    use_goal: bool,
+    use_lidar: bool,
+    model_type: str,
+    split_name: str,
+) -> dict[str, object]:
+    path_metadata: list[dict[str, Any]] = []
+    for path_like in episode_paths:
+        path = Path(path_like)
+        stat = path.stat()
+        path_metadata.append(
+            {
+                "path": str(path),
+                "size": int(stat.st_size),
+                "mtime_ns": int(stat.st_mtime_ns),
+            }
+        )
+    return {
+        "format": "tensorized_sequence_dataset_v1",
+        "split_name": str(split_name),
+        "sequence_length": int(sequence_length),
+        "stride": int(stride),
+        "use_goal": bool(use_goal),
+        "use_lidar": bool(use_lidar),
+        "model_type": str(model_type),
+        "episode_paths": path_metadata,
+    }
