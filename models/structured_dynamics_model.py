@@ -21,7 +21,7 @@ class StructuredDynamicsConfig:
     num_dynamic_obstacles: int = 4
     obstacle_feature_dim: int = 5
     obstacle_embed_dim: int = 32
-    action_vocab_size: int = 6
+    action_vocab_size: int = 7
     action_embed_dim: int = 16
     action_cont_dim: int = 2
     goal_dim: int = 5

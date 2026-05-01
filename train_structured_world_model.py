@@ -465,12 +465,59 @@ def active_rollout_horizon_for_epoch(curriculum: list[dict[str, int]], epoch: in
     return int(curriculum[-1]["horizon"])
 
 
+def maybe_expand_action_embedding_state(
+    checkpoint_state_dict: Mapping[str, torch.Tensor],
+    model: StructuredDynamicsModel,
+) -> tuple[dict[str, torch.Tensor], list[dict[str, Any]]]:
+    """Expand an older action embedding table when the current action space has extra actions."""
+    adapted_state_dict = dict(checkpoint_state_dict)
+    adaptations: list[dict[str, Any]] = []
+    key = "action_embedding.weight"
+    if key not in adapted_state_dict:
+        return adapted_state_dict, adaptations
+
+    checkpoint_weight = adapted_state_dict[key]
+    model_weight = model.state_dict()[key]
+    if tuple(checkpoint_weight.shape) == tuple(model_weight.shape):
+        return adapted_state_dict, adaptations
+
+    can_expand = (
+        checkpoint_weight.ndim == 2
+        and model_weight.ndim == 2
+        and checkpoint_weight.shape[0] < model_weight.shape[0]
+        and checkpoint_weight.shape[1] == model_weight.shape[1]
+    )
+    if not can_expand:
+        raise ValueError(
+            f"Checkpoint {key} shape {tuple(checkpoint_weight.shape)} is incompatible with "
+            f"current model shape {tuple(model_weight.shape)}"
+        )
+
+    expanded_weight = model_weight.detach().clone()
+    expanded_weight[: checkpoint_weight.shape[0]] = checkpoint_weight.to(
+        device=expanded_weight.device,
+        dtype=expanded_weight.dtype,
+    )
+    adapted_state_dict[key] = expanded_weight
+    adaptations.append(
+        {
+            "parameter": key,
+            "checkpoint_shape": list(checkpoint_weight.shape),
+            "current_shape": list(model_weight.shape),
+            "copied_rows": int(checkpoint_weight.shape[0]),
+            "initialized_rows": int(model_weight.shape[0] - checkpoint_weight.shape[0]),
+        }
+    )
+    return adapted_state_dict, adaptations
+
+
 def load_checkpoint(
     path: str | Path,
     model: StructuredDynamicsModel,
     optimizer: torch.optim.Optimizer | None,
     device: torch.device,
     load_optimizer: bool = True,
+    allow_action_vocab_expansion: bool = False,
 ) -> dict[str, Any]:
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     if "model_state_dict" not in checkpoint:
@@ -481,9 +528,17 @@ def load_checkpoint(
         raise ValueError(
             f"Checkpoint model_type={checkpoint_model_type!r} is incompatible with current model_type={model.config.model_type!r}"
         )
-    model.load_state_dict(checkpoint["model_state_dict"])
+    checkpoint_state_dict = checkpoint["model_state_dict"]
+    load_adaptations: list[dict[str, Any]] = []
+    if allow_action_vocab_expansion:
+        checkpoint_state_dict, load_adaptations = maybe_expand_action_embedding_state(checkpoint_state_dict, model)
+    if load_adaptations and load_optimizer:
+        raise ValueError("Cannot load optimizer state when checkpoint parameters were expanded")
+    model.load_state_dict(checkpoint_state_dict)
     if load_optimizer and optimizer is not None and "optimizer_state_dict" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    checkpoint = dict(checkpoint)
+    checkpoint["load_adaptations"] = load_adaptations
     return checkpoint
 
 
@@ -512,6 +567,7 @@ def save_init_source(
             "init_checkpoint_epoch": checkpoint.get("epoch"),
             "init_checkpoint_metrics": checkpoint.get("metrics"),
             "init_checkpoint_path": str(Path(init_checkpoint_path)),
+            "load_adaptations": checkpoint.get("load_adaptations", []),
             "new_output_dir": str(Path(new_output_dir)),
             "optimizer_state_loaded": bool(optimizer_state_loaded),
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -667,6 +723,7 @@ def main() -> None:
             optimizer=optimizer,
             device=device,
             load_optimizer=init_load_optimizer_state,
+            allow_action_vocab_expansion=True,
         )
         save_init_source(
             output_dir / "init_source.json",
@@ -681,6 +738,13 @@ def main() -> None:
             f"stage={training_stage}; starting rollout horizon={active_rollout_horizon}.",
             flush=True,
         )
+        for adaptation in checkpoint.get("load_adaptations", []):
+            print(
+                "Adapted checkpoint parameter "
+                f"{adaptation['parameter']}: {adaptation['checkpoint_shape']} -> {adaptation['current_shape']} "
+                f"({adaptation['initialized_rows']} new row(s) initialized).",
+                flush=True,
+            )
 
     previous_rollout_horizon: int | None = (
         active_rollout_horizon_for_epoch(

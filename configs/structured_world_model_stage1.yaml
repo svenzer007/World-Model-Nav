@@ -11,7 +11,7 @@ model:
   num_dynamic_obstacles: 4
   obstacle_feature_dim: 5
   obstacle_embed_dim: 32
-  action_vocab_size: 6
+  action_vocab_size: 7
   action_embed_dim: 16
   action_cont_dim: 2
   goal_dim: 5

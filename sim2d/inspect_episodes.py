@@ -22,6 +22,7 @@ KNOWN_ACTIONS = (
     "forward_right",
     "slow_left",
     "slow_right",
+    "backward",
 )
 
 TURNING_ACTIONS = {"forward_left", "forward_right", "slow_left", "slow_right"}

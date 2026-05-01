@@ -16,7 +16,6 @@ python3 -m sim2d.generate_data \
   --dynamic_obstacle_radius 0.5 \
   --dynamic_obstacle_speed 0.5 \
   --no_lidar \
-  --disable_backward \
   --num_workers 4
 ```
 
@@ -31,7 +30,6 @@ python3 -m sim2d.generate_data \
   --dynamic_obstacle_radius 0.5 \
   --dynamic_obstacle_speed 0.5 \
   --no_lidar \
-  --disable_backward \
   --preview_every 50 \
   --num_workers 8
 ```

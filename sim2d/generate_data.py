@@ -131,11 +131,6 @@ def main() -> None:
         config.dynamic_interaction_resample_limit = 10
         config.save_static_lidar = False
         config.save_dynamic_residual = False
-        config.expert_config.action_indices = tuple(
-            int(action_index)
-            for action_index, action in ACTIONS.items()
-            if str(action["name"]) != "backward"
-        )
     if args.disable_backward:
         config.expert_config.action_indices = tuple(
             int(action_index)
