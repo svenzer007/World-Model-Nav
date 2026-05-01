@@ -137,7 +137,8 @@ def render_episode_step_frame(
         ax.plot(path_world[:, 0], path_world[:, 1], color="tab:cyan", linewidth=1.2)
 
     robot_pose = np.asarray(step["robot_pose"])
-    _draw_robot(ax, robot_pose)
+    robot_radius = float(episode.get("robot_config", {}).get("radius", 0.25))
+    _draw_robot(ax, robot_pose, robot_radius)
     goal = np.asarray(step["selected_subgoal_world"])
     ax.scatter(goal[0], goal[1], c="orange", s=45, marker="x")
 
@@ -348,11 +349,11 @@ def _draw_map(ax: plt.Axes, occupancy: np.ndarray, resolution: float, origin: Se
     ax.imshow(occupancy, cmap="gray_r", origin="lower", extent=extent, interpolation="nearest")
 
 
-def _draw_robot(ax: plt.Axes, robot_pose: np.ndarray) -> None:
-    radius = 0.25
-    circle = plt.Circle((robot_pose[0], robot_pose[1]), radius=radius, color="tab:red", fill=False, linewidth=1.5)
+def _draw_robot(ax: plt.Axes, robot_pose: np.ndarray, robot_radius: float) -> None:
+    circle = plt.Circle((robot_pose[0], robot_pose[1]), radius=robot_radius, color="tab:red", fill=False, linewidth=1.5)
     ax.add_patch(circle)
-    heading_end = robot_pose[:2] + 0.5 * np.array([np.cos(robot_pose[2]), np.sin(robot_pose[2])], dtype=float)
+    heading_length = max(0.5, float(robot_radius) * 1.4)
+    heading_end = robot_pose[:2] + heading_length * np.array([np.cos(robot_pose[2]), np.sin(robot_pose[2])], dtype=float)
     ax.plot([robot_pose[0], heading_end[0]], [robot_pose[1], heading_end[1]], color="tab:red", linewidth=1.5)
 
 
