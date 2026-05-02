@@ -12,7 +12,6 @@ python3 -m sim2d.generate_data \
   --num_dynamic_obstacles 4 \
   --robot_radius 0.4 \
   --dynamic_obstacle_radius 0.5 \
-  --dynamic_obstacle_speed 0.5 \
   --no_lidar \
   --num_workers 4
 ```
@@ -28,7 +27,6 @@ python3 -m sim2d.generate_data \
   --num_dynamic_obstacles 4 \
   --robot_radius 0.4 \
   --dynamic_obstacle_radius 0.5 \
-  --dynamic_obstacle_speed 0.5 \
   --no_lidar \
   --preview_every 50 \
   --num_workers 8
