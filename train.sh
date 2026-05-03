@@ -1,7 +1,7 @@
 python3 -m sim2d.generate_data \
   --map_yaml ./maps/dreamer/map.yaml \
   --output_dir ./dataset_dreamer_map_large_spread \
-  --num_episodes 10000 \
+  --num_episodes 20000 \
   --max_steps 450 \
   --num_dynamic_obstacles 4 \
   --robot_radius 0.4 \
