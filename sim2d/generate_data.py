@@ -78,6 +78,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
     parser.add_argument("--dynamic_obstacle_radius", type=float, default=None)
     parser.add_argument("--dynamic_obstacle_speed", type=float, default=None)
+    parser.add_argument("--dynamic_obstacle_speed_min", type=float, default=None)
+    parser.add_argument("--dynamic_obstacle_speed_max", type=float, default=None)
     parser.add_argument("--dynamic_obstacle_route_radius", type=float, default=None)
     parser.add_argument("--dynamic_obstacle_route_length_min", type=int, default=None)
     parser.add_argument("--dynamic_obstacle_route_length_max", type=int, default=None)
@@ -161,6 +163,13 @@ def main() -> None:
     if args.dynamic_obstacle_speed is not None:
         speed = float(args.dynamic_obstacle_speed)
         config.dynamic_obstacle_config.speed_range = (speed, speed)
+    if args.dynamic_obstacle_speed_min is not None or args.dynamic_obstacle_speed_max is not None:
+        current_min, current_max = config.dynamic_obstacle_config.speed_range
+        speed_min = float(args.dynamic_obstacle_speed_min) if args.dynamic_obstacle_speed_min is not None else float(current_min)
+        speed_max = float(args.dynamic_obstacle_speed_max) if args.dynamic_obstacle_speed_max is not None else float(current_max)
+        if speed_min < 0.0 or speed_max < speed_min:
+            raise ValueError("Dynamic obstacle speed range must satisfy 0 <= min <= max")
+        config.dynamic_obstacle_config.speed_range = (speed_min, speed_max)
     if args.dynamic_obstacle_route_radius is not None:
         config.dynamic_obstacle_config.route_radius = float(args.dynamic_obstacle_route_radius)
     if args.dynamic_obstacle_route_length_min is not None or args.dynamic_obstacle_route_length_max is not None:

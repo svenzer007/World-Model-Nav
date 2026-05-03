@@ -4,11 +4,13 @@ set -euo pipefail
 python3 -m sim2d.generate_data \
   --map_yaml ./maps/dreamer/map.yaml \
   --output_dir ./dataset_dreamer_map_large_spread_robust \
-  --num_episodes 20000 \
+  --num_episodes 5000 \
   --max_steps 450 \
   --num_dynamic_obstacles 4 \
   --robot_radius 0.4 \
   --dynamic_obstacle_radius 0.5 \
+  --dynamic_obstacle_speed_min 0.4 \
+  --dynamic_obstacle_speed_max 0.6 \
   --no_lidar \
   --preview_every 50 \
   --num_workers 256 \
