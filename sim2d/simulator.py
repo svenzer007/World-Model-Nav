@@ -110,6 +110,8 @@ class EpisodeSimulator:
 
         done_reason = "timeout"
         episode_collision_any = False
+        robot_command_state = self._build_robot_command_randomization_state(episode_rng)
+        robot_command_params = dict(robot_command_state["params"])
 
         for step_index in range(self.config.max_steps):
             waypoint_now = compute_local_subgoal(robot_pose, path_world, self.config.lookahead_distance)
@@ -143,7 +145,17 @@ class EpisodeSimulator:
             )
 
             dynamic_t = [obstacle.snapshot() for obstacle in dyn_obstacles]
-            robot_pose_next = self._apply_action(robot_pose, decision.v, decision.omega)
+            tracked_command = self._resolve_robot_command(
+                desired_v=decision.v,
+                desired_omega=decision.omega,
+                state=robot_command_state,
+                rng=episode_rng,
+            )
+            robot_pose_next = self._apply_action(
+                robot_pose,
+                float(tracked_command["applied_v_t"]),
+                float(tracked_command["applied_omega_t"]),
+            )
             for obstacle in dyn_obstacles:
                 obstacle.step(self.config.robot_config.dt)
             dynamic_t1 = [obstacle.snapshot() for obstacle in dyn_obstacles]
@@ -213,6 +225,7 @@ class EpisodeSimulator:
                     "omega": float(decision.omega),
                     "v_t": float(decision.v),
                     "omega_t": float(decision.omega),
+                    **tracked_command,
                     **lidar_fields_t1,
                     "goal_t1": waypoint_next["goal_features"],
                     "collision_t1": bool(collision_t1),
@@ -284,6 +297,8 @@ class EpisodeSimulator:
             "lidar_config": asdict(self.config.lidar_config),
             "action_space": action_space_to_list(),
             "robot_config": asdict(self.config.robot_config),
+            "robot_command_randomization_config": asdict(self.config.robot_command_randomization_config),
+            "robot_command_randomization": robot_command_params,
             "expert_config": asdict(self.config.expert_config),
             "dynamic_label_config": {
                 "dynamic_residual_epsilon": float(self.config.dynamic_residual_epsilon),
@@ -491,6 +506,105 @@ class EpisodeSimulator:
         from .dynamics import unicycle_step
 
         return unicycle_step(robot_pose, v, omega, self.config.robot_config.dt)
+
+    def _build_robot_command_randomization_state(self, rng: np.random.Generator) -> dict[str, object]:
+        """Sample per-episode command-tracking parameters and initialize delay history."""
+        cfg = self.config.robot_command_randomization_config
+        if not bool(cfg.enabled):
+            params = {
+                "enabled": False,
+                "delay_steps": 0,
+                "v_gain": 1.0,
+                "omega_gain": 1.0,
+                "v_noise_std": 0.0,
+                "omega_noise_std": 0.0,
+                "v_clip_min": float(cfg.v_clip_range[0]),
+                "v_clip_max": float(cfg.v_clip_range[1]),
+                "omega_clip_min": float(cfg.omega_clip_range[0]),
+                "omega_clip_max": float(cfg.omega_clip_range[1]),
+            }
+            return {"params": params, "history": []}
+
+        delay_min = max(0, int(cfg.delay_min_steps))
+        delay_max = max(delay_min, int(cfg.delay_max_steps))
+        v_gain_min, v_gain_max = self._validated_range("v_gain_range", cfg.v_gain_range)
+        omega_gain_min, omega_gain_max = self._validated_range("omega_gain_range", cfg.omega_gain_range)
+        v_clip_min, v_clip_max = self._validated_range("v_clip_range", cfg.v_clip_range)
+        omega_clip_min, omega_clip_max = self._validated_range("omega_clip_range", cfg.omega_clip_range)
+        delay_steps = int(rng.integers(delay_min, delay_max + 1))
+        params = {
+            "enabled": True,
+            "delay_steps": delay_steps,
+            "v_gain": float(rng.uniform(v_gain_min, v_gain_max)),
+            "omega_gain": float(rng.uniform(omega_gain_min, omega_gain_max)),
+            "v_noise_std": max(0.0, float(cfg.v_noise_std)),
+            "omega_noise_std": max(0.0, float(cfg.omega_noise_std)),
+            "v_clip_min": v_clip_min,
+            "v_clip_max": v_clip_max,
+            "omega_clip_min": omega_clip_min,
+            "omega_clip_max": omega_clip_max,
+        }
+        history = [np.zeros(2, dtype=float) for _ in range(delay_steps)]
+        return {"params": params, "history": history}
+
+    def _resolve_robot_command(
+        self,
+        *,
+        desired_v: float,
+        desired_omega: float,
+        state: dict[str, object],
+        rng: np.random.Generator,
+    ) -> dict[str, object]:
+        """Convert desired velocity command into the delayed/noisy command applied to the robot."""
+        params = dict(state["params"])
+        desired = np.array([float(desired_v), float(desired_omega)], dtype=float)
+        history = state.get("history", [])
+        if bool(params["enabled"]) and int(params["delay_steps"]) > 0:
+            delayed = np.asarray(history.pop(0), dtype=float)
+            history.append(desired.copy())
+        else:
+            delayed = desired.copy()
+
+        if bool(params["enabled"]):
+            v_noise = float(rng.normal(0.0, float(params["v_noise_std"])))
+            omega_noise = float(rng.normal(0.0, float(params["omega_noise_std"])))
+            applied_v = float(delayed[0]) * float(params["v_gain"]) + v_noise
+            applied_omega = float(delayed[1]) * float(params["omega_gain"]) + omega_noise
+        else:
+            v_noise = 0.0
+            omega_noise = 0.0
+            applied_v = float(delayed[0])
+            applied_omega = float(delayed[1])
+
+        applied_v = float(np.clip(applied_v, float(params["v_clip_min"]), float(params["v_clip_max"])))
+        applied_omega = float(np.clip(applied_omega, float(params["omega_clip_min"]), float(params["omega_clip_max"])))
+        return {
+            "desired_v_t": float(desired[0]),
+            "desired_omega_t": float(desired[1]),
+            "delayed_v_t": float(delayed[0]),
+            "delayed_omega_t": float(delayed[1]),
+            "applied_v_t": applied_v,
+            "applied_omega_t": applied_omega,
+            "applied_action_cont": np.array([applied_v, applied_omega], dtype=np.float32),
+            "command_delay_steps": int(params["delay_steps"]),
+            "command_v_gain": float(params["v_gain"]),
+            "command_omega_gain": float(params["omega_gain"]),
+            "command_v_noise_t": v_noise,
+            "command_omega_noise_t": omega_noise,
+            "command_tracking_error_v_t": applied_v - float(desired[0]),
+            "command_tracking_error_omega_t": applied_omega - float(desired[1]),
+            "command_randomization_enabled": bool(params["enabled"]),
+        }
+
+    @staticmethod
+    def _validated_range(name: str, values: Sequence[float]) -> tuple[float, float]:
+        if len(values) != 2:
+            raise ValueError(f"{name} must contain exactly two values")
+        lower = float(values[0])
+        upper = float(values[1])
+        if upper < lower:
+            raise ValueError(f"{name} must satisfy min <= max")
+        return lower, upper
 
     def _compute_structured_dynamic_fields(
         self,

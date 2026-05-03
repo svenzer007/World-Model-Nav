@@ -43,6 +43,19 @@ class RobotConfig:
 
 
 @dataclass
+class RobotCommandRandomizationConfig:
+    enabled: bool = False
+    delay_min_steps: int = 0
+    delay_max_steps: int = 0
+    v_gain_range: tuple[float, float] = (1.0, 1.0)
+    omega_gain_range: tuple[float, float] = (1.0, 1.0)
+    v_noise_std: float = 0.0
+    omega_noise_std: float = 0.0
+    v_clip_range: tuple[float, float] = (-1.0, 1.0)
+    omega_clip_range: tuple[float, float] = (-1.5, 1.5)
+
+
+@dataclass
 class LidarConfig:
     num_beams: int = 241
     angle_min: float = -np.pi / 2.0
@@ -113,6 +126,7 @@ class DatasetConfig:
     episode_resample_limit: int = 200
     map_config: MapConfig = field(default_factory=MapConfig)
     robot_config: RobotConfig = field(default_factory=RobotConfig)
+    robot_command_randomization_config: RobotCommandRandomizationConfig = field(default_factory=RobotCommandRandomizationConfig)
     lidar_config: LidarConfig = field(default_factory=LidarConfig)
     dynamic_obstacle_config: DynamicObstacleConfig = field(default_factory=DynamicObstacleConfig)
     expert_config: ExpertConfig = field(default_factory=ExpertConfig)

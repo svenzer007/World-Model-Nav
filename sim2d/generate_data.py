@@ -86,6 +86,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_robot_path_deviation", type=float, default=None)
     parser.add_argument("--max_robot_trajectory_path_ratio", type=float, default=None)
     parser.add_argument("--dynamic_interaction_resample_limit", type=int, default=None)
+    parser.add_argument("--robot_command_randomization", action="store_true")
+    parser.add_argument("--robot_command_delay_min_steps", type=int, default=None)
+    parser.add_argument("--robot_command_delay_max_steps", type=int, default=None)
+    parser.add_argument("--robot_command_v_gain_min", type=float, default=None)
+    parser.add_argument("--robot_command_v_gain_max", type=float, default=None)
+    parser.add_argument("--robot_command_omega_gain_min", type=float, default=None)
+    parser.add_argument("--robot_command_omega_gain_max", type=float, default=None)
+    parser.add_argument("--robot_command_v_noise_std", type=float, default=None)
+    parser.add_argument("--robot_command_omega_noise_std", type=float, default=None)
+    parser.add_argument("--robot_command_v_clip_min", type=float, default=None)
+    parser.add_argument("--robot_command_v_clip_max", type=float, default=None)
+    parser.add_argument("--robot_command_omega_clip_min", type=float, default=None)
+    parser.add_argument("--robot_command_omega_clip_max", type=float, default=None)
     parser.add_argument("--draw_lidar_in_gif", action="store_true")
     parser.add_argument("--disable_backward", action="store_true")
     lidar_group = parser.add_mutually_exclusive_group()
@@ -166,6 +179,53 @@ def main() -> None:
     if args.max_robot_trajectory_path_ratio is not None:
         config.max_robot_trajectory_path_ratio = float(args.max_robot_trajectory_path_ratio)
     config.visualization_config.draw_lidar_in_gif = bool(args.draw_lidar_in_gif)
+    command_cfg = config.robot_command_randomization_config
+    if args.robot_command_randomization:
+        command_cfg.enabled = True
+    if args.robot_command_delay_min_steps is not None:
+        command_cfg.delay_min_steps = int(args.robot_command_delay_min_steps)
+    if args.robot_command_delay_max_steps is not None:
+        command_cfg.delay_max_steps = int(args.robot_command_delay_max_steps)
+    if args.robot_command_v_gain_min is not None or args.robot_command_v_gain_max is not None:
+        current_min, current_max = command_cfg.v_gain_range
+        gain_min = float(args.robot_command_v_gain_min) if args.robot_command_v_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_v_gain_max) if args.robot_command_v_gain_max is not None else float(current_max)
+        command_cfg.v_gain_range = (gain_min, gain_max)
+    if args.robot_command_omega_gain_min is not None or args.robot_command_omega_gain_max is not None:
+        current_min, current_max = command_cfg.omega_gain_range
+        gain_min = (
+            float(args.robot_command_omega_gain_min)
+            if args.robot_command_omega_gain_min is not None
+            else float(current_min)
+        )
+        gain_max = (
+            float(args.robot_command_omega_gain_max)
+            if args.robot_command_omega_gain_max is not None
+            else float(current_max)
+        )
+        command_cfg.omega_gain_range = (gain_min, gain_max)
+    if args.robot_command_v_noise_std is not None:
+        command_cfg.v_noise_std = float(args.robot_command_v_noise_std)
+    if args.robot_command_omega_noise_std is not None:
+        command_cfg.omega_noise_std = float(args.robot_command_omega_noise_std)
+    if args.robot_command_v_clip_min is not None or args.robot_command_v_clip_max is not None:
+        current_min, current_max = command_cfg.v_clip_range
+        clip_min = float(args.robot_command_v_clip_min) if args.robot_command_v_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_v_clip_max) if args.robot_command_v_clip_max is not None else float(current_max)
+        command_cfg.v_clip_range = (clip_min, clip_max)
+    if args.robot_command_omega_clip_min is not None or args.robot_command_omega_clip_max is not None:
+        current_min, current_max = command_cfg.omega_clip_range
+        clip_min = (
+            float(args.robot_command_omega_clip_min)
+            if args.robot_command_omega_clip_min is not None
+            else float(current_min)
+        )
+        clip_max = (
+            float(args.robot_command_omega_clip_max)
+            if args.robot_command_omega_clip_max is not None
+            else float(current_max)
+        )
+        command_cfg.omega_clip_range = (clip_min, clip_max)
     if args.expert_horizon_seconds is not None:
         config.expert_config.horizon_seconds = float(args.expert_horizon_seconds)
     if args.dynamic_interaction_resample_limit is not None:

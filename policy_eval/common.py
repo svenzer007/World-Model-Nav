@@ -807,6 +807,9 @@ def _run_controller_episode(
     dynamic_clearance_history: list[float] = []
     combined_clearance_history: list[float] = []
     done_reason = "timeout"
+    command_rng = np.random.default_rng(int(seed))
+    robot_command_state = simulator._build_robot_command_randomization_state(command_rng)
+    robot_command_params = dict(robot_command_state["params"])
 
     for step_index in range(int(config.max_steps)):
         waypoint_now = compute_local_subgoal(robot_pose, path_world, config.lookahead_distance)
@@ -823,7 +826,17 @@ def _run_controller_episode(
         )
 
         dynamic_t = _snapshot_obstacles(dyn_obstacles)
-        robot_pose_next = simulator._apply_action(robot_pose, float(decision["v"]), float(decision["omega"]))
+        tracked_command = simulator._resolve_robot_command(
+            desired_v=float(decision["v"]),
+            desired_omega=float(decision["omega"]),
+            state=robot_command_state,
+            rng=command_rng,
+        )
+        robot_pose_next = simulator._apply_action(
+            robot_pose,
+            float(tracked_command["applied_v_t"]),
+            float(tracked_command["applied_omega_t"]),
+        )
         for obstacle in dyn_obstacles:
             obstacle.step(config.robot_config.dt)
         dynamic_t1 = _snapshot_obstacles(dyn_obstacles)
@@ -898,6 +911,7 @@ def _run_controller_episode(
                 "omega": float(decision["omega"]),
                 "v_t": float(decision["v"]),
                 "omega_t": float(decision["omega"]),
+                **tracked_command,
                 "collision_t1": bool(static_collision or dynamic_collision),
                 "static_collision_t1": bool(static_collision),
                 "dynamic_collision_t1": bool(dynamic_collision),
@@ -937,6 +951,8 @@ def _run_controller_episode(
         "origin": np.array(map_bundle.origin, dtype=float),
         "lidar_config": config.lidar_config.__dict__,
         "robot_config": config.robot_config.__dict__,
+        "robot_command_randomization_config": config.robot_command_randomization_config.__dict__,
+        "robot_command_randomization": robot_command_params,
         "expert_config": config.expert_config.__dict__,
         "start_pose": scenario["start_pose"].copy(),
         "final_goal": goal_point.copy(),
@@ -1181,6 +1197,53 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
         config.map_config.width = int(args.map_width)
     if args.map_height is not None:
         config.map_config.height = int(args.map_height)
+    command_cfg = config.robot_command_randomization_config
+    if bool(getattr(args, "robot_command_randomization", False)):
+        command_cfg.enabled = True
+    if getattr(args, "robot_command_delay_min_steps", None) is not None:
+        command_cfg.delay_min_steps = int(args.robot_command_delay_min_steps)
+    if getattr(args, "robot_command_delay_max_steps", None) is not None:
+        command_cfg.delay_max_steps = int(args.robot_command_delay_max_steps)
+    if getattr(args, "robot_command_v_gain_min", None) is not None or getattr(args, "robot_command_v_gain_max", None) is not None:
+        current_min, current_max = command_cfg.v_gain_range
+        gain_min = float(args.robot_command_v_gain_min) if args.robot_command_v_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_v_gain_max) if args.robot_command_v_gain_max is not None else float(current_max)
+        command_cfg.v_gain_range = (gain_min, gain_max)
+    if getattr(args, "robot_command_omega_gain_min", None) is not None or getattr(args, "robot_command_omega_gain_max", None) is not None:
+        current_min, current_max = command_cfg.omega_gain_range
+        gain_min = (
+            float(args.robot_command_omega_gain_min)
+            if args.robot_command_omega_gain_min is not None
+            else float(current_min)
+        )
+        gain_max = (
+            float(args.robot_command_omega_gain_max)
+            if args.robot_command_omega_gain_max is not None
+            else float(current_max)
+        )
+        command_cfg.omega_gain_range = (gain_min, gain_max)
+    if getattr(args, "robot_command_v_noise_std", None) is not None:
+        command_cfg.v_noise_std = float(args.robot_command_v_noise_std)
+    if getattr(args, "robot_command_omega_noise_std", None) is not None:
+        command_cfg.omega_noise_std = float(args.robot_command_omega_noise_std)
+    if getattr(args, "robot_command_v_clip_min", None) is not None or getattr(args, "robot_command_v_clip_max", None) is not None:
+        current_min, current_max = command_cfg.v_clip_range
+        clip_min = float(args.robot_command_v_clip_min) if args.robot_command_v_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_v_clip_max) if args.robot_command_v_clip_max is not None else float(current_max)
+        command_cfg.v_clip_range = (clip_min, clip_max)
+    if getattr(args, "robot_command_omega_clip_min", None) is not None or getattr(args, "robot_command_omega_clip_max", None) is not None:
+        current_min, current_max = command_cfg.omega_clip_range
+        clip_min = (
+            float(args.robot_command_omega_clip_min)
+            if args.robot_command_omega_clip_min is not None
+            else float(current_min)
+        )
+        clip_max = (
+            float(args.robot_command_omega_clip_max)
+            if args.robot_command_omega_clip_max is not None
+            else float(current_max)
+        )
+        command_cfg.omega_clip_range = (clip_min, clip_max)
     return config
 
 
@@ -1314,6 +1377,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "robot_radius": float(config.robot_config.radius),
             "map_width": int(config.map_config.width),
             "map_height": int(config.map_config.height),
+            "robot_command_randomization": config.robot_command_randomization_config.__dict__,
             "horizon": int(args.horizon),
             "disable_backward": bool(args.disable_backward),
             "effective_runtime_actions": [
