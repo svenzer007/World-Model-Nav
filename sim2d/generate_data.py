@@ -77,6 +77,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--map_width", type=int, default=None)
     parser.add_argument("--map_height", type=int, default=None)
     parser.add_argument("--robot_radius", type=float, default=None)
+    parser.add_argument("--robot_dt", type=float, default=None)
     parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
     parser.add_argument("--dynamic_obstacle_radius", type=float, default=None)
     parser.add_argument("--dynamic_obstacle_speed", type=float, default=None)
@@ -115,6 +116,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     lidar_group.add_argument("--no_lidar", dest="generate_lidar", action="store_false")
     parser.set_defaults(generate_lidar=None)
     parser.add_argument("--expert_horizon_seconds", type=float, default=None)
+    parser.add_argument("--expert_goal_progress_weight", type=float, default=None)
+    parser.add_argument("--expert_heading_weight", type=float, default=None)
+    parser.add_argument("--expert_clearance_weight", type=float, default=None)
+    parser.add_argument("--expert_path_adherence_weight", type=float, default=None)
+    parser.add_argument("--expert_velocity_weight", type=float, default=None)
+    parser.add_argument("--expert_collision_penalty", type=float, default=None)
+    parser.add_argument("--expert_min_clearance_clip", type=float, default=None)
     parser.add_argument("--debug_episode_id", type=int, default=None)
     parser.add_argument("--debug_timestep", type=int, default=None)
     parser.add_argument("--debug_output_dir", type=str, default=None)
@@ -172,6 +180,11 @@ def main() -> None:
         config.save_dynamic_residual = bool(args.generate_lidar)
     if args.robot_radius is not None:
         config.robot_config.radius = float(args.robot_radius)
+    if args.robot_dt is not None:
+        robot_dt = float(args.robot_dt)
+        if robot_dt <= 0.0:
+            raise ValueError("--robot_dt must be positive")
+        config.robot_config.dt = robot_dt
     if args.dynamic_obstacle_radius is not None:
         radius = float(args.dynamic_obstacle_radius)
         config.dynamic_obstacle_config.radius_range = (radius, radius)
@@ -264,6 +277,20 @@ def main() -> None:
         command_cfg.omega_clip_range = (clip_min, clip_max)
     if args.expert_horizon_seconds is not None:
         config.expert_config.horizon_seconds = float(args.expert_horizon_seconds)
+    if args.expert_goal_progress_weight is not None:
+        config.expert_config.goal_progress_weight = float(args.expert_goal_progress_weight)
+    if args.expert_heading_weight is not None:
+        config.expert_config.heading_weight = float(args.expert_heading_weight)
+    if args.expert_clearance_weight is not None:
+        config.expert_config.clearance_weight = float(args.expert_clearance_weight)
+    if args.expert_path_adherence_weight is not None:
+        config.expert_config.path_adherence_weight = float(args.expert_path_adherence_weight)
+    if args.expert_velocity_weight is not None:
+        config.expert_config.velocity_weight = float(args.expert_velocity_weight)
+    if args.expert_collision_penalty is not None:
+        config.expert_config.collision_penalty = float(args.expert_collision_penalty)
+    if args.expert_min_clearance_clip is not None:
+        config.expert_config.min_clearance_clip = float(args.expert_min_clearance_clip)
     if args.dynamic_interaction_resample_limit is not None:
         config.dynamic_interaction_resample_limit = int(args.dynamic_interaction_resample_limit)
 

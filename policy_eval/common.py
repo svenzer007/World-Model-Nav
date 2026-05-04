@@ -1213,6 +1213,11 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
         config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
     if getattr(args, "robot_radius", None) is not None:
         config.robot_config.radius = float(args.robot_radius)
+    if getattr(args, "robot_dt", None) is not None:
+        robot_dt = float(args.robot_dt)
+        if robot_dt <= 0.0:
+            raise ValueError("--robot_dt must be positive")
+        config.robot_config.dt = robot_dt
     if args.map_width is not None:
         config.map_config.width = int(args.map_width)
     if args.map_height is not None:

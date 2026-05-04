@@ -144,7 +144,7 @@ class DWAExpertPolicy:
             dynamic_obstacles=dynamic_obstacles,
         )
 
-        for step_index in range(self.config.rollout_steps):
+        for step_index in range(self._rollout_steps()):
             pose = self._step_pose(pose, float(action["vx"]), float(action["vy"]), float(action["omega"]))
             for obstacle in obstacles:
                 obstacle.step(self.robot_config.dt)
@@ -240,6 +240,10 @@ class DWAExpertPolicy:
 
     def _step_pose(self, pose: np.ndarray, vx: float, vy: float, omega: float) -> np.ndarray:
         return holonomic_step(pose, vx, vy, omega, self.robot_config.dt)
+
+    def _rollout_steps(self) -> int:
+        dt = max(1e-9, float(self.robot_config.dt))
+        return max(1, int(round(float(self.config.horizon_seconds) / dt)))
 
     def _evaluate_true_map_one_step(
         self,
