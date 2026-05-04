@@ -130,6 +130,7 @@ class DatasetConfig:
     min_dynamic_risk_fraction: float = 0.04
     min_dynamic_event_steps: int = 3
     dynamic_interaction_resample_limit: int = 30
+    require_success: bool = False
     save_static_lidar: bool = True
     save_dynamic_residual: bool = True
     episode_resample_limit: int = 200

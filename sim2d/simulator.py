@@ -59,8 +59,9 @@ class EpisodeSimulator:
         """Generate one accepted V4 episode, resampling dynamically boring rollouts."""
         rng = np.random.default_rng(seed)
         best_episode: dict[str, object] | None = None
-        best_score: tuple[int, int, float, float] = (-1, -1, -1.0, -1.0)
+        best_score: tuple[int, int, int, int, float, float] = (-1, -1, -1, -1, -1.0, -1.0)
         attempts = max(1, int(self.config.dynamic_interaction_resample_limit))
+        require_success = bool(self.config.require_success)
 
         for dynamic_attempt in range(attempts):
             candidate_seed = int(rng.integers(0, 2**31 - 1))
@@ -69,9 +70,13 @@ class EpisodeSimulator:
             candidate["candidate_seed"] = int(candidate_seed)
             candidate["dynamic_interaction_attempt"] = int(dynamic_attempt)
             stats = candidate["episode_stats"]
+            success_ok = bool(stats.get("success", False))
             trajectory_quality_ok = self._episode_has_trajectory_quality(candidate)
+            dynamic_interaction_ok = self._episode_has_dynamic_interaction(candidate)
             score = (
+                int(success_ok),
                 int(trajectory_quality_ok),
+                int(dynamic_interaction_ok),
                 int(stats["dynamic_event_steps"]),
                 float(stats["dynamic_risk_fraction"]),
                 float(stats["dynamic_visible_fraction"]),
@@ -79,13 +84,23 @@ class EpisodeSimulator:
             if score > best_score:
                 best_episode = candidate
                 best_score = score
-            if trajectory_quality_ok and self._episode_has_dynamic_interaction(candidate):
+            if trajectory_quality_ok and dynamic_interaction_ok and (success_ok or not require_success):
                 candidate["episode_stats"]["dynamic_interaction_accepted"] = True
                 candidate["episode_stats"]["dynamic_interaction_fallback"] = False
                 return candidate
 
         if best_episode is None:
             raise RuntimeError("Failed to generate any V4 episode candidate")
+        if require_success:
+            best_stats = best_episode["episode_stats"]
+            best_success_ok = bool(best_stats.get("success", False))
+            best_trajectory_ok = self._episode_has_trajectory_quality(best_episode)
+            best_dynamic_ok = self._episode_has_dynamic_interaction(best_episode)
+            if not (best_success_ok and best_trajectory_ok and best_dynamic_ok):
+                raise RuntimeError(
+                    "Failed to sample a successful dynamic-interaction episode "
+                    f"after {attempts} attempts"
+                )
         best_episode["episode_stats"]["dynamic_interaction_accepted"] = False
         best_episode["episode_stats"]["dynamic_interaction_fallback"] = True
         return best_episode

@@ -8,13 +8,15 @@ FINETUNE_ARTIFACTS="./artifacts/structured_world_model_quadruped_ros_finetune"
 INITIAL_EVAL="./artifacts/policy_eval_quadruped_initial"
 FINETUNE_EVAL="./artifacts/policy_eval_quadruped_ros_finetune"
 
+DATASET_WORKERS="512"
+
 ROBOT_DT="0.05"
-EXPERT_HORIZON_SECONDS="3.0"
-EXPERT_GOAL_PROGRESS_WEIGHT="1.8"
-EXPERT_HEADING_WEIGHT="0.6"
-EXPERT_CLEARANCE_WEIGHT="3.0"
-EXPERT_PATH_ADHERENCE_WEIGHT="1.0"
-EXPERT_VELOCITY_WEIGHT="0.3"
+EXPERT_HORIZON_SECONDS="1.0"
+EXPERT_GOAL_PROGRESS_WEIGHT="4.0"
+EXPERT_HEADING_WEIGHT="0.4"
+EXPERT_CLEARANCE_WEIGHT="1.2"
+EXPERT_PATH_ADHERENCE_WEIGHT="1.5"
+EXPERT_VELOCITY_WEIGHT="0.6"
 EXPERT_MIN_CLEARANCE_CLIP="0.05"
 
 ROS_MAX_ROBOT_PATH_DEVIATION="4.0"
@@ -24,7 +26,7 @@ POLICY_EVAL_PROGRESS_WEIGHT="1.5"
 POLICY_EVAL_HEADING_WEIGHT="0.5"
 POLICY_EVAL_PATH_WEIGHT="0.5"
 POLICY_EVAL_MIN_CLEARANCE_CLIP="0.02"
-POLICY_EVAL_HORIZON_STEPS="60"
+POLICY_EVAL_HORIZON_STEPS="20"
 
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/world_model_nav_mplconfig_${USER:-user}}"
 mkdir -p "${MPLCONFIGDIR}"
@@ -40,7 +42,7 @@ rm -rf \
 python3 -m sim2d.generate_data \
   --output_dir "${INITIAL_DATASET}" \
   --num_episodes 3000 \
-  --max_steps 500 \
+  --max_steps 1000 \
   --map_width 200 \
   --map_height 200 \
   --num_dynamic_obstacles 4 \
@@ -51,8 +53,10 @@ python3 -m sim2d.generate_data \
   --dynamic_obstacle_speed_max 0.6 \
   --no_lidar \
   --preview_every 50 \
-  --num_workers 256 \
+  --num_workers "${DATASET_WORKERS}" \
   --skip_quality_report \
+  --dynamic_interaction_resample_limit 80 \
+  --require_success \
   --expert_horizon_seconds "${EXPERT_HORIZON_SECONDS}" \
   --expert_goal_progress_weight "${EXPERT_GOAL_PROGRESS_WEIGHT}" \
   --expert_heading_weight "${EXPERT_HEADING_WEIGHT}" \
@@ -95,8 +99,10 @@ python3 -m sim2d.generate_data \
   --dynamic_obstacle_speed_max 0.6 \
   --no_lidar \
   --preview_every 50 \
-  --num_workers 256 \
+  --num_workers "${DATASET_WORKERS}" \
   --skip_quality_report \
+  --dynamic_interaction_resample_limit 80 \
+  --require_success \
   --max_robot_path_deviation "${ROS_MAX_ROBOT_PATH_DEVIATION}" \
   --max_robot_trajectory_path_ratio "${ROS_MAX_ROBOT_TRAJECTORY_PATH_RATIO}" \
   --expert_horizon_seconds "${EXPERT_HORIZON_SECONDS}" \
@@ -133,7 +139,7 @@ python3 run_policy_eval.py \
   --episode_source "${INITIAL_DATASET}" \
   --output_dir "${INITIAL_EVAL}" \
   --num_episodes 20 \
-  --max_steps 500 \
+  --max_steps 1000 \
   --robot_radius 0.4 \
   --robot_dt "${ROBOT_DT}" \
   --horizon "${POLICY_EVAL_HORIZON_STEPS}" \

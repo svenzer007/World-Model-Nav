@@ -91,6 +91,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_robot_path_deviation", type=float, default=None)
     parser.add_argument("--max_robot_trajectory_path_ratio", type=float, default=None)
     parser.add_argument("--dynamic_interaction_resample_limit", type=int, default=None)
+    parser.add_argument("--require_success", action="store_true")
     parser.add_argument("--robot_command_randomization", action="store_true")
     parser.add_argument("--robot_command_delay_min_steps", type=int, default=None)
     parser.add_argument("--robot_command_delay_max_steps", type=int, default=None)
@@ -293,6 +294,8 @@ def main() -> None:
         config.expert_config.min_clearance_clip = float(args.expert_min_clearance_clip)
     if args.dynamic_interaction_resample_limit is not None:
         config.dynamic_interaction_resample_limit = int(args.dynamic_interaction_resample_limit)
+    if args.require_success:
+        config.require_success = True
 
     output_dir = Path(config.output_dir)
     episodes_dir = output_dir / "episodes"
