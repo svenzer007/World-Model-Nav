@@ -23,6 +23,8 @@ python3 -m sim2d.generate_data \
   --output_dir "${INITIAL_DATASET}" \
   --num_episodes 3000 \
   --max_steps 250 \
+  --map_width 200 \
+  --map_height 200 \
   --num_dynamic_obstacles 4 \
   --robot_radius 0.4 \
   --dynamic_obstacle_radius 0.5 \

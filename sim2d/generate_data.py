@@ -74,6 +74,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--preview_every", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--map_yaml", type=str, default=None)
+    parser.add_argument("--map_width", type=int, default=None)
+    parser.add_argument("--map_height", type=int, default=None)
     parser.add_argument("--robot_radius", type=float, default=None)
     parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
     parser.add_argument("--dynamic_obstacle_radius", type=float, default=None)
@@ -133,6 +135,14 @@ def main() -> None:
     )
     if args.num_dynamic_obstacles is not None:
         config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
+    if args.map_width is not None:
+        if int(args.map_width) <= 0:
+            raise ValueError("--map_width must be positive")
+        config.map_config.width = int(args.map_width)
+    if args.map_height is not None:
+        if int(args.map_height) <= 0:
+            raise ValueError("--map_height must be positive")
+        config.map_config.height = int(args.map_height)
     if args.map_yaml is not None:
         config.map_config.map_yaml = str(args.map_yaml)
         config.map_config.min_start_goal_distance = 5.0
