@@ -827,14 +827,16 @@ def _run_controller_episode(
 
         dynamic_t = _snapshot_obstacles(dyn_obstacles)
         tracked_command = simulator._resolve_robot_command(
-            desired_v=float(decision["v"]),
+            desired_vx=float(decision["vx"]),
+            desired_vy=float(decision["vy"]),
             desired_omega=float(decision["omega"]),
             state=robot_command_state,
             rng=command_rng,
         )
         robot_pose_next = simulator._apply_action(
             robot_pose,
-            float(tracked_command["applied_v_t"]),
+            float(tracked_command["applied_vx_t"]),
+            float(tracked_command["applied_vy_t"]),
             float(tracked_command["applied_omega_t"]),
         )
         for obstacle in dyn_obstacles:
@@ -847,7 +849,10 @@ def _run_controller_episode(
             dynamic_obstacles_t=dynamic_t,
             dynamic_obstacles_t1=dynamic_t1,
             action_index=int(decision["action_index"]),
-            action_cont=np.array([float(decision["v"]), float(decision["omega"])], dtype=np.float32),
+            action_cont=np.array(
+                [float(decision["vx"]), float(decision["vy"]), float(decision["omega"])],
+                dtype=np.float32,
+            ),
             path_world=path_world,
         )
 
@@ -907,10 +912,16 @@ def _run_controller_episode(
                 "selected_subgoal_world": waypoint_now["selected_subgoal_world"].copy(),
                 "action_index": int(decision["action_index"]),
                 "action_name": str(decision["action_name"]),
-                "v": float(decision["v"]),
+                "vx": float(decision["vx"]),
+                "vy": float(decision["vy"]),
+                "v": float(decision["vx"]),
                 "omega": float(decision["omega"]),
-                "v_t": float(decision["v"]),
+                "wz": float(decision["omega"]),
+                "vx_t": float(decision["vx"]),
+                "vy_t": float(decision["vy"]),
+                "v_t": float(decision["vx"]),
                 "omega_t": float(decision["omega"]),
+                "wz_t": float(decision["omega"]),
                 **tracked_command,
                 "collision_t1": bool(static_collision or dynamic_collision),
                 "static_collision_t1": bool(static_collision),
@@ -997,8 +1008,11 @@ def _build_decision_log(episode: dict[str, object]) -> dict[str, object]:
                 "t": int(step["t"]),
                 "action_index": int(step["action_index"]),
                 "action_name": str(step["action_name"]),
-                "v": float(step["v"]),
+                "vx": float(step.get("vx", step.get("v", 0.0))),
+                "vy": float(step.get("vy", 0.0)),
+                "v": float(step.get("vx", step.get("v", 0.0))),
                 "omega": float(step["omega"]),
+                "wz": float(step.get("wz", step["omega"])),
                 "collision_t1": bool(step["collision_t1"]),
                 "static_collision_t1": bool(step["static_collision_t1"]),
                 "dynamic_collision_t1": bool(step["dynamic_collision_t1"]),
@@ -1022,7 +1036,8 @@ def _episode_result(episode: dict[str, object]) -> dict[str, object]:
         controller_debug = dict(step.get("controller_debug", {}))
         backward_cfg = dict(controller_debug.get("backward_policy_config", {}))
         backward_action_name = str(backward_cfg.get("backward_action_name", backward_action_name))
-        if str(step.get("action_name", "")) == backward_action_name:
+        action_name = str(step.get("action_name", ""))
+        if action_name == backward_action_name or action_name.startswith("backward_"):
             backward_selected_count += 1
         for candidate in list(controller_debug.get("candidates", [])):
             candidate_dict = dict(candidate)
@@ -1114,6 +1129,11 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
             backward_penalties.append(backward_penalty_value)
 
     total_actions = max(1, sum(action_counts.values()))
+    reverse_action_count = sum(
+        int(count)
+        for action_name, count in action_counts.items()
+        if action_name == backward_action_name or str(action_name).startswith("backward_")
+    )
     return {
         "num_episodes": int(n),
         "success_rate": float(success / n),
@@ -1127,7 +1147,7 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         "stop_fraction": _mean_finite(stop_fractions),
         "action_distribution": {action: float(count / total_actions) for action, count in sorted(action_counts.items())},
         "mean_score_components": {key: _mean_finite(values) for key, values in sorted(score_components.items())},
-        "backward_action_fraction": float(action_counts.get(backward_action_name, 0) / total_actions),
+        "backward_action_fraction": float(reverse_action_count / total_actions),
         "backward_selected_count": float(np.sum(backward_selected_counts)),
         "backward_gated_count": float(np.sum(backward_gated_counts)),
         "backward_allowed_count": float(np.sum(backward_allowed_counts)),
@@ -1204,11 +1224,16 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
         command_cfg.delay_min_steps = int(args.robot_command_delay_min_steps)
     if getattr(args, "robot_command_delay_max_steps", None) is not None:
         command_cfg.delay_max_steps = int(args.robot_command_delay_max_steps)
-    if getattr(args, "robot_command_v_gain_min", None) is not None or getattr(args, "robot_command_v_gain_max", None) is not None:
-        current_min, current_max = command_cfg.v_gain_range
-        gain_min = float(args.robot_command_v_gain_min) if args.robot_command_v_gain_min is not None else float(current_min)
-        gain_max = float(args.robot_command_v_gain_max) if args.robot_command_v_gain_max is not None else float(current_max)
-        command_cfg.v_gain_range = (gain_min, gain_max)
+    if getattr(args, "robot_command_vx_gain_min", None) is not None or getattr(args, "robot_command_vx_gain_max", None) is not None:
+        current_min, current_max = command_cfg.vx_gain_range
+        gain_min = float(args.robot_command_vx_gain_min) if args.robot_command_vx_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_vx_gain_max) if args.robot_command_vx_gain_max is not None else float(current_max)
+        command_cfg.vx_gain_range = (gain_min, gain_max)
+    if getattr(args, "robot_command_vy_gain_min", None) is not None or getattr(args, "robot_command_vy_gain_max", None) is not None:
+        current_min, current_max = command_cfg.vy_gain_range
+        gain_min = float(args.robot_command_vy_gain_min) if args.robot_command_vy_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_vy_gain_max) if args.robot_command_vy_gain_max is not None else float(current_max)
+        command_cfg.vy_gain_range = (gain_min, gain_max)
     if getattr(args, "robot_command_omega_gain_min", None) is not None or getattr(args, "robot_command_omega_gain_max", None) is not None:
         current_min, current_max = command_cfg.omega_gain_range
         gain_min = (
@@ -1222,15 +1247,22 @@ def _dataset_config_from_args(args: argparse.Namespace) -> DatasetConfig:
             else float(current_max)
         )
         command_cfg.omega_gain_range = (gain_min, gain_max)
-    if getattr(args, "robot_command_v_noise_std", None) is not None:
-        command_cfg.v_noise_std = float(args.robot_command_v_noise_std)
+    if getattr(args, "robot_command_vx_noise_std", None) is not None:
+        command_cfg.vx_noise_std = float(args.robot_command_vx_noise_std)
+    if getattr(args, "robot_command_vy_noise_std", None) is not None:
+        command_cfg.vy_noise_std = float(args.robot_command_vy_noise_std)
     if getattr(args, "robot_command_omega_noise_std", None) is not None:
         command_cfg.omega_noise_std = float(args.robot_command_omega_noise_std)
-    if getattr(args, "robot_command_v_clip_min", None) is not None or getattr(args, "robot_command_v_clip_max", None) is not None:
-        current_min, current_max = command_cfg.v_clip_range
-        clip_min = float(args.robot_command_v_clip_min) if args.robot_command_v_clip_min is not None else float(current_min)
-        clip_max = float(args.robot_command_v_clip_max) if args.robot_command_v_clip_max is not None else float(current_max)
-        command_cfg.v_clip_range = (clip_min, clip_max)
+    if getattr(args, "robot_command_vx_clip_min", None) is not None or getattr(args, "robot_command_vx_clip_max", None) is not None:
+        current_min, current_max = command_cfg.vx_clip_range
+        clip_min = float(args.robot_command_vx_clip_min) if args.robot_command_vx_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_vx_clip_max) if args.robot_command_vx_clip_max is not None else float(current_max)
+        command_cfg.vx_clip_range = (clip_min, clip_max)
+    if getattr(args, "robot_command_vy_clip_min", None) is not None or getattr(args, "robot_command_vy_clip_max", None) is not None:
+        current_min, current_max = command_cfg.vy_clip_range
+        clip_min = float(args.robot_command_vy_clip_min) if args.robot_command_vy_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_vy_clip_max) if args.robot_command_vy_clip_max is not None else float(current_max)
+        command_cfg.vy_clip_range = (clip_min, clip_max)
     if getattr(args, "robot_command_omega_clip_min", None) is not None or getattr(args, "robot_command_omega_clip_max", None) is not None:
         current_min, current_max = command_cfg.omega_clip_range
         clip_min = (
@@ -1255,6 +1287,7 @@ def _effective_runtime_action_indices(args: argparse.Namespace) -> tuple[int, ..
             action_index
             for action_index in action_indices
             if str(ACTIONS[int(action_index)]["name"]) != backward_name
+            and float(ACTIONS[int(action_index)]["vx"]) >= 0.0
         ]
     if not action_indices:
         raise ValueError("Runtime action filtering removed every action; check --disable_backward and action settings")
@@ -1384,8 +1417,11 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
                 {
                     "index": int(action_index),
                     "name": str(ACTIONS[int(action_index)]["name"]),
-                    "v": float(ACTIONS[int(action_index)]["v"]),
+                    "vx": float(ACTIONS[int(action_index)]["vx"]),
+                    "vy": float(ACTIONS[int(action_index)]["vy"]),
+                    "v": float(ACTIONS[int(action_index)]["vx"]),
                     "omega": float(ACTIONS[int(action_index)]["omega"]),
+                    "wz": float(ACTIONS[int(action_index)]["omega"]),
                 }
                 for action_index in controller_cfg.action_indices
             ],

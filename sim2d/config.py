@@ -9,13 +9,19 @@ import numpy as np
 
 
 ACTIONS: Dict[int, Dict[str, float | str]] = {
-    0: {"name": "stop", "v": 0.0, "omega": 0.0},
-    1: {"name": "forward", "v": 0.8, "omega": 0.0},
-    2: {"name": "forward_left", "v": 0.8, "omega": 1.0},
-    3: {"name": "forward_right", "v": 0.8, "omega": -1.0},
-    4: {"name": "slow_left", "v": 0.5, "omega": 1.0},
-    5: {"name": "slow_right", "v": 0.5, "omega": -1.0},
-    6: {"name": "backward", "v": -0.5, "omega": 0.0},
+    0: {"name": "stop", "vx": 0.0, "vy": 0.0, "omega": 0.0},
+    1: {"name": "forward", "vx": 0.8, "vy": 0.0, "omega": 0.0},
+    2: {"name": "backward", "vx": -0.4, "vy": 0.0, "omega": 0.0},
+    3: {"name": "strafe_left", "vx": 0.0, "vy": 0.4, "omega": 0.0},
+    4: {"name": "strafe_right", "vx": 0.0, "vy": -0.4, "omega": 0.0},
+    5: {"name": "forward_left", "vx": 0.6, "vy": 0.4, "omega": 0.0},
+    6: {"name": "forward_right", "vx": 0.6, "vy": -0.4, "omega": 0.0},
+    7: {"name": "backward_left", "vx": -0.4, "vy": 0.4, "omega": 0.0},
+    8: {"name": "backward_right", "vx": -0.4, "vy": -0.4, "omega": 0.0},
+    9: {"name": "rotate_left", "vx": 0.0, "vy": 0.0, "omega": 0.6},
+    10: {"name": "rotate_right", "vx": 0.0, "vy": 0.0, "omega": -0.6},
+    11: {"name": "forward_arc_left", "vx": 0.6, "vy": 0.0, "omega": 0.6},
+    12: {"name": "forward_arc_right", "vx": 0.6, "vy": 0.0, "omega": -0.6},
 }
 
 
@@ -47,12 +53,15 @@ class RobotCommandRandomizationConfig:
     enabled: bool = False
     delay_min_steps: int = 0
     delay_max_steps: int = 0
-    v_gain_range: tuple[float, float] = (1.0, 1.0)
+    vx_gain_range: tuple[float, float] = (1.0, 1.0)
+    vy_gain_range: tuple[float, float] = (1.0, 1.0)
     omega_gain_range: tuple[float, float] = (1.0, 1.0)
-    v_noise_std: float = 0.0
+    vx_noise_std: float = 0.0
+    vy_noise_std: float = 0.0
     omega_noise_std: float = 0.0
-    v_clip_range: tuple[float, float] = (-1.0, 1.0)
-    omega_clip_range: tuple[float, float] = (-1.5, 1.5)
+    vx_clip_range: tuple[float, float] = (-0.4, 0.8)
+    vy_clip_range: tuple[float, float] = (-0.4, 0.4)
+    omega_clip_range: tuple[float, float] = (-0.6, 0.6)
 
 
 @dataclass
@@ -144,8 +153,10 @@ def action_space_to_list() -> List[Dict[str, object]]:
         {
             "index": action_index,
             "name": action["name"],
-            "v": float(action["v"]),
+            "vx": float(action["vx"]),
+            "vy": float(action["vy"]),
             "omega": float(action["omega"]),
+            "wz": float(action["omega"]),
         }
         for action_index, action in ACTIONS.items()
     ]

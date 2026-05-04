@@ -205,7 +205,7 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         radii = np.asarray(steps[0]["dynamic_obstacle_radii"], dtype=np.float32)
 
         action_index = np.asarray([int(step["action_index"]) for step in steps], dtype=np.int64)
-        action_cont = np.asarray([[float(step["v_t"]), float(step["omega_t"])] for step in steps], dtype=np.float32)
+        action_cont = np.asarray([self._action_cont_from_step(step) for step in steps], dtype=np.float32)
         risk = np.asarray([float(step["dynamic_risk_t1"]) for step in steps], dtype=np.float32)
         collision_next = np.asarray([float(step["dynamic_collision_t1"]) for step in steps], dtype=np.float32)
         collision_within_3 = np.asarray([float(step["dynamic_collision_within_3"]) for step in steps], dtype=np.float32)
@@ -252,7 +252,7 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
             dtype=np.float32,
         )
         action_index = np.asarray([int(step["action_index"]) for step in steps], dtype=np.int64)
-        action_cont = np.asarray([[float(step["v_t"]), float(step["omega_t"])] for step in steps], dtype=np.float32)
+        action_cont = np.asarray([self._action_cont_from_step(step) for step in steps], dtype=np.float32)
         arrays: dict[str, object] = {
             "dt": dt_values,
             "radii": np.asarray(steps[0]["dynamic_obstacle_radii"], dtype=np.float32),
@@ -338,6 +338,13 @@ class StructuredSequenceDataset(Dataset[dict[str, object]]):
         if self.use_lidar:
             sample["lidar"] = torch.from_numpy(arrays["lidar"][start:stop])
         return sample
+
+    @staticmethod
+    def _action_cont_from_step(step: dict[str, object]) -> list[float]:
+        vx = float(step.get("vx_t", step.get("v_t", step.get("vx", step.get("v", 0.0)))))
+        vy = float(step.get("vy_t", step.get("vy", 0.0)))
+        omega = float(step.get("omega_t", step.get("wz_t", step.get("omega", step.get("wz", 0.0)))))
+        return [vx, vy, omega]
 
     @staticmethod
     def _cached_causal_world_velocity(

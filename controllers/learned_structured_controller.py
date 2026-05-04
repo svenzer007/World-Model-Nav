@@ -21,7 +21,7 @@ from controllers.baseline_structured_controller import (
 )
 from models import FACTOR_MODEL_TYPE, FACTOR_WORLD_MODEL_TYPE, StructuredDynamicsConfig, StructuredDynamicsModel, normalize_model_config
 from sim2d.config import ACTIONS, DatasetConfig
-from sim2d.dynamics import disk_collides_with_occupancy, minimum_static_clearance, unicycle_step
+from sim2d.dynamics import disk_collides_with_occupancy, holonomic_step, minimum_static_clearance
 from sim2d.obstacles import DynamicObstacle
 from sim2d.waypoint import compute_local_subgoal
 
@@ -138,8 +138,11 @@ class LearnedStructuredController:
         return {
             "action_index": int(chosen["action_index"]),
             "action_name": str(action["name"]),
-            "v": float(action["v"]),
+            "vx": float(action["vx"]),
+            "vy": float(action["vy"]),
+            "v": float(action["vx"]),
             "omega": float(action["omega"]),
+            "wz": float(action["omega"]),
             "debug": {
                 "mode": "learned_structured_rollout",
                 "horizon": int(self.controller_cfg.horizon),
@@ -289,12 +292,17 @@ class LearnedStructuredController:
         ).astype(np.float32)
 
         action_index_tensor = torch.tensor([int(action_index)], dtype=torch.long, device=self.device)
-        action_cont_tensor = torch.tensor([[float(action["v"]), float(action["omega"])]], dtype=torch.float32, device=self.device)
+        action_cont_tensor = torch.tensor(
+            [[float(action["vx"]), float(action["vy"]), float(action["omega"])]],
+            dtype=torch.float32,
+            device=self.device,
+        )
 
         for _ in range(int(self.controller_cfg.horizon)):
-            pose = unicycle_step(
+            pose = holonomic_step(
                 pose,
-                float(action["v"]),
+                float(action["vx"]),
+                float(action["vy"]),
                 float(action["omega"]),
                 float(self.config.robot_config.dt),
             )
@@ -403,15 +411,18 @@ class LearnedStructuredController:
             current_subgoal_world=np.asarray(current_subgoal_world, dtype=float),
             path_world=path_world,
             min_combined_clearance=float(np.min(combined_clearances)) if combined_clearances else float("inf"),
-            velocity_penalty=velocity_penalty_from_action(float(action["v"])),
+            velocity_penalty=velocity_penalty_from_action(float(action["vx"]), float(action["vy"])),
             feasible=feasible,
             controller_cfg=self.controller_cfg,
         )
         return {
             "action_index": int(action_index),
             "action_name": str(action["name"]),
-            "v": float(action["v"]),
+            "vx": float(action["vx"]),
+            "vy": float(action["vy"]),
+            "v": float(action["vx"]),
             "omega": float(action["omega"]),
+            "wz": float(action["omega"]),
             "total_cost_before_backward_penalty": float(score["total_cost"]),
             "total_cost_after_backward_penalty": float(score["total_cost"]),
             "total_cost": float(score["total_cost"]),

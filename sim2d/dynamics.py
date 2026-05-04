@@ -18,6 +18,19 @@ def unicycle_step(pose: Sequence[float], v: float, omega: float, dt: float) -> n
     return np.array([x_next, y_next, theta_next], dtype=float)
 
 
+def holonomic_step(pose: Sequence[float], vx: float, vy: float, omega: float, dt: float) -> np.ndarray:
+    """Advance a body-frame holonomic base command by one time step."""
+    x, y, theta = [float(value) for value in pose]
+    cos_theta = float(np.cos(theta))
+    sin_theta = float(np.sin(theta))
+    vx_world = float(vx) * cos_theta - float(vy) * sin_theta
+    vy_world = float(vx) * sin_theta + float(vy) * cos_theta
+    x_next = x + vx_world * float(dt)
+    y_next = y + vy_world * float(dt)
+    theta_next = wrap_angle(theta + float(omega) * float(dt))
+    return np.array([x_next, y_next, theta_next], dtype=float)
+
+
 def disk_collides_with_occupancy(
     position_xy: Sequence[float],
     radius: float,

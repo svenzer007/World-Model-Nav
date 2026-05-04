@@ -326,8 +326,11 @@ def build_timestep_debug_summary(episode: dict[str, object], timestep: int) -> d
         "chosen_action": {
             "action_index": int(step["action_index"]),
             "action_name": str(step["action_name"]),
-            "v": float(step["v"]),
+            "vx": float(step.get("vx", step.get("v", 0.0))),
+            "vy": float(step.get("vy", 0.0)),
+            "v": float(step.get("vx", step.get("v", 0.0))),
             "omega": float(step["omega"]),
+            "wz": float(step.get("wz", step["omega"])),
             "feasible": None if chosen_candidate is None else bool(chosen_candidate.get("feasible", False)),
         },
         "inflation_metadata": {

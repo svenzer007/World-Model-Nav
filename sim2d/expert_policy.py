@@ -12,8 +12,8 @@ from .config import ACTIONS, ExpertConfig, RobotConfig
 from .dynamics import (
     disk_collides_with_dynamic,
     disk_collides_with_occupancy,
+    holonomic_step,
     minimum_combined_clearance,
-    unicycle_step,
 )
 from .utils import distance_point_to_polyline, nearest_point_index, world_to_grid, wrap_angle
 
@@ -22,11 +22,20 @@ from .utils import distance_point_to_polyline, nearest_point_index, world_to_gri
 class ExpertDecision:
     action_index: int
     action_name: str
-    v: float
+    vx: float
+    vy: float
     omega: float
     expert_debug: dict[str, object]
     chosen_action_min_clearance: float
     emergency_override_used: bool
+
+    @property
+    def v(self) -> float:
+        return self.vx
+
+    @property
+    def wz(self) -> float:
+        return self.omega
 
 
 class DWAExpertPolicy:
@@ -87,7 +96,8 @@ class DWAExpertPolicy:
         return ExpertDecision(
             action_index=int(chosen["action_index"]),
             action_name=str(action["name"]),
-            v=float(action["v"]),
+            vx=float(action["vx"]),
+            vy=float(action["vy"]),
             omega=float(action["omega"]),
             expert_debug={
                 "candidates": candidate_logs,
@@ -125,7 +135,8 @@ class DWAExpertPolicy:
 
         true_map_one_step_collision, true_map_one_step_collision_reason = self._evaluate_true_map_one_step(
             pose=pose,
-            action_v=float(action["v"]),
+            action_vx=float(action["vx"]),
+            action_vy=float(action["vy"]),
             action_omega=float(action["omega"]),
             true_occupancy=true_occupancy,
             resolution=resolution,
@@ -134,7 +145,7 @@ class DWAExpertPolicy:
         )
 
         for step_index in range(self.config.rollout_steps):
-            pose = self._step_pose(pose, float(action["v"]), float(action["omega"]))
+            pose = self._step_pose(pose, float(action["vx"]), float(action["vy"]), float(action["omega"]))
             for obstacle in obstacles:
                 obstacle.step(self.robot_config.dt)
 
@@ -185,7 +196,7 @@ class DWAExpertPolicy:
         tangent_penalty = self._path_tangent_penalty(pose, path_world)
         clipped_clearance = max(min_clearance, self.config.min_clearance_clip)
         clearance_cost = 1.0 / clipped_clearance
-        velocity_cost = max(0.0, 0.4 - float(action["v"]))
+        velocity_cost = self._velocity_cost(float(action["vx"]), float(action["vy"]))
 
         total_score = (
             self.config.goal_progress_weight * goal_distance
@@ -200,8 +211,11 @@ class DWAExpertPolicy:
         return {
             "action_index": int(action_index),
             "action_name": str(action["name"]),
-            "v": float(action["v"]),
+            "vx": float(action["vx"]),
+            "vy": float(action["vy"]),
+            "v": float(action["vx"]),
             "omega": float(action["omega"]),
+            "wz": float(action["omega"]),
             "feasible": bool(feasible),
             "collision_reason": collision_reason,
             "goal_progress_cost": float(goal_distance),
@@ -224,13 +238,14 @@ class DWAExpertPolicy:
             "true_map_one_step_collision_reason": true_map_one_step_collision_reason,
         }
 
-    def _step_pose(self, pose: np.ndarray, v: float, omega: float) -> np.ndarray:
-        return unicycle_step(pose, v, omega, self.robot_config.dt)
+    def _step_pose(self, pose: np.ndarray, vx: float, vy: float, omega: float) -> np.ndarray:
+        return holonomic_step(pose, vx, vy, omega, self.robot_config.dt)
 
     def _evaluate_true_map_one_step(
         self,
         pose: np.ndarray,
-        action_v: float,
+        action_vx: float,
+        action_vy: float,
         action_omega: float,
         true_occupancy: np.ndarray,
         resolution: float,
@@ -238,7 +253,7 @@ class DWAExpertPolicy:
         dynamic_obstacles: Sequence[object],
     ) -> tuple[bool, str]:
         """Check whether one environment step would collide in the true map."""
-        next_pose = self._step_pose(pose, action_v, action_omega)
+        next_pose = self._step_pose(pose, action_vx, action_vy, action_omega)
         simulated_obstacles = [obstacle.clone() for obstacle in dynamic_obstacles]
         for obstacle in simulated_obstacles:
             obstacle.step(self.robot_config.dt)
@@ -275,3 +290,9 @@ class DWAExpertPolicy:
             return 0.0
         tangent_heading = math.atan2(float(tangent[1]), float(tangent[0]))
         return abs(wrap_angle(tangent_heading - float(pose[2])))
+
+    @staticmethod
+    def _velocity_cost(vx: float, vy: float) -> float:
+        translation_speed = float(np.hypot(float(vx), float(vy)))
+        reverse_cost = max(0.0, -float(vx))
+        return max(0.0, 0.4 - translation_speed) + reverse_cost

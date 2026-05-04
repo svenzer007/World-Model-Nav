@@ -91,14 +91,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--robot_command_randomization", action="store_true")
     parser.add_argument("--robot_command_delay_min_steps", type=int, default=None)
     parser.add_argument("--robot_command_delay_max_steps", type=int, default=None)
-    parser.add_argument("--robot_command_v_gain_min", type=float, default=None)
-    parser.add_argument("--robot_command_v_gain_max", type=float, default=None)
+    parser.add_argument("--robot_command_vx_gain_min", type=float, default=None)
+    parser.add_argument("--robot_command_vx_gain_max", type=float, default=None)
+    parser.add_argument("--robot_command_vy_gain_min", type=float, default=None)
+    parser.add_argument("--robot_command_vy_gain_max", type=float, default=None)
     parser.add_argument("--robot_command_omega_gain_min", type=float, default=None)
     parser.add_argument("--robot_command_omega_gain_max", type=float, default=None)
-    parser.add_argument("--robot_command_v_noise_std", type=float, default=None)
+    parser.add_argument("--robot_command_vx_noise_std", type=float, default=None)
+    parser.add_argument("--robot_command_vy_noise_std", type=float, default=None)
     parser.add_argument("--robot_command_omega_noise_std", type=float, default=None)
-    parser.add_argument("--robot_command_v_clip_min", type=float, default=None)
-    parser.add_argument("--robot_command_v_clip_max", type=float, default=None)
+    parser.add_argument("--robot_command_vx_clip_min", type=float, default=None)
+    parser.add_argument("--robot_command_vx_clip_max", type=float, default=None)
+    parser.add_argument("--robot_command_vy_clip_min", type=float, default=None)
+    parser.add_argument("--robot_command_vy_clip_max", type=float, default=None)
     parser.add_argument("--robot_command_omega_clip_min", type=float, default=None)
     parser.add_argument("--robot_command_omega_clip_max", type=float, default=None)
     parser.add_argument("--draw_lidar_in_gif", action="store_true")
@@ -150,7 +155,7 @@ def main() -> None:
         config.expert_config.action_indices = tuple(
             int(action_index)
             for action_index, action in ACTIONS.items()
-            if str(action["name"]) != "backward"
+            if str(action["name"]) != "backward" and float(action["vx"]) >= 0.0
         )
     if args.generate_lidar is not None:
         config.save_static_lidar = bool(args.generate_lidar)
@@ -195,11 +200,16 @@ def main() -> None:
         command_cfg.delay_min_steps = int(args.robot_command_delay_min_steps)
     if args.robot_command_delay_max_steps is not None:
         command_cfg.delay_max_steps = int(args.robot_command_delay_max_steps)
-    if args.robot_command_v_gain_min is not None or args.robot_command_v_gain_max is not None:
-        current_min, current_max = command_cfg.v_gain_range
-        gain_min = float(args.robot_command_v_gain_min) if args.robot_command_v_gain_min is not None else float(current_min)
-        gain_max = float(args.robot_command_v_gain_max) if args.robot_command_v_gain_max is not None else float(current_max)
-        command_cfg.v_gain_range = (gain_min, gain_max)
+    if args.robot_command_vx_gain_min is not None or args.robot_command_vx_gain_max is not None:
+        current_min, current_max = command_cfg.vx_gain_range
+        gain_min = float(args.robot_command_vx_gain_min) if args.robot_command_vx_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_vx_gain_max) if args.robot_command_vx_gain_max is not None else float(current_max)
+        command_cfg.vx_gain_range = (gain_min, gain_max)
+    if args.robot_command_vy_gain_min is not None or args.robot_command_vy_gain_max is not None:
+        current_min, current_max = command_cfg.vy_gain_range
+        gain_min = float(args.robot_command_vy_gain_min) if args.robot_command_vy_gain_min is not None else float(current_min)
+        gain_max = float(args.robot_command_vy_gain_max) if args.robot_command_vy_gain_max is not None else float(current_max)
+        command_cfg.vy_gain_range = (gain_min, gain_max)
     if args.robot_command_omega_gain_min is not None or args.robot_command_omega_gain_max is not None:
         current_min, current_max = command_cfg.omega_gain_range
         gain_min = (
@@ -213,15 +223,22 @@ def main() -> None:
             else float(current_max)
         )
         command_cfg.omega_gain_range = (gain_min, gain_max)
-    if args.robot_command_v_noise_std is not None:
-        command_cfg.v_noise_std = float(args.robot_command_v_noise_std)
+    if args.robot_command_vx_noise_std is not None:
+        command_cfg.vx_noise_std = float(args.robot_command_vx_noise_std)
+    if args.robot_command_vy_noise_std is not None:
+        command_cfg.vy_noise_std = float(args.robot_command_vy_noise_std)
     if args.robot_command_omega_noise_std is not None:
         command_cfg.omega_noise_std = float(args.robot_command_omega_noise_std)
-    if args.robot_command_v_clip_min is not None or args.robot_command_v_clip_max is not None:
-        current_min, current_max = command_cfg.v_clip_range
-        clip_min = float(args.robot_command_v_clip_min) if args.robot_command_v_clip_min is not None else float(current_min)
-        clip_max = float(args.robot_command_v_clip_max) if args.robot_command_v_clip_max is not None else float(current_max)
-        command_cfg.v_clip_range = (clip_min, clip_max)
+    if args.robot_command_vx_clip_min is not None or args.robot_command_vx_clip_max is not None:
+        current_min, current_max = command_cfg.vx_clip_range
+        clip_min = float(args.robot_command_vx_clip_min) if args.robot_command_vx_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_vx_clip_max) if args.robot_command_vx_clip_max is not None else float(current_max)
+        command_cfg.vx_clip_range = (clip_min, clip_max)
+    if args.robot_command_vy_clip_min is not None or args.robot_command_vy_clip_max is not None:
+        current_min, current_max = command_cfg.vy_clip_range
+        clip_min = float(args.robot_command_vy_clip_min) if args.robot_command_vy_clip_min is not None else float(current_min)
+        clip_max = float(args.robot_command_vy_clip_max) if args.robot_command_vy_clip_max is not None else float(current_max)
+        command_cfg.vy_clip_range = (clip_min, clip_max)
     if args.robot_command_omega_clip_min is not None or args.robot_command_omega_clip_max is not None:
         current_min, current_max = command_cfg.omega_clip_range
         clip_min = (

@@ -12,6 +12,7 @@ from .config import DatasetConfig, action_space_to_list
 from .dynamics import (
     disk_collides_with_dynamic,
     disk_collides_with_occupancy,
+    holonomic_step,
     minimum_dynamic_clearance,
     minimum_static_clearance,
 )
@@ -146,14 +147,16 @@ class EpisodeSimulator:
 
             dynamic_t = [obstacle.snapshot() for obstacle in dyn_obstacles]
             tracked_command = self._resolve_robot_command(
-                desired_v=decision.v,
+                desired_vx=decision.vx,
+                desired_vy=decision.vy,
                 desired_omega=decision.omega,
                 state=robot_command_state,
                 rng=episode_rng,
             )
             robot_pose_next = self._apply_action(
                 robot_pose,
-                float(tracked_command["applied_v_t"]),
+                float(tracked_command["applied_vx_t"]),
+                float(tracked_command["applied_vy_t"]),
                 float(tracked_command["applied_omega_t"]),
             )
             for obstacle in dyn_obstacles:
@@ -221,10 +224,16 @@ class EpisodeSimulator:
                     "goal_t": waypoint_now["goal_features"],
                     "action_index": int(decision.action_index),
                     "action_name": decision.action_name,
-                    "v": float(decision.v),
+                    "vx": float(decision.vx),
+                    "vy": float(decision.vy),
+                    "v": float(decision.vx),
                     "omega": float(decision.omega),
-                    "v_t": float(decision.v),
+                    "wz": float(decision.omega),
+                    "vx_t": float(decision.vx),
+                    "vy_t": float(decision.vy),
+                    "v_t": float(decision.vx),
                     "omega_t": float(decision.omega),
+                    "wz_t": float(decision.omega),
                     **tracked_command,
                     **lidar_fields_t1,
                     "goal_t1": waypoint_next["goal_features"],
@@ -502,10 +511,8 @@ class EpisodeSimulator:
             return start_pose, goal_xy
         return None, None
 
-    def _apply_action(self, robot_pose: np.ndarray, v: float, omega: float) -> np.ndarray:
-        from .dynamics import unicycle_step
-
-        return unicycle_step(robot_pose, v, omega, self.config.robot_config.dt)
+    def _apply_action(self, robot_pose: np.ndarray, vx: float, vy: float, omega: float) -> np.ndarray:
+        return holonomic_step(robot_pose, vx, vy, omega, self.config.robot_config.dt)
 
     def _build_robot_command_randomization_state(self, rng: np.random.Generator) -> dict[str, object]:
         """Sample per-episode command-tracking parameters and initialize delay history."""
@@ -514,12 +521,16 @@ class EpisodeSimulator:
             params = {
                 "enabled": False,
                 "delay_steps": 0,
-                "v_gain": 1.0,
+                "vx_gain": 1.0,
+                "vy_gain": 1.0,
                 "omega_gain": 1.0,
-                "v_noise_std": 0.0,
+                "vx_noise_std": 0.0,
+                "vy_noise_std": 0.0,
                 "omega_noise_std": 0.0,
-                "v_clip_min": float(cfg.v_clip_range[0]),
-                "v_clip_max": float(cfg.v_clip_range[1]),
+                "vx_clip_min": float(cfg.vx_clip_range[0]),
+                "vx_clip_max": float(cfg.vx_clip_range[1]),
+                "vy_clip_min": float(cfg.vy_clip_range[0]),
+                "vy_clip_max": float(cfg.vy_clip_range[1]),
                 "omega_clip_min": float(cfg.omega_clip_range[0]),
                 "omega_clip_max": float(cfg.omega_clip_range[1]),
             }
@@ -527,37 +538,44 @@ class EpisodeSimulator:
 
         delay_min = max(0, int(cfg.delay_min_steps))
         delay_max = max(delay_min, int(cfg.delay_max_steps))
-        v_gain_min, v_gain_max = self._validated_range("v_gain_range", cfg.v_gain_range)
+        vx_gain_min, vx_gain_max = self._validated_range("vx_gain_range", cfg.vx_gain_range)
+        vy_gain_min, vy_gain_max = self._validated_range("vy_gain_range", cfg.vy_gain_range)
         omega_gain_min, omega_gain_max = self._validated_range("omega_gain_range", cfg.omega_gain_range)
-        v_clip_min, v_clip_max = self._validated_range("v_clip_range", cfg.v_clip_range)
+        vx_clip_min, vx_clip_max = self._validated_range("vx_clip_range", cfg.vx_clip_range)
+        vy_clip_min, vy_clip_max = self._validated_range("vy_clip_range", cfg.vy_clip_range)
         omega_clip_min, omega_clip_max = self._validated_range("omega_clip_range", cfg.omega_clip_range)
         delay_steps = int(rng.integers(delay_min, delay_max + 1))
         params = {
             "enabled": True,
             "delay_steps": delay_steps,
-            "v_gain": float(rng.uniform(v_gain_min, v_gain_max)),
+            "vx_gain": float(rng.uniform(vx_gain_min, vx_gain_max)),
+            "vy_gain": float(rng.uniform(vy_gain_min, vy_gain_max)),
             "omega_gain": float(rng.uniform(omega_gain_min, omega_gain_max)),
-            "v_noise_std": max(0.0, float(cfg.v_noise_std)),
+            "vx_noise_std": max(0.0, float(cfg.vx_noise_std)),
+            "vy_noise_std": max(0.0, float(cfg.vy_noise_std)),
             "omega_noise_std": max(0.0, float(cfg.omega_noise_std)),
-            "v_clip_min": v_clip_min,
-            "v_clip_max": v_clip_max,
+            "vx_clip_min": vx_clip_min,
+            "vx_clip_max": vx_clip_max,
+            "vy_clip_min": vy_clip_min,
+            "vy_clip_max": vy_clip_max,
             "omega_clip_min": omega_clip_min,
             "omega_clip_max": omega_clip_max,
         }
-        history = [np.zeros(2, dtype=float) for _ in range(delay_steps)]
+        history = [np.zeros(3, dtype=float) for _ in range(delay_steps)]
         return {"params": params, "history": history}
 
     def _resolve_robot_command(
         self,
         *,
-        desired_v: float,
+        desired_vx: float,
+        desired_vy: float,
         desired_omega: float,
         state: dict[str, object],
         rng: np.random.Generator,
     ) -> dict[str, object]:
         """Convert desired velocity command into the delayed/noisy command applied to the robot."""
         params = dict(state["params"])
-        desired = np.array([float(desired_v), float(desired_omega)], dtype=float)
+        desired = np.array([float(desired_vx), float(desired_vy), float(desired_omega)], dtype=float)
         history = state.get("history", [])
         if bool(params["enabled"]) and int(params["delay_steps"]) > 0:
             delayed = np.asarray(history.pop(0), dtype=float)
@@ -566,33 +584,56 @@ class EpisodeSimulator:
             delayed = desired.copy()
 
         if bool(params["enabled"]):
-            v_noise = float(rng.normal(0.0, float(params["v_noise_std"])))
+            vx_noise = float(rng.normal(0.0, float(params["vx_noise_std"])))
+            vy_noise = float(rng.normal(0.0, float(params["vy_noise_std"])))
             omega_noise = float(rng.normal(0.0, float(params["omega_noise_std"])))
-            applied_v = float(delayed[0]) * float(params["v_gain"]) + v_noise
-            applied_omega = float(delayed[1]) * float(params["omega_gain"]) + omega_noise
+            applied_vx = float(delayed[0]) * float(params["vx_gain"]) + vx_noise
+            applied_vy = float(delayed[1]) * float(params["vy_gain"]) + vy_noise
+            applied_omega = float(delayed[2]) * float(params["omega_gain"]) + omega_noise
         else:
-            v_noise = 0.0
+            vx_noise = 0.0
+            vy_noise = 0.0
             omega_noise = 0.0
-            applied_v = float(delayed[0])
-            applied_omega = float(delayed[1])
+            applied_vx = float(delayed[0])
+            applied_vy = float(delayed[1])
+            applied_omega = float(delayed[2])
 
-        applied_v = float(np.clip(applied_v, float(params["v_clip_min"]), float(params["v_clip_max"])))
+        applied_vx = float(np.clip(applied_vx, float(params["vx_clip_min"]), float(params["vx_clip_max"])))
+        applied_vy = float(np.clip(applied_vy, float(params["vy_clip_min"]), float(params["vy_clip_max"])))
         applied_omega = float(np.clip(applied_omega, float(params["omega_clip_min"]), float(params["omega_clip_max"])))
         return {
+            "desired_vx_t": float(desired[0]),
+            "desired_vy_t": float(desired[1]),
             "desired_v_t": float(desired[0]),
-            "desired_omega_t": float(desired[1]),
+            "desired_omega_t": float(desired[2]),
+            "desired_wz_t": float(desired[2]),
+            "delayed_vx_t": float(delayed[0]),
+            "delayed_vy_t": float(delayed[1]),
             "delayed_v_t": float(delayed[0]),
-            "delayed_omega_t": float(delayed[1]),
-            "applied_v_t": applied_v,
+            "delayed_omega_t": float(delayed[2]),
+            "delayed_wz_t": float(delayed[2]),
+            "applied_vx_t": applied_vx,
+            "applied_vy_t": applied_vy,
+            "applied_v_t": applied_vx,
             "applied_omega_t": applied_omega,
-            "applied_action_cont": np.array([applied_v, applied_omega], dtype=np.float32),
+            "applied_wz_t": applied_omega,
+            "applied_action_cont": np.array([applied_vx, applied_vy, applied_omega], dtype=np.float32),
             "command_delay_steps": int(params["delay_steps"]),
-            "command_v_gain": float(params["v_gain"]),
+            "command_vx_gain": float(params["vx_gain"]),
+            "command_vy_gain": float(params["vy_gain"]),
+            "command_v_gain": float(params["vx_gain"]),
             "command_omega_gain": float(params["omega_gain"]),
-            "command_v_noise_t": v_noise,
+            "command_wz_gain": float(params["omega_gain"]),
+            "command_vx_noise_t": vx_noise,
+            "command_vy_noise_t": vy_noise,
+            "command_v_noise_t": vx_noise,
             "command_omega_noise_t": omega_noise,
-            "command_tracking_error_v_t": applied_v - float(desired[0]),
-            "command_tracking_error_omega_t": applied_omega - float(desired[1]),
+            "command_wz_noise_t": omega_noise,
+            "command_tracking_error_vx_t": applied_vx - float(desired[0]),
+            "command_tracking_error_vy_t": applied_vy - float(desired[1]),
+            "command_tracking_error_v_t": applied_vx - float(desired[0]),
+            "command_tracking_error_omega_t": applied_omega - float(desired[2]),
+            "command_tracking_error_wz_t": applied_omega - float(desired[2]),
             "command_randomization_enabled": bool(params["enabled"]),
         }
 

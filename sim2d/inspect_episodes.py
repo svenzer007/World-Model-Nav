@@ -18,14 +18,20 @@ from .visualize import save_episode_preview_png
 KNOWN_ACTIONS = (
     "stop",
     "forward",
+    "backward",
+    "strafe_left",
+    "strafe_right",
     "forward_left",
     "forward_right",
-    "slow_left",
-    "slow_right",
-    "backward",
+    "backward_left",
+    "backward_right",
+    "rotate_left",
+    "rotate_right",
+    "forward_arc_left",
+    "forward_arc_right",
 )
 
-TURNING_ACTIONS = {"forward_left", "forward_right", "slow_left", "slow_right"}
+TURNING_ACTIONS = {"rotate_left", "rotate_right", "forward_arc_left", "forward_arc_right"}
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -173,6 +179,8 @@ def _validate_v4_step_fields(episode: dict[str, object], step_index: int, step: 
     required = (
         "robot_pose_t",
         "robot_pose_t1",
+        "vx_t",
+        "vy_t",
         "v_t",
         "omega_t",
         "action_name",

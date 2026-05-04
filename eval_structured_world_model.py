@@ -89,7 +89,10 @@ def compute_action_sensitivity(
 
 def runtime_action_cont_values(model_type: str, eval_cfg: Mapping[str, Any]) -> list[list[float]] | None:
     if model_type == FACTOR_WORLD_MODEL_TYPE:
-        return [[float(action["v"]), float(action["omega"])] for _, action in sorted(ACTIONS.items())]
+        return [
+            [float(action["vx"]), float(action["vy"]), float(action["omega"])]
+            for _, action in sorted(ACTIONS.items())
+        ]
     values = eval_cfg.get("action_cont_values")
     return list(values) if values is not None else None
 

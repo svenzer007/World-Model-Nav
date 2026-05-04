@@ -1,0 +1,91 @@
+seed: 7
+
+data:
+  data_dir: ./dataset_quadruped_ros_map
+  train_fraction: 0.9
+  sequence_length: 20
+  stride: 4
+  tensor_cache: true
+  cache_episodes: true
+  preload_episode_cache: false
+
+model:
+  model_type: factorized_world_v3
+  num_dynamic_obstacles: 4
+  obstacle_feature_dim: 5
+  obstacle_embed_dim: 32
+  action_vocab_size: 13
+  action_embed_dim: 16
+  action_cont_dim: 3
+  goal_dim: 5
+  lidar_dim: 241
+  use_goal: true
+  use_lidar: false
+  goal_embed_dim: 32
+  lidar_embed_dim: 64
+  gru_hidden_dim: 128
+  gru_layers: 1
+  head_hidden_dim: 128
+  dropout: 0.0
+  delta_scale: 0.05
+
+training:
+  stage: stage2
+  batch_size: 512
+  epochs: 12
+  learning_rate: 0.00003
+  grad_clip_norm: 5.0
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 4
+  allow_tf32: true
+  float32_matmul_precision: high
+  device: auto
+  output_dir: ./artifacts/structured_world_model_quadruped_ros_finetune
+  init_checkpoint: ./artifacts/structured_world_model_quadruped_initial/best.pt
+  init_load_optimizer_state: false
+
+rollout:
+  enabled: true
+  eval_enabled: true
+  horizon: 3
+  curriculum:
+    - {horizon: 3, epochs: 3}
+    - {horizon: 6, epochs: 3}
+    - {horizon: 8, epochs: 3}
+    - {horizon: 10, epochs: 3}
+
+loss_weights:
+  lambda_delta: 1.0
+  lambda_rollout: 0.5
+
+sampler:
+  enabled: true
+  base_weight: 1.0
+  event_bonus: 2.0
+  risk_bonus: 2.0
+  low_clearance_bonus: 1.5
+  collision_bonus: 3.0
+  stop_downweight: 0.7
+  clearance_scale: 1.0
+  min_weight: 0.05
+  max_weight: 20.0
+
+evaluation:
+  threshold: 0.5
+  output_path: ./artifacts/structured_world_model_quadruped_ros_finetune/eval_metrics.json
+  action_cont_values:
+    - [0.0, 0.0, 0.0]
+    - [0.8, 0.0, 0.0]
+    - [-0.4, 0.0, 0.0]
+    - [0.0, 0.4, 0.0]
+    - [0.0, -0.4, 0.0]
+    - [0.6, 0.4, 0.0]
+    - [0.6, -0.4, 0.0]
+    - [-0.4, 0.4, 0.0]
+    - [-0.4, -0.4, 0.0]
+    - [0.0, 0.0, 0.6]
+    - [0.0, 0.0, -0.6]
+    - [0.6, 0.0, 0.6]
+    - [0.6, 0.0, -0.6]
