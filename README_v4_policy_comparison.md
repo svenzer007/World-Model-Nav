@@ -1,151 +1,105 @@
-# V4 Policy Comparison Simulator
+# World-Model Policy Comparison
 
-This runner compares two closed-loop controllers on identical sampled V4 scenarios:
+This README covers the comparison step for the current `world_model` workflow.
 
-- `baseline_structured`: analytic robot rollout plus true cloned dynamic-obstacle rollout
-- `learned_structured`: analytic robot rollout plus Version-C world-model-predicted obstacle world rollout, transformed into the rolled-out robot frame for scoring
+Policy comparison is a compare-two-output-dirs workflow:
 
-Both controllers use the same repeated-action candidate set:
+1. run `run_policy_eval.py` once for the first checkpoint or setting
+2. run `run_policy_eval.py` again for the second checkpoint or setting
+3. compare the two completed output directories with `compare_policy_eval_runs.py`
 
-- `stop`
-- `forward`
-- `forward_left`
-- `forward_right`
-- `slow_left`
-- `slow_right`
+For the full workflow, including simulator-default policy eval and saved-episode replay, see [README_v4_evaluation.md](./README_v4_evaluation.md).
 
-Each step evaluates every action repeated for `H` rollout steps, executes only the first action, and replans on the next simulator step.
+## Inputs
 
-Policy comparison now mirrors the dataset expert's feasibility-first selection rule:
+`compare_policy_eval_runs.py` takes:
 
-- prefer minimum-cost feasible non-stop action
-- else minimum-cost feasible action
-- else least-bad fallback over all actions
+- `--run_a`
+- `--run_b`
+- optional `--label_a`
+- optional `--label_b`
+- `--output_dir`
 
-Feasibility uses the inflated planning map together with static and dynamic collision checks over the rollout horizon.
-
-## Score
-
-Both controllers now use the same expert-aligned rollout score:
-
-```text
-total_cost =
-  w_progress * goal_progress_cost
-  + w_heading * heading_cost
-  + w_path * path_cost
-  + w_velocity * velocity_cost
-  + clearance_cost
-  + static_collision_penalty if not feasible else 0
-```
-
-Where:
-
-- `goal_progress_cost`: rollout endpoint distance to `current_subgoal_world`
-- `heading_cost`: rollout endpoint heading alignment to that same `current_subgoal_world`
-- `path_cost`: path distance plus path tangent penalty
-- `velocity_cost`: expert-style low-speed penalty `max(0, 0.4 - v)`
-- `clearance_cost`: `1 / max(min_combined_clearance, min_clearance_clip)`
-- `min_combined_clearance`: minimum over rollout of `min(static_clearance, dynamic_clearance)`
-
-Separate static and dynamic clearances are still logged for analysis, but action scoring now uses the single expert-style combined-clearance term. A non-feasible candidate gets exactly one infeasibility penalty. For backward-compatible CLI behavior that penalty uses `static_collision_penalty`; `dynamic_collision_penalty` is still accepted and logged, but it is not used in the expert-aligned total-cost formula.
-
-The default comparison horizon is `10`, which better matches the dataset expert's effective rollout horizon.
-
-## Frame Rules
-
-- Robot rollout: world frame
-- Static collision/clearance: world frame
-- Learned obstacle rollout state: world frame
-- Dynamic collision/clearance: robot-relative frame after transforming predicted obstacle world positions into the rolled-out robot frame
-
-The active `version_c_world_delta_v3` controller keeps obstacle prediction in the
-world frame and derives robot-relative geometry analytically for dynamic scoring.
-
-## Learned Rollout
-
-The learned controller loads a full structured-dynamics checkpoint, rejects `use_lidar=true`, and allows `use_goal=true`.
-
-Per rollout step:
-
-```text
-pos_world_next = pos_world_current + pred_delta_world
-vel_world_next = (pos_world_next - pos_world_current) / dt
-pos_rel_next = transform(pos_world_next, rolled_robot_pose)
-```
-
-Predicted obstacle world positions are rolled forward by the learned model.
-At each candidate rollout step they are transformed into the rolled robot frame,
-and dynamic collision checks use that derived robot-relative geometry.
-
-Hidden-state rules:
-
-- `h_real` is carried only across real executed simulator steps
-- each candidate gets a safe clone of `h_real`
-- rejected candidates never mutate `h_real`
-- `commit_step(...)` updates `h_real` only after execution using the true observed transition
-
-Hidden-state cloning helper supports:
-
-- `None`
-- tensor hidden state
-- tuple/list of tensors, including `(h_tensor,)`
-
-## Obstacle Ordering
-
-The learned controller fixes obstacle ordering by obstacle ID at episode start and reorders later observations to that canonical order. Missing, duplicated, or inconsistent IDs raise a clear error instead of silently corrupting per-obstacle dynamics.
-
-## Logging
-
-Both controllers log per step:
-
-- chosen action
-- candidate scores
-- score breakdown
-- robot rollout poses
-- static collision flags
-- dynamic collision flags
-- static clearance sequences
-- dynamic clearance sequences
-
-The learned controller also logs:
-
-- predicted obstacle positions over horizon in robot-frame scoring coordinates
-- predicted relative velocities in robot-frame scoring coordinates
-- predicted dynamic clearances
-- true horizon obstacle positions for analysis
-- true dynamic clearances for analysis
-- drift `||pos_rel_pred - pos_rel_true||`
-
-The only intended difference between controllers is future dynamic-obstacle rollout source:
-
-- `baseline_structured`: true cloned dynamic-obstacle rollout
-- `learned_structured`: Version-C world-model-predicted future obstacle world rollout, transformed into robot-relative geometry for scoring
-
-The learned controller still maintains real hidden state only through true executed transitions in `commit_step(...)`.
-
-## Smoke Run
+Example:
 
 ```bash
 cd /home/stavan/s4/rnl/world_model
-python run_policy_comparison_v4.py \
-  --num_episodes 2 \
-  --max_steps 80 \
-  --horizon 10 \
-  --checkpoint artifacts/structured_world_model_version_c_stage2/best.pt \
-  --output_dir artifacts/policy_comparison_v4_smoke \
-  --save_previews
+python compare_policy_eval_runs.py \
+  --run_a artifacts/policy_eval_h10_a \
+  --run_b artifacts/policy_eval_h10_b \
+  --label_a checkpoint_a \
+  --label_b checkpoint_b \
+  --output_dir artifacts/policy_eval_comparison_h10
 ```
 
-If your local checkpoint directory name differs, point `--checkpoint` at the available `best.pt`.
+## Expected Policy-Eval Run Layout
 
-## Debug Guidance
+Each input run directory should come from `run_policy_eval.py` and contain:
 
-Two useful checks:
+- `summary.json`
+- `episode_results/episode_*.json`
+- `decision_logs/episode_*.json`
+- learned-only: `rollout_error_stats_summary.json`
+- optional `rollout_error_stats/episode_*_rollout_error_stats.json`
+- optional visual artifacts
 
-1. Plot predicted vs true obstacle trajectories in robot frame over the rollout horizon.
-2. Plot mean `||pred - true||` drift versus horizon step.
+## Outputs
 
-Interpretation:
+The comparison utility writes:
 
-- drift exploding with horizon suggests model rollout weakness
-- small drift with poor avoidance suggests controller/scoring weakness
+- `comparison_summary.json`
+
+It also prints a short terminal summary for the main aggregate metrics.
+
+The comparison payload includes:
+
+- run labels and paths
+- checkpoint references when present
+- controller names
+- aggregate metric comparisons
+- action-distribution comparisons
+- mean score-component comparisons
+- rollout-error metric comparisons when both runs provide rollout summaries
+- per-episode deltas when both runs provide episode results
+
+## Compared Metrics
+
+The current comparison step includes:
+
+- success rate
+- dynamic collision rate
+- static collision rate
+- timeout rate
+- average path length
+- average progress
+- average min dynamic clearance
+- average min static clearance
+- stop fraction
+- action distribution
+- mean score components
+- learned rollout-error summary metrics when present
+
+## Relationship To Policy Eval
+
+`run_policy_eval.py` is the script that runs either:
+
+- `learned_structured`
+- `baseline_structured`
+
+`compare_policy_eval_runs.py` does not rerun the simulator or the controller. It compares two completed policy-eval outputs after the fact.
+
+## Action-Space Notes
+
+For the `world_model` branch, the canonical runtime action definition lives in:
+
+- `sim2d/config.py::ACTIONS`
+
+That is the normal single place to edit when you want to change the branch’s runtime action space again.
+
+For this branch:
+
+- policy eval candidate enumeration comes from the controllers, and both controllers derive candidates from `ACTIONS`
+- action names, action indices, and runtime `(v, omega)` values come from `ACTIONS`
+- `run_policy_eval.py --disable_backward` is a runtime-only filter on top of `ACTIONS`
+- the active `version_c_world_delta_v3` policy/runtime shell now follows the same canonical runtime action setup as `longer_horizons`
+- older or non-active offline-eval fallback paths still keep their own `action_vocab_size` / YAML fallback behavior where needed

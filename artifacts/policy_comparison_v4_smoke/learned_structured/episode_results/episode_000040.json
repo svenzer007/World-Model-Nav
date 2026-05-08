@@ -1,16 +1,16 @@
 {
   "controller": "learned_structured",
-  "done_reason": "dynamic_collision",
-  "dynamic_collision": true,
+  "done_reason": "timeout",
+  "dynamic_collision": false,
   "episode_id": 40,
-  "min_dynamic_clearance": -0.02565350734949165,
-  "min_static_clearance": 0.15314230329548112,
-  "num_steps": 118,
-  "robot_path_length": 4.0000000000000115,
+  "min_dynamic_clearance": 0.11270522574515746,
+  "min_static_clearance": 0.1406511856702256,
+  "num_steps": 250,
+  "robot_path_length": 5.58,
   "seed": 993421639,
   "static_collision": false,
-  "stop_fraction": 0.025423728813559324,
+  "stop_fraction": 0.292,
   "success": false,
-  "timeout": false,
-  "total_progress": 0.01532888412475586
+  "timeout": true,
+  "total_progress": -1.2140097618103027
 }

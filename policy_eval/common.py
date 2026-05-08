@@ -1,8 +1,7 @@
-"""Compare baseline and learned V4 structured controllers in closed-loop simulation."""
+"""Shared closed-loop policy-eval helpers for the world_model branch."""
 
 from __future__ import annotations
 
-import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -11,9 +10,8 @@ import numpy as np
 from tqdm import tqdm
 
 from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
-from controllers.learned_structured_controller import LearnedStructuredController
-from sim2d.config import DatasetConfig
-from sim2d.dataset import save_episode_pickle
+from sim2d.config import ACTIONS, DatasetConfig
+from sim2d.dataset import load_episode_pickle, save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
 from sim2d.maps import GeneratedMap
 from sim2d.obstacles import DynamicObstacle
@@ -21,33 +19,7 @@ from sim2d.simulator import EpisodeSimulator
 from sim2d.utils import euclidean, json_safe, path_length, save_json, seed_sequence
 from sim2d.visualize import save_episode_gif, save_episode_preview_png, save_episode_video
 from sim2d.waypoint import compute_local_subgoal
-
-
-def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_rollout_from_epoch_10/best.pt")
-    parser.add_argument("--output_dir", type=str, default="artifacts/policy_comparison_v4_h10")
-    parser.add_argument("--num_episodes", type=int, default=10)
-    parser.add_argument("--seed", type=int, default=1000)
-    parser.add_argument("--max_steps", type=int, default=200)
-    parser.add_argument("--num_dynamic_obstacles", type=int, default=None)
-    parser.add_argument("--device", type=str, default="auto")
-    parser.add_argument("--horizon", type=int, default=10)
-    parser.add_argument("--w_progress", type=float, default=2.0)
-    parser.add_argument("--w_heading", type=float, default=0.8)
-    parser.add_argument("--w_path", type=float, default=1.1)
-    parser.add_argument("--w_velocity", type=float, default=0.3)
-    parser.add_argument("--w_static", type=float, default=0.5)
-    parser.add_argument("--w_dynamic", type=float, default=2.0)
-    parser.add_argument("--static_collision_penalty", type=float, default=1e6)
-    parser.add_argument("--dynamic_collision_penalty", type=float, default=1e6)
-    parser.add_argument("--dynamic_risk_tau", type=float, default=0.5)
-    parser.add_argument("--min_clearance_clip", type=float, default=0.05)
-    parser.add_argument("--save_episodes", action="store_true")
-    parser.add_argument("--save_previews", action="store_true")
-    parser.add_argument("--save_gifs", action="store_true")
-    parser.add_argument("--save_videos", action="store_true")
-    return parser
+from .sources import resolve_episode_source_paths, scenario_from_saved_episode
 
 
 def _clone_map(map_bundle: GeneratedMap) -> GeneratedMap:
@@ -119,7 +91,7 @@ def _score_components_from_debug(chosen_debug: dict[str, object]) -> dict[str, f
 
 
 def _safe_action_family(action_name: str) -> str:
-    families = {"stop", "forward", "forward_left", "forward_right", "slow_left", "slow_right"}
+    families = {str(action["name"]) for action in ACTIONS.values()}
     return action_name if action_name in families else "unknown"
 
 
@@ -705,7 +677,7 @@ def _run_controller_episode(
     return {
         "episode_id": int(episode_id),
         "seed": int(seed),
-        "schema_version": "v4_policy_comparison_1",
+        "schema_version": "v4_policy_eval_episode_1",
         "controller": str(controller.name),
         "map_id": map_bundle.map_id,
         "map_type": map_bundle.map_type,
@@ -775,6 +747,27 @@ def _build_decision_log(episode: dict[str, object]) -> dict[str, object]:
 
 def _episode_result(episode: dict[str, object]) -> dict[str, object]:
     stats = episode["episode_stats"]
+    backward_selected_count = 0
+    backward_gated_count = 0
+    backward_allowed_count = 0
+    backward_penalties: list[float] = []
+    backward_action_name = "backward"
+    for step in episode["steps"]:
+        controller_debug = dict(step.get("controller_debug", {}))
+        backward_cfg = dict(controller_debug.get("backward_policy_config", {}))
+        backward_action_name = str(backward_cfg.get("backward_action_name", backward_action_name))
+        if str(step.get("action_name", "")) == backward_action_name:
+            backward_selected_count += 1
+        for candidate in list(controller_debug.get("candidates", [])):
+            candidate_dict = dict(candidate)
+            if not bool(candidate_dict.get("is_backward_action", False)):
+                continue
+            if bool(candidate_dict.get("backward_gated", False)):
+                backward_gated_count += 1
+            if bool(candidate_dict.get("backward_allowed", False)):
+                backward_allowed_count += 1
+            if bool(candidate_dict.get("backward_penalty_applied", False)):
+                backward_penalties.append(float(candidate_dict.get("backward_penalty_value", 0.0)))
     return {
         "episode_id": int(episode["episode_id"]),
         "seed": int(episode["seed"]),
@@ -790,6 +783,10 @@ def _episode_result(episode: dict[str, object]) -> dict[str, object]:
         "min_static_clearance": float(stats["min_static_clearance"]),
         "min_dynamic_clearance": float(stats["min_dynamic_clearance"]),
         "stop_fraction": float(stats["stop_fraction"]),
+        "backward_selected_count": int(backward_selected_count),
+        "backward_gated_count": int(backward_gated_count),
+        "backward_allowed_count": int(backward_allowed_count),
+        "average_backward_penalty_applied": _mean_finite(backward_penalties),
     }
 
 
@@ -822,6 +819,11 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
     progresses: list[float] = []
     min_dyn_clearances: list[float] = []
     min_static_clearances: list[float] = []
+    backward_selected_counts: list[float] = []
+    backward_gated_counts: list[float] = []
+    backward_allowed_counts: list[float] = []
+    backward_penalties: list[float] = []
+    backward_action_name = "backward"
 
     for episode in episodes:
         stats = episode["episode_stats"]
@@ -831,9 +833,18 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         progresses.append(float(stats["total_progress"]))
         min_dyn_clearances.append(float(stats["min_dynamic_clearance"]))
         min_static_clearances.append(float(stats["min_static_clearance"]))
+        backward_selected_counts.append(float(_episode_result(episode).get("backward_selected_count", 0)))
+        backward_gated_counts.append(float(_episode_result(episode).get("backward_gated_count", 0)))
+        backward_allowed_counts.append(float(_episode_result(episode).get("backward_allowed_count", 0)))
         for step in episode["steps"]:
+            backward_cfg = dict(step.get("controller_debug", {}).get("backward_policy_config", {}))
+            backward_action_name = str(backward_cfg.get("backward_action_name", backward_action_name))
             for key, value in step.get("score_components", {}).items():
                 score_components[str(key)].append(float(value))
+            for candidate in list(step.get("controller_debug", {}).get("candidates", [])):
+                candidate_dict = dict(candidate)
+                if bool(candidate_dict.get("is_backward_action", False)) and bool(candidate_dict.get("backward_penalty_applied", False)):
+                    backward_penalties.append(float(candidate_dict.get("backward_penalty_value", 0.0)))
 
     total_actions = max(1, sum(action_counts.values()))
     return {
@@ -849,6 +860,11 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         "stop_fraction": _mean_finite(stop_fractions),
         "action_distribution": {action: float(count / total_actions) for action, count in sorted(action_counts.items())},
         "mean_score_components": {key: _mean_finite(values) for key, values in sorted(score_components.items())},
+        "backward_action_fraction": float(action_counts.get(backward_action_name, 0) / total_actions),
+        "backward_selected_count": float(np.sum(backward_selected_counts)),
+        "backward_gated_count": float(np.sum(backward_gated_counts)),
+        "backward_allowed_count": float(np.sum(backward_allowed_counts)),
+        "average_backward_penalty_applied": _mean_finite(backward_penalties),
     }
 
 
@@ -857,12 +873,13 @@ def _save_episode_artifacts(
     output_dir: Path,
     vis_config: Any,
     *,
+    nest_by_controller: bool,
     save_episodes: bool,
     save_previews: bool,
     save_gifs: bool,
     save_videos: bool,
 ) -> None:
-    controller_dir = output_dir / str(episode["controller"])
+    controller_dir = output_dir / str(episode["controller"]) if nest_by_controller else output_dir
     stem = f"episode_{int(episode['episode_id']):06d}"
     save_json(controller_dir / "decision_logs" / f"{stem}.json", _build_decision_log(episode))
     save_json(controller_dir / "episode_results" / f"{stem}.json", _episode_result(episode))
@@ -879,19 +896,22 @@ def _save_episode_artifacts(
         save_episode_video(episode, controller_dir / "video" / f"{stem}.mp4", vis_config)
 
 
-def main() -> None:
-    args = build_arg_parser().parse_args()
-    output_dir = Path(args.output_dir)
-    checkpoint_path = Path(args.checkpoint)
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
+def _effective_runtime_action_indices(args: Any) -> tuple[int, ...]:
+    action_indices = [int(action_index) for action_index in ACTIONS]
+    if bool(getattr(args, "disable_backward", False)):
+        backward_name = str(getattr(args, "backward_action_name", "backward"))
+        action_indices = [
+            action_index
+            for action_index in action_indices
+            if str(ACTIONS[int(action_index)]["name"]) != backward_name
+        ]
+    if not action_indices:
+        raise ValueError("Runtime action filtering removed every action; check --disable_backward and action settings")
+    return tuple(action_indices)
 
-    config = DatasetConfig(num_episodes=int(args.num_episodes), seed=int(args.seed), max_steps=int(args.max_steps))
-    if args.num_dynamic_obstacles is not None:
-        config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
 
-    simulator = EpisodeSimulator(config)
-    controller_cfg = StructuredControllerConfig(
+def _controller_cfg_from_args(args: Any) -> StructuredControllerConfig:
+    return StructuredControllerConfig(
         horizon=int(args.horizon),
         w_progress=float(args.w_progress),
         w_heading=float(args.w_heading),
@@ -903,45 +923,153 @@ def main() -> None:
         dynamic_collision_penalty=float(args.dynamic_collision_penalty),
         dynamic_risk_tau=float(args.dynamic_risk_tau),
         min_clearance_clip=float(args.min_clearance_clip),
+        backward_penalty_enabled=bool(args.backward_penalty_enabled),
+        backward_action_name=str(args.backward_action_name),
+        backward_penalty=float(args.backward_penalty),
+        backward_gate_enabled=bool(args.backward_gate_enabled),
+        dynamic_stop_clearance_threshold=float(args.dynamic_stop_clearance_threshold),
+        backward_dynamic_margin=float(args.backward_dynamic_margin),
+        action_indices=_effective_runtime_action_indices(args),
     )
-    controllers = [
-        BaselineStructuredController(config, controller_cfg),
-        LearnedStructuredController(checkpoint_path, config, controller_cfg, device=str(args.device)),
-    ]
 
-    seeds = seed_sequence(int(args.seed), int(args.num_episodes))
-    all_episodes: dict[str, list[dict[str, object]]] = {controller.name: [] for controller in controllers}
 
-    for episode_id, seed in enumerate(tqdm(seeds, desc="policy comparison v4", dynamic_ncols=True)):
-        scenario = _sample_scenario(simulator, episode_id, seed)
-        for controller in controllers:
-            episode = _run_controller_episode(
-                simulator=simulator,
-                controller=controller,
-                scenario=_clone_scenario(scenario),
-                episode_id=episode_id,
-                seed=seed,
-            )
-            _save_episode_artifacts(
-                episode,
-                output_dir,
-                config.visualization_config,
-                save_episodes=bool(args.save_episodes),
-                save_previews=bool(args.save_previews),
-                save_gifs=bool(args.save_gifs),
-                save_videos=bool(args.save_videos),
-            )
-            all_episodes[controller.name].append(episode)
+def _dataset_config_from_args(args: Any) -> DatasetConfig:
+    resolved_num_episodes = int(args.num_episodes) if int(args.num_episodes) > 0 else 1
+    config = DatasetConfig(num_episodes=resolved_num_episodes, seed=int(args.seed), max_steps=int(args.max_steps))
+    if args.num_dynamic_obstacles is not None:
+        config.dynamic_obstacle_config.num_dynamic_obstacles = int(args.num_dynamic_obstacles)
+    if args.map_width is not None:
+        config.map_config.width = int(args.map_width)
+    if args.map_height is not None:
+        config.map_config.height = int(args.map_height)
+    return config
 
-    summary = {
-        "schema_version": "v4_policy_comparison_1",
-        "checkpoint": str(checkpoint_path),
-        "config": {
+
+def _validate_runtime_override_args(args: Any) -> None:
+    has_map_override = args.map_width is not None or args.map_height is not None
+    if getattr(args, "episode_source", None) and has_map_override:
+        raise ValueError(
+            "Map-size overrides are only supported for simulator-sampled policy eval; "
+            "saved-episode replay already uses map geometry from the episode pickle"
+        )
+
+
+def _build_policy_eval_controller(
+    *,
+    args: Any,
+    config: DatasetConfig,
+    controller_cfg: StructuredControllerConfig,
+) -> tuple[Any, str | None]:
+    controller_name = str(args.controller)
+    if controller_name == "baseline_structured":
+        return BaselineStructuredController(config, controller_cfg), None
+    if controller_name == "learned_structured":
+        checkpoint_path = Path(args.checkpoint)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
+        from controllers.learned_structured_controller import LearnedStructuredController
+
+        return LearnedStructuredController(checkpoint_path, config, controller_cfg, device=str(args.device)), str(checkpoint_path)
+    raise ValueError(f"Unsupported controller: {controller_name}")
+
+
+def _iter_policy_eval_sources(
+    *,
+    simulator: EpisodeSimulator,
+    args: Any,
+) -> tuple[list[tuple[int, int, dict[str, Any]]], dict[str, object]]:
+    episode_source_path = getattr(args, "episode_source", None)
+    if not episode_source_path:
+        seeds = seed_sequence(int(args.seed), int(args.num_episodes))
+        items = [
+            (episode_id, seed, _sample_scenario(simulator, episode_id, seed))
+            for episode_id, seed in enumerate(seeds)
+        ]
+        details = {
+            "mode": "simulator_sampled",
+            "seed": int(args.seed),
             "num_episodes": int(args.num_episodes),
+            "max_steps": int(args.max_steps),
+            "num_dynamic_obstacles": int(simulator.config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "map_width": int(simulator.config.map_config.width),
+            "map_height": int(simulator.config.map_config.height),
+        }
+        return items, details
+
+    episode_paths = resolve_episode_source_paths(episode_source_path)
+    requested = int(args.num_episodes)
+    if requested > 0:
+        episode_paths = episode_paths[:requested]
+    items: list[tuple[int, int, dict[str, Any]]] = []
+    for replay_index, episode_path in enumerate(episode_paths):
+        saved_episode = load_episode_pickle(episode_path)
+        episode_id = int(saved_episode.get("episode_id", replay_index))
+        seed = int(saved_episode.get("seed", replay_index))
+        items.append((episode_id, seed, scenario_from_saved_episode(saved_episode)))
+    details = {
+        "mode": "saved_episode_replay",
+        "path": str(Path(episode_source_path)),
+        "resolved_episode_count": int(len(items)),
+        "used_episode_files": [str(path) for path in episode_paths],
+        "num_requested": int(requested),
+    }
+    return items, details
+
+
+def run_policy_eval(args: Any) -> dict[str, object]:
+    output_dir = Path(args.output_dir)
+    _validate_runtime_override_args(args)
+    config = _dataset_config_from_args(args)
+    simulator = EpisodeSimulator(config)
+    controller_cfg = _controller_cfg_from_args(args)
+    controller, checkpoint_path = _build_policy_eval_controller(args=args, config=config, controller_cfg=controller_cfg)
+    source_items, episode_source_details = _iter_policy_eval_sources(simulator=simulator, args=args)
+    episodes: list[dict[str, object]] = []
+
+    for episode_id, seed, scenario in tqdm(source_items, desc="policy eval", dynamic_ncols=True):
+        episode = _run_controller_episode(
+            simulator=simulator,
+            controller=controller,
+            scenario=_clone_scenario(scenario),
+            episode_id=episode_id,
+            seed=seed,
+        )
+        _save_episode_artifacts(
+            episode,
+            output_dir,
+            config.visualization_config,
+            nest_by_controller=False,
+            save_episodes=bool(args.save_episodes),
+            save_previews=bool(args.save_previews),
+            save_gifs=bool(args.save_gifs),
+            save_videos=bool(args.save_videos),
+        )
+        episodes.append(episode)
+
+    aggregate = _aggregate_controller_episodes(episodes)
+    summary = {
+        "schema_version": "v4_policy_eval_1",
+        "controller": str(controller.name),
+        "episode_source": episode_source_details,
+        "config": {
+            "controller": str(args.controller),
+            "num_episodes": int(len(source_items)),
             "seed": int(args.seed),
             "max_steps": int(args.max_steps),
             "num_dynamic_obstacles": int(config.dynamic_obstacle_config.num_dynamic_obstacles),
+            "map_width": int(config.map_config.width),
+            "map_height": int(config.map_config.height),
             "horizon": int(args.horizon),
+            "disable_backward": bool(args.disable_backward),
+            "effective_runtime_actions": [
+                {
+                    "index": int(action_index),
+                    "name": str(ACTIONS[int(action_index)]["name"]),
+                    "v": float(ACTIONS[int(action_index)]["v"]),
+                    "omega": float(ACTIONS[int(action_index)]["omega"]),
+                }
+                for action_index in controller_cfg.action_indices
+            ],
             "weights": {
                 "progress": float(args.w_progress),
                 "heading": float(args.w_heading),
@@ -954,19 +1082,23 @@ def main() -> None:
             "dynamic_collision_penalty": float(args.dynamic_collision_penalty),
             "dynamic_risk_tau": float(args.dynamic_risk_tau),
             "min_clearance_clip": float(args.min_clearance_clip),
+            "backward_penalty_enabled": bool(args.backward_penalty_enabled),
+            "backward_penalty": float(args.backward_penalty),
+            "backward_gate_enabled": bool(args.backward_gate_enabled),
+            "dynamic_stop_clearance_threshold": float(args.dynamic_stop_clearance_threshold),
+            "backward_dynamic_margin": float(args.backward_dynamic_margin),
+            "backward_action_name": str(args.backward_action_name),
         },
-        "controllers": {name: _aggregate_controller_episodes(episodes) for name, episodes in all_episodes.items()},
-        "episodes": {name: [_episode_result(episode) for episode in episodes] for name, episodes in all_episodes.items()},
+        "aggregate": aggregate,
+        "episodes": [_episode_result(episode) for episode in episodes],
     }
+    if checkpoint_path is not None:
+        summary["checkpoint"] = str(checkpoint_path)
     save_json(output_dir / "summary.json", json_safe(summary))
-    learned_episodes = all_episodes.get("learned_structured", [])
-    if learned_episodes:
+    if episodes and str(controller.name) == "learned_structured":
         save_json(
-            output_dir / "learned_structured" / "rollout_error_stats_summary.json",
-            json_safe(_build_rollout_error_stats_from_episodes(learned_episodes)),
+            output_dir / "rollout_error_stats_summary.json",
+            json_safe(_build_rollout_error_stats_from_episodes(episodes)),
         )
-    print(json_safe(summary["controllers"]))
-
-
-if __name__ == "__main__":
-    main()
+    print(json_safe(summary["aggregate"]))
+    return summary

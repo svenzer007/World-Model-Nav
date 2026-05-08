@@ -100,7 +100,7 @@ python train_structured_world_model.py \
 
 ## Evaluation
 
-Evaluation focuses on world-frame delta metrics and rollout delta metrics.
+Offline model evaluation focuses on world-frame delta metrics and rollout delta metrics.
 
 Example:
 
@@ -110,6 +110,14 @@ python eval_structured_world_model.py \
   --config configs/structured_world_model_version_c_stage2.yaml \
   --checkpoint artifacts/structured_world_model_version_c_stage2/best.pt
 ```
+
+For the current closed-loop workflow after training:
+
+1. run `eval_structured_world_model.py`
+2. run `run_policy_eval.py` for either `learned_structured` or `baseline_structured`
+3. compare two completed policy-eval runs with `compare_policy_eval_runs.py` when needed
+
+See [README_v4_evaluation.md](./README_v4_evaluation.md) for the full supported evaluation workflow.
 
 ## Compatibility
 

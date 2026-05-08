@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from data.sequence_dataset import StructuredSequenceDataset, list_episode_paths, split_episode_paths
-from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, build_model, resolve_model_type
+from models import BASELINE_MODEL_TYPE, VERSION_C_MODEL_TYPE, VERSION_C_WORLD_DELTA_MODEL_VERSION, build_model, resolve_model_type
+from sim2d.config import ACTIONS
 from train_structured_world_model import (
     detach_recurrent_state,
     is_version_c_world_delta,
@@ -59,6 +60,27 @@ def compute_action_sensitivity(
     normalized = variance / (mean_norm + eps)
     valid = batch["valid_mask"].to(normalized.dtype)
     return torch.sum(normalized * valid) / torch.clamp(torch.sum(valid), min=1.0)
+
+
+def runtime_action_cont_values(
+    model_type: str,
+    model_version: str,
+    eval_cfg: Mapping[str, Any],
+) -> list[list[float]] | None:
+    if model_type == VERSION_C_MODEL_TYPE and model_version == VERSION_C_WORLD_DELTA_MODEL_VERSION:
+        return [[float(action["v"]), float(action["omega"])] for _, action in sorted(ACTIONS.items())]
+    values = eval_cfg.get("action_cont_values")
+    return list(values) if values is not None else None
+
+
+def action_sensitivity_vocab_size(
+    model_type: str,
+    model_version: str,
+    model_config: Mapping[str, Any],
+) -> int:
+    if model_type == VERSION_C_MODEL_TYPE and model_version == VERSION_C_WORLD_DELTA_MODEL_VERSION:
+        return len(ACTIONS)
+    return int(model_config.get("action_vocab_size", 6))
 
 
 def compute_rollout_delta_metrics_baseline(
@@ -272,8 +294,16 @@ def main() -> None:
                 compute_action_sensitivity(
                     model,
                     batch,
-                    int(model_config.get("action_vocab_size", 6)),
-                    eval_cfg.get("action_cont_values"),
+                    action_sensitivity_vocab_size(
+                        model_type,
+                        str(resolve_model_version(model_type, model_config)),
+                        model_config,
+                    ),
+                    runtime_action_cont_values(
+                        model_type,
+                        str(resolve_model_version(model_type, model_config)),
+                        eval_cfg,
+                    ),
                 )
                 .detach()
                 .cpu()

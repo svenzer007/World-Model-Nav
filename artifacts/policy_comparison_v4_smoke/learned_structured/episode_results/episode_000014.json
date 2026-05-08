@@ -3,14 +3,14 @@
   "done_reason": "dynamic_collision",
   "dynamic_collision": true,
   "episode_id": 14,
-  "min_dynamic_clearance": -0.009501155097587033,
-  "min_static_clearance": 0.21328424553740843,
-  "num_steps": 33,
-  "robot_path_length": 1.069999999999999,
+  "min_dynamic_clearance": -0.0027606188029921097,
+  "min_static_clearance": 0.24738383597741742,
+  "num_steps": 43,
+  "robot_path_length": 1.4449999999999978,
   "seed": 561382199,
   "static_collision": false,
   "stop_fraction": 0.0,
   "success": false,
   "timeout": false,
-  "total_progress": 0.006261229515075684
+  "total_progress": -0.19464147090911865
 }

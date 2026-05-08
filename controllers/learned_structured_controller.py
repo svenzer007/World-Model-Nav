@@ -10,8 +10,11 @@ import torch
 
 from controllers.baseline_structured_controller import (
     StructuredControllerConfig,
+    apply_backward_policy,
     dynamic_clearances_from_positions,
+    effective_runtime_actions,
     expert_style_rollout_cost,
+    _is_backward_candidate,
     planning_point_collision,
     robot_frame_points,
     velocity_penalty_from_action,
@@ -73,6 +76,8 @@ class LearnedStructuredController:
         if "model_state_dict" not in checkpoint:
             raise KeyError(f"{checkpoint_path} does not look like a full training checkpoint")
         model_cfg = dict(checkpoint.get("config", {}).get("model", {}))
+        runtime_max_action_index = max(int(action_index) for action_index in controller_cfg.action_indices)
+        checkpoint_action_vocab_size = int(model_cfg.get("action_vocab_size", len(ACTIONS)))
         checkpoint_model_type = checkpoint.get("model_type")
         self.model_type = str(checkpoint_model_type or resolve_model_type(model_cfg))
         if resolve_model_type(model_cfg) != self.model_type:
@@ -86,6 +91,17 @@ class LearnedStructuredController:
                     f"but config resolves to {model_cfg['model_version']!r}"
                 )
             model_cfg["model_version"] = checkpoint_model_version
+        resolved_model_version = str(model_cfg.get("model_version", ""))
+        active_world_delta_path = (
+            self.model_type == VERSION_C_MODEL_TYPE and resolved_model_version == VERSION_C_WORLD_DELTA_MODEL_VERSION
+        )
+        if runtime_max_action_index >= checkpoint_action_vocab_size and not active_world_delta_path:
+            raise ValueError(
+                f"Checkpoint {checkpoint_path} supports action indices in [0, {checkpoint_action_vocab_size - 1}], "
+                f"but runtime policy eval was configured with action index {runtime_max_action_index}. "
+                "This relaxed action-space compatibility is only enabled for the active "
+                f"{VERSION_C_WORLD_DELTA_MODEL_VERSION!r} path."
+            )
         if bool(model_cfg.get("use_lidar", False)):
             raise ValueError("learned structured controller does not support checkpoints with use_lidar=true")
         try:
@@ -103,7 +119,7 @@ class LearnedStructuredController:
             ) from exc
         self.model.eval()
         self.is_version_c = self.model_type == VERSION_C_MODEL_TYPE
-        self.model_version = str(model_cfg.get("model_version", ""))
+        self.model_version = resolved_model_version
         self.is_version_c_world = self.is_version_c and self.model_version == VERSION_C_WORLD_DELTA_MODEL_VERSION
         self.use_goal = bool(model_cfg.get("use_goal", True))
         self.h_real = None
@@ -146,8 +162,9 @@ class LearnedStructuredController:
                 dynamic_obstacles=ordered_obstacles,
                 current_state=current_state,
             )
-            for action_index in ACTIONS
+            for action_index in effective_runtime_actions(self.controller_cfg)
         ]
+        backward_debug = apply_backward_policy(candidates, self.controller_cfg)
         feasible_non_stop = [
             candidate for candidate in candidates if bool(candidate["feasible"]) and int(candidate["action_index"]) != 0
         ]
@@ -161,7 +178,8 @@ class LearnedStructuredController:
         else:
             chosen = min(candidates, key=lambda item: float(item["total_cost"]))
             selection_mode = "fallback_all"
-        action = ACTIONS[int(chosen["action_index"])]
+        backward_debug["backward_selected"] = bool(_is_backward_candidate(chosen, self.controller_cfg))
+        action = effective_runtime_actions(self.controller_cfg)[int(chosen["action_index"])]
         return {
             "action_index": int(chosen["action_index"]),
             "action_name": str(action["name"]),
@@ -185,6 +203,7 @@ class LearnedStructuredController:
                 "num_feasible_non_stop": int(len(feasible_non_stop)),
                 "num_feasible_all": int(len(feasible_all)),
                 "selection_mode": selection_mode,
+                **backward_debug,
                 "chosen": chosen,
                 "candidates": candidates,
             },
@@ -443,6 +462,8 @@ class LearnedStructuredController:
             "action_name": str(action["name"]),
             "v": float(action["v"]),
             "omega": float(action["omega"]),
+            "total_cost_before_backward_penalty": float(score["total_cost"]),
+            "total_cost_after_backward_penalty": float(score["total_cost"]),
             "total_cost": float(score["total_cost"]),
             "goal_progress_cost": float(score["goal_progress_cost"]),
             "heading_cost": float(score["heading_cost"]),
@@ -473,6 +494,12 @@ class LearnedStructuredController:
             "min_static_clearance": float(np.min(static_clearances)) if static_clearances else float("inf"),
             "min_dynamic_clearance": float(np.min(dynamic_clearances)) if dynamic_clearances else float("inf"),
             "min_combined_clearance": float(np.min(combined_clearances)) if combined_clearances else float("inf"),
+            "backward_penalty_applied": False,
+            "backward_penalty_value": 0.0,
+            "backward_gated": False,
+            "backward_allowed": True,
+            "backward_gate_reason": "not_backward_action",
+            "is_backward_action": bool(_is_backward_candidate({"action_name": str(action["name"])}, self.controller_cfg)),
         }
 
     def _current_state_for_decision(

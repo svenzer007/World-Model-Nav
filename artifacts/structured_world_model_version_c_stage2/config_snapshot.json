@@ -1,9 +1,5 @@
 {
-  "collision_pos_weights": {
-    "collision_next": 100.0,
-    "collision_within_3": 100.0,
-    "collision_within_5": 100.0
-  },
+  "collision_pos_weights": {},
   "config": {
     "data": {
       "data_dir": "./dataset",
@@ -42,16 +38,8 @@
       "threshold": 0.5
     },
     "loss_weights": {
-      "auto_pos_weight": true,
-      "collision_next_pos_weight_cap": 100.0,
-      "collision_within_3_pos_weight_cap": 100.0,
-      "collision_within_5_pos_weight_cap": 100.0,
-      "lambda_collision_next": 0.08,
-      "lambda_collision_within_3": 0.06,
-      "lambda_collision_within_5": 0.03,
       "lambda_delta": 1.0,
       "lambda_latent": 0.25,
-      "lambda_risk": 0.0,
       "lambda_rollout": 0.5
     },
     "model": {
@@ -66,31 +54,30 @@
       "hidden_dim": 128,
       "latent_dim": 64,
       "model_type": "structured_obstacle_rssm_vc",
-      "model_version": "version_c",
+      "model_version": "version_c_world_delta_v3",
       "num_dynamic_obstacles": 4,
       "obstacle_embed_dim": 48,
       "obstacle_feature_dim": 5,
-      "risk_head_enabled": false,
       "use_goal": true,
       "use_lidar": false
     },
     "rollout": {
       "curriculum": [
         {
-          "epochs": 4,
+          "epochs": 5,
           "horizon": 3
         },
         {
-          "epochs": 4,
-          "horizon": 5
+          "epochs": 5,
+          "horizon": 6
         },
         {
-          "epochs": 4,
-          "horizon": 7
+          "epochs": 3,
+          "horizon": 8
         },
         {
-          "epochs": 4,
-          "horizon": 9
+          "epochs": 17,
+          "horizon": 10
         }
       ],
       "enabled": true,
@@ -128,23 +115,23 @@
   "num_val_episodes": 20,
   "num_val_sequences": 2957,
   "resolved_model_type": "structured_obstacle_rssm_vc",
-  "resolved_model_version": "version_c",
+  "resolved_model_version": "version_c_world_delta_v3",
   "resolved_rollout_curriculum": [
     {
-      "epochs": 4,
+      "epochs": 5,
       "horizon": 3
     },
     {
-      "epochs": 4,
-      "horizon": 5
+      "epochs": 5,
+      "horizon": 6
     },
     {
-      "epochs": 4,
-      "horizon": 7
+      "epochs": 3,
+      "horizon": 8
     },
     {
-      "epochs": 4,
-      "horizon": 9
+      "epochs": 17,
+      "horizon": 10
     }
   ],
   "resolved_training_stage": "stage2"

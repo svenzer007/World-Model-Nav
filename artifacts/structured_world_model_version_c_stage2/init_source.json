@@ -1,24 +1,21 @@
 {
   "active_rollout_horizon": 0,
-  "init_checkpoint_best_val_loss": 0.03362754153761458,
+  "init_checkpoint_best_val_loss": 0.0032278857394517895,
   "init_checkpoint_epoch": 9,
   "init_checkpoint_metrics": {
-    "delta_mae": 0.003150407626154892,
-    "delta_rmse": 0.004639077426350498,
-    "latent_mae": 0.10347026665794089,
-    "loss_collision_next": 0.011114120316941556,
-    "loss_collision_within_3": 0.03960054269446892,
-    "loss_collision_within_5": 0.0735261705146726,
-    "loss_delta": 0.005364719790683941,
-    "loss_latent": 0.0911674994103452,
-    "loss_total": 0.03362754153761458,
-    "loss_total_one_step": 0.03362754153761458
+    "delta_mae": 0.0011463105527466124,
+    "delta_rmse": 0.002930299593185253,
+    "latent_mae": 0.021697366174231184,
+    "loss_delta": 0.0019411623042616794,
+    "loss_latent": 0.005146893808875788,
+    "loss_total": 0.0032278857394517895,
+    "loss_total_one_step": 0.0032278857394517895
   },
   "init_checkpoint_path": "artifacts/structured_world_model_version_c_stage1/best.pt",
   "model_type": "structured_obstacle_rssm_vc",
-  "model_version": "version_c",
+  "model_version": "version_c_world_delta_v3",
   "new_output_dir": "artifacts/structured_world_model_version_c_stage2",
   "optimizer_state_loaded": false,
-  "timestamp": "2026-04-25T06:35:05.610124+00:00",
+  "timestamp": "2026-04-30T22:54:52.848697+00:00",
   "training_stage": "stage1"
 }
