@@ -10,12 +10,12 @@ import numpy as np
 
 ACTIONS: Dict[int, Dict[str, float | str]] = {
     0: {"name": "stop", "v": 0.0, "omega": 0.0},
-    1: {"name": "forward", "v": 0.8, "omega": 0.0},
-    2: {"name": "forward_left", "v": 0.8, "omega": 1.0},
-    3: {"name": "forward_right", "v": 0.8, "omega": -1.0},
-    4: {"name": "slow_left", "v": 0.5, "omega": 1.0},
-    5: {"name": "slow_right", "v": 0.5, "omega": -1.0},
-    6: {"name": "backward", "v": -0.5, "omega": 0.0},
+    1: {"name": "forward", "v": 0.4, "omega": 0.0},
+    2: {"name": "forward_left", "v": 0.4, "omega": 1.0},
+    3: {"name": "forward_right", "v": 0.4, "omega": -1.0},
+    4: {"name": "slow_left", "v": 0.2, "omega": 1.0},
+    5: {"name": "slow_right", "v": 0.2, "omega": -1.0},
+    6: {"name": "backward", "v": -0.2, "omega": 0.0},
 }
 
 
