@@ -11,6 +11,7 @@ import numpy as np
 from tqdm import tqdm
 
 from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
+from controllers.cbf_qp_controller import CBFQPController, CBFQPControllerConfig
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dataset import load_episode_pickle, save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
@@ -72,7 +73,13 @@ def _step_action_histogram(steps: list[dict[str, object]]) -> dict[str, int]:
 def _episode_stop_fraction(steps: list[dict[str, object]]) -> float:
     if not steps:
         return 0.0
-    return float(sum(int(step["action_index"]) == 0 for step in steps) / len(steps))
+    return float(
+        sum(
+            int(step["action_index"]) == 0 or str(step.get("action_name", "")) == "stop"
+            for step in steps
+        )
+        / len(steps)
+    )
 
 
 def _score_components_from_debug(chosen_debug: dict[str, object]) -> dict[str, float]:
@@ -88,6 +95,8 @@ def _score_components_from_debug(chosen_debug: dict[str, object]) -> dict[str, f
 
 def _safe_action_family(action_name: str) -> str:
     families = {str(action["name"]) for action in ACTIONS.values()}
+    if action_name == "cbf_qp":
+        return "cbf_qp"
     return action_name if action_name in families else "unknown"
 
 
@@ -1045,6 +1054,45 @@ def _mean_finite(values: list[float]) -> float:
     return float(np.mean(finite)) if finite else float("nan")
 
 
+def _continuous_command_summary(episodes: list[dict[str, object]]) -> dict[str, float] | None:
+    if not episodes or str(episodes[0].get("controller", "")) != "cbf_qp":
+        return None
+    v_values: list[float] = []
+    omega_values: list[float] = []
+    abs_v_values: list[float] = []
+    abs_omega_values: list[float] = []
+    fallback_flags: list[float] = []
+    control_deviation_norms: list[float] = []
+    cbf_margins: list[float] = []
+    interval_widths: list[float] = []
+    for episode in episodes:
+        for step in episode["steps"]:
+            controller_debug = dict(step.get("controller_debug", {}))
+            v_value = float(step.get("v", 0.0))
+            omega_value = float(step.get("omega", 0.0))
+            v_values.append(v_value)
+            omega_values.append(omega_value)
+            abs_v_values.append(abs(v_value))
+            abs_omega_values.append(abs(omega_value))
+            fallback_flags.append(float(bool(controller_debug.get("qp_fallback_used", False))))
+            control_deviation_norms.append(float(controller_debug.get("control_deviation_norm", float("nan"))))
+            cbf_margins.append(float(controller_debug.get("min_hdot_plus_alpha_h", float("nan"))))
+            lower = float(controller_debug.get("v_feasible_lower", float("nan")))
+            upper = float(controller_debug.get("v_feasible_upper", float("nan")))
+            interval_widths.append(float(upper - lower) if np.isfinite(lower) and np.isfinite(upper) else float("nan"))
+    return {
+        "mean_v": _mean_finite(v_values),
+        "mean_omega": _mean_finite(omega_values),
+        "mean_abs_v": _mean_finite(abs_v_values),
+        "mean_abs_omega": _mean_finite(abs_omega_values),
+        "stop_fraction": _mean_finite([float(episode["episode_stats"]["stop_fraction"]) for episode in episodes]),
+        "fallback_fraction": _mean_finite(fallback_flags),
+        "average_control_deviation_norm": _mean_finite(control_deviation_norms),
+        "average_cbf_margin": _mean_finite(cbf_margins),
+        "average_v_feasible_interval_width": _mean_finite(interval_widths),
+    }
+
+
 def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[str, object]:
     if not episodes:
         return {
@@ -1098,7 +1146,7 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
             backward_penalties.append(backward_penalty_value)
 
     total_actions = max(1, sum(action_counts.values()))
-    return {
+    aggregate = {
         "num_episodes": int(n),
         "success_rate": float(success / n),
         "dynamic_collision_rate": float(dynamic_collisions / n),
@@ -1117,6 +1165,10 @@ def _aggregate_controller_episodes(episodes: list[dict[str, object]]) -> dict[st
         "backward_allowed_count": float(np.sum(backward_allowed_counts)),
         "average_backward_penalty_applied": _mean_finite(backward_penalties),
     }
+    continuous_summary = _continuous_command_summary(episodes)
+    if continuous_summary is not None:
+        aggregate["continuous_command_summary"] = continuous_summary
+    return aggregate
 
 
 def _save_episode_artifacts(
@@ -1141,9 +1193,18 @@ def _save_episode_artifacts(
         save_episode_pickle(episode, controller_dir / "episodes" / f"{stem}.pkl")
     if save_previews:
         save_episode_preview_png(episode, controller_dir / "preview" / f"{stem}.png", vis_config)
-    if save_gifs:
+    controller_name = str(episode["controller"])
+    cbf_redirected_gif_to_video = False
+    if controller_name == "cbf_qp" and save_gifs:
+        print(
+            f"Info: redirecting cbf_qp GIF export for {stem} to MP4 video export",
+            flush=True,
+        )
+        save_episode_video(episode, controller_dir / "video" / f"{stem}.mp4", vis_config)
+        cbf_redirected_gif_to_video = True
+    elif save_gifs:
         save_episode_gif(episode, controller_dir / "gif" / f"{stem}.gif", vis_config)
-    if save_videos:
+    if save_videos and not (controller_name == "cbf_qp" and cbf_redirected_gif_to_video):
         save_episode_video(episode, controller_dir / "video" / f"{stem}.mp4", vis_config)
 
 
@@ -1167,6 +1228,44 @@ def _controller_cfg_from_args(args: argparse.Namespace) -> StructuredControllerC
         dynamic_stop_clearance_threshold=float(args.dynamic_stop_clearance_threshold),
         backward_dynamic_margin=float(args.backward_dynamic_margin),
         action_indices=_effective_runtime_action_indices(args),
+    )
+
+
+def _cbf_controller_cfg_from_args(args: argparse.Namespace) -> CBFQPControllerConfig:
+    omega_candidates = tuple(
+        float(token.strip())
+        for token in str(args.cbf_omega_candidates).split(",")
+        if token.strip()
+    )
+    if not omega_candidates:
+        raise ValueError("cbf_omega_candidates must contain at least one numeric omega candidate")
+    return CBFQPControllerConfig(
+        horizon=int(args.horizon),
+        cbf_omega_scan_enabled=bool(args.cbf_omega_scan_enabled),
+        cbf_omega_candidates=omega_candidates,
+        cbf_static_rollout_steps=int(args.cbf_static_rollout_steps),
+        cbf_heading_lookahead_enabled=bool(args.cbf_heading_lookahead_enabled),
+        cbf_heading_lookahead_time=float(args.cbf_heading_lookahead_time),
+        cbf_dynamic_margin_priority_enabled=False,
+        cbf_margin_priority_use_margin_trigger=bool(args.cbf_margin_priority_use_margin_trigger),
+        cbf_margin_priority_threshold=float(args.cbf_margin_priority_threshold),
+        cbf_margin_priority_use_distance_trigger=bool(args.cbf_margin_priority_use_distance_trigger),
+        cbf_dynamic_priority_distance_threshold=float(args.cbf_dynamic_priority_distance_threshold),
+        cbf_alpha=float(args.cbf_alpha),
+        cbf_safety_margin=float(args.cbf_safety_margin),
+        cbf_k_v=float(args.cbf_k_v),
+        cbf_k_omega=float(args.cbf_k_omega),
+        cbf_w_v=float(args.cbf_w_v),
+        cbf_w_omega=float(args.cbf_w_omega),
+        cbf_v_min=float(args.cbf_v_min),
+        cbf_v_max=float(args.cbf_v_max),
+        cbf_omega_min=float(args.cbf_omega_min),
+        cbf_omega_max=float(args.cbf_omega_max),
+        cbf_constraint_eps=float(args.cbf_constraint_eps),
+        cbf_use_reverse_fallback=bool(args.cbf_use_reverse_fallback),
+        cbf_reverse_fallback_speed=float(args.cbf_reverse_fallback_speed),
+        cbf_debug=bool(args.cbf_debug),
+        score_cfg=_controller_cfg_from_args(args),
     )
 
 
@@ -1209,12 +1308,20 @@ def _build_policy_eval_controller(
     *,
     args: argparse.Namespace,
     config: DatasetConfig,
-    controller_cfg: StructuredControllerConfig,
+    controller_cfg: object,
 ) -> tuple[Any, str | None]:
     controller_name = str(args.controller)
     if controller_name == "baseline_structured":
+        if not isinstance(controller_cfg, StructuredControllerConfig):
+            raise TypeError("baseline_structured requires StructuredControllerConfig")
         return BaselineStructuredController(config, controller_cfg), None
+    if controller_name == "cbf_qp":
+        if not isinstance(controller_cfg, CBFQPControllerConfig):
+            raise TypeError("cbf_qp requires CBFQPControllerConfig")
+        return CBFQPController(config, controller_cfg), None
     if controller_name == "learned_structured":
+        if not isinstance(controller_cfg, StructuredControllerConfig):
+            raise TypeError("learned_structured requires StructuredControllerConfig")
         checkpoint_path = Path(args.checkpoint)
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Structured model checkpoint not found: {checkpoint_path}")
@@ -1272,7 +1379,10 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     _validate_runtime_override_args(args)
     config = _dataset_config_from_args(args)
     simulator = EpisodeSimulator(config)
-    controller_cfg = _controller_cfg_from_args(args)
+    if str(args.controller) == "cbf_qp":
+        controller_cfg: object = _cbf_controller_cfg_from_args(args)
+    else:
+        controller_cfg = _controller_cfg_from_args(args)
     controller, checkpoint_path = _build_policy_eval_controller(args=args, config=config, controller_cfg=controller_cfg)
     source_items, episode_source_details = _iter_policy_eval_sources(simulator=simulator, args=args)
     episodes: list[dict[str, object]] = []
@@ -1312,15 +1422,6 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "map_height": int(config.map_config.height),
             "horizon": int(args.horizon),
             "disable_backward": bool(args.disable_backward),
-            "effective_runtime_actions": [
-                {
-                    "index": int(action_index),
-                    "name": str(ACTIONS[int(action_index)]["name"]),
-                    "v": float(ACTIONS[int(action_index)]["v"]),
-                    "omega": float(ACTIONS[int(action_index)]["omega"]),
-                }
-                for action_index in controller_cfg.action_indices
-            ],
             "weights": {
                 "progress": float(args.w_progress),
                 "heading": float(args.w_heading),
@@ -1343,6 +1444,45 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
         "aggregate": aggregate,
         "episodes": [_episode_result(episode) for episode in episodes],
     }
+    if isinstance(controller_cfg, StructuredControllerConfig):
+        summary["config"]["effective_runtime_actions"] = [
+            {
+                "index": int(action_index),
+                "name": str(ACTIONS[int(action_index)]["name"]),
+                "v": float(ACTIONS[int(action_index)]["v"]),
+                "omega": float(ACTIONS[int(action_index)]["omega"]),
+            }
+            for action_index in controller_cfg.action_indices
+        ]
+    if isinstance(controller_cfg, CBFQPControllerConfig):
+        summary["config"]["continuous_command_controller"] = True
+        summary["config"]["continuous_command_category"] = "cbf_qp"
+        summary["config"]["cbf"] = {
+            "alpha": float(controller_cfg.cbf_alpha),
+            "safety_margin": float(controller_cfg.cbf_safety_margin),
+            "k_v": float(controller_cfg.cbf_k_v),
+            "k_omega": float(controller_cfg.cbf_k_omega),
+            "w_v": float(controller_cfg.cbf_w_v),
+            "w_omega": float(controller_cfg.cbf_w_omega),
+            "omega_scan_enabled": bool(controller_cfg.cbf_omega_scan_enabled),
+            "omega_candidates": [float(value) for value in controller_cfg.cbf_omega_candidates],
+            "static_rollout_steps": int(controller_cfg.cbf_static_rollout_steps),
+            "heading_lookahead_enabled": bool(controller_cfg.cbf_heading_lookahead_enabled),
+            "heading_lookahead_time": float(controller_cfg.cbf_heading_lookahead_time),
+            "dynamic_margin_priority_enabled_deprecated": bool(controller_cfg.cbf_dynamic_margin_priority_enabled),
+            "margin_priority_use_margin_trigger": bool(controller_cfg.cbf_margin_priority_use_margin_trigger),
+            "margin_priority_threshold": float(controller_cfg.cbf_margin_priority_threshold),
+            "margin_priority_use_distance_trigger": bool(controller_cfg.cbf_margin_priority_use_distance_trigger),
+            "dynamic_priority_distance_threshold": float(controller_cfg.cbf_dynamic_priority_distance_threshold),
+            "v_min": float(controller_cfg.cbf_v_min),
+            "v_max": float(controller_cfg.cbf_v_max),
+            "omega_min": float(controller_cfg.cbf_omega_min),
+            "omega_max": float(controller_cfg.cbf_omega_max),
+            "constraint_eps": float(controller_cfg.cbf_constraint_eps),
+            "use_reverse_fallback": bool(controller_cfg.cbf_use_reverse_fallback),
+            "reverse_fallback_speed": float(controller_cfg.cbf_reverse_fallback_speed),
+            "debug": bool(controller_cfg.cbf_debug),
+        }
     if checkpoint_path is not None:
         summary["checkpoint"] = str(checkpoint_path)
     save_json(output_dir / "summary.json", json_safe(summary))

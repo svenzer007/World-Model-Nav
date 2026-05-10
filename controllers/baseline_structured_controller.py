@@ -264,6 +264,101 @@ def expert_style_rollout_cost(
     }
 
 
+def simulate_constant_command_rollout(
+    *,
+    robot_pose: np.ndarray,
+    v: float,
+    omega: float,
+    horizon: int,
+    config: DatasetConfig,
+    planning_occupancy: np.ndarray,
+    true_occupancy: np.ndarray,
+    resolution: float,
+    origin: Sequence[float],
+    occupied_points: np.ndarray,
+    dynamic_obstacles: Sequence[DynamicObstacle],
+) -> dict[str, Any]:
+    pose = np.asarray(robot_pose, dtype=float).copy()
+    rolled_obstacles = [obstacle.clone() for obstacle in dynamic_obstacles]
+    robot_rollout_world: list[list[float]] = []
+    static_clearances: list[float] = []
+    static_collisions: list[bool] = []
+    dynamic_clearances: list[float] = []
+    dynamic_collisions: list[bool] = []
+    planning_collisions: list[bool] = []
+    combined_clearances: list[float] = []
+    dynamic_positions_robot: list[list[list[float]]] = []
+
+    for _ in range(int(horizon)):
+        pose = unicycle_step(
+            pose,
+            float(v),
+            float(omega),
+            float(config.robot_config.dt),
+        )
+        for obstacle in rolled_obstacles:
+            obstacle.step(float(config.robot_config.dt))
+
+        robot_rollout_world.append([float(value) for value in pose])
+
+        static_clearance = float(
+            minimum_static_clearance(
+                pose[:2],
+                config.robot_config.radius,
+                occupied_points,
+                resolution,
+            )
+        )
+        static_collision = bool(
+            disk_collides_with_occupancy(
+                pose[:2],
+                config.robot_config.radius,
+                true_occupancy,
+                resolution,
+                origin,
+            )
+        )
+        positions_world = np.asarray([obstacle.position.copy() for obstacle in rolled_obstacles], dtype=float)
+        radii = np.asarray([float(obstacle.radius) for obstacle in rolled_obstacles], dtype=float)
+        positions_robot = robot_frame_points(pose, positions_world)
+        dyn_clearances = dynamic_clearances_from_positions(positions_robot, radii, config.robot_config.radius)
+        planning_collision = bool(planning_point_collision(pose[:2], planning_occupancy, resolution, origin))
+
+        static_clearances.append(static_clearance)
+        static_collisions.append(static_collision)
+        planning_collisions.append(planning_collision)
+        dynamic_positions_robot.append(positions_robot.astype(float).tolist())
+        dynamic_clearance = float(np.min(dyn_clearances)) if dyn_clearances.size else float("inf")
+        dynamic_clearances.append(dynamic_clearance)
+        dynamic_collisions.append(bool(np.any(dyn_clearances <= 0.0)))
+        combined_clearances.append(float(min(static_clearance, dynamic_clearance)))
+
+    infeasible_reasons: list[str] = []
+    if any(planning_collisions):
+        infeasible_reasons.append("planning_collision")
+    if any(static_collisions):
+        infeasible_reasons.append("static_collision")
+    if any(dynamic_collisions):
+        infeasible_reasons.append("dynamic_collision")
+
+    return {
+        "rollout_endpoint_pose": pose,
+        "robot_rollout_world": robot_rollout_world,
+        "static_clearances": static_clearances,
+        "static_collisions": static_collisions,
+        "planning_collisions": planning_collisions,
+        "dynamic_clearances": dynamic_clearances,
+        "dynamic_collisions": dynamic_collisions,
+        "combined_clearances": combined_clearances,
+        "dynamic_positions_robot": dynamic_positions_robot,
+        "infeasible_reasons": infeasible_reasons,
+        "feasible": not bool(infeasible_reasons),
+        "min_static_clearance": float(np.min(static_clearances)) if static_clearances else float("inf"),
+        "min_dynamic_clearance": float(np.min(dynamic_clearances)) if dynamic_clearances else float("inf"),
+        "min_combined_clearance": float(np.min(combined_clearances)) if combined_clearances else float("inf"),
+    }
+
+
 class BaselineStructuredController:
     """Use true dynamic-obstacle rollout with analytic scoring."""
 
@@ -381,75 +476,27 @@ class BaselineStructuredController:
         dynamic_obstacles: Sequence[DynamicObstacle],
     ) -> dict[str, Any]:
         action = ACTIONS[int(action_index)]
-        pose = np.asarray(robot_pose, dtype=float).copy()
-        rolled_obstacles = [obstacle.clone() for obstacle in dynamic_obstacles]
-        robot_rollout_world: list[list[float]] = []
-        static_clearances: list[float] = []
-        static_collisions: list[bool] = []
-        dynamic_clearances: list[float] = []
-        dynamic_collisions: list[bool] = []
-        planning_collisions: list[bool] = []
-        combined_clearances: list[float] = []
-        dynamic_positions_robot: list[list[list[float]]] = []
-        infeasible_reasons: list[str] = []
-
-        for _ in range(int(self.controller_cfg.horizon)):
-            pose = unicycle_step(
-                pose,
-                float(action["v"]),
-                float(action["omega"]),
-                float(self.config.robot_config.dt),
-            )
-            for obstacle in rolled_obstacles:
-                obstacle.step(float(self.config.robot_config.dt))
-
-            robot_rollout_world.append([float(value) for value in pose])
-
-            static_clearance = float(
-                minimum_static_clearance(
-                    pose[:2],
-                    self.config.robot_config.radius,
-                    occupied_points,
-                    resolution,
-                )
-            )
-            static_collision = bool(
-                disk_collides_with_occupancy(
-                    pose[:2],
-                    self.config.robot_config.radius,
-                    true_occupancy,
-                    resolution,
-                    origin,
-                )
-            )
-            positions_world = np.asarray([obstacle.position.copy() for obstacle in rolled_obstacles], dtype=float)
-            radii = np.asarray([float(obstacle.radius) for obstacle in rolled_obstacles], dtype=float)
-            positions_robot = robot_frame_points(pose, positions_world)
-            dyn_clearances = dynamic_clearances_from_positions(positions_robot, radii, self.config.robot_config.radius)
-            planning_collision = bool(planning_point_collision(pose[:2], planning_occupancy, resolution, origin))
-
-            static_clearances.append(static_clearance)
-            static_collisions.append(static_collision)
-            planning_collisions.append(planning_collision)
-            dynamic_positions_robot.append(positions_robot.astype(float).tolist())
-            dynamic_clearance = float(np.min(dyn_clearances)) if dyn_clearances.size else float("inf")
-            dynamic_clearances.append(dynamic_clearance)
-            dynamic_collisions.append(bool(np.any(dyn_clearances <= 0.0)))
-            combined_clearances.append(float(min(static_clearance, dynamic_clearance)))
-
-        if any(planning_collisions):
-            infeasible_reasons.append("planning_collision")
-        if any(static_collisions):
-            infeasible_reasons.append("static_collision")
-        if any(dynamic_collisions):
-            infeasible_reasons.append("dynamic_collision")
-        feasible = not bool(infeasible_reasons)
+        rollout = simulate_constant_command_rollout(
+            robot_pose=robot_pose,
+            v=float(action["v"]),
+            omega=float(action["omega"]),
+            horizon=int(self.controller_cfg.horizon),
+            config=self.config,
+            planning_occupancy=planning_occupancy,
+            true_occupancy=true_occupancy,
+            resolution=resolution,
+            origin=origin,
+            occupied_points=occupied_points,
+            dynamic_obstacles=dynamic_obstacles,
+        )
+        pose = np.asarray(rollout["rollout_endpoint_pose"], dtype=float)
+        feasible = bool(rollout["feasible"])
 
         score = expert_style_rollout_cost(
             rollout_endpoint_pose=pose,
             current_subgoal_world=np.asarray(current_subgoal_world, dtype=float),
             path_world=path_world,
-            min_combined_clearance=float(np.min(combined_clearances)) if combined_clearances else float("inf"),
+            min_combined_clearance=float(rollout["min_combined_clearance"]),
             velocity_penalty=velocity_penalty_from_action(float(action["v"])),
             feasible=feasible,
             controller_cfg=self.controller_cfg,
@@ -470,19 +517,19 @@ class BaselineStructuredController:
             "velocity_cost": float(score["velocity_cost"]),
             "clearance_cost": float(score["clearance_cost"]),
             "infeasibility_penalty": float(score["infeasibility_penalty"]),
-            "robot_rollout_world": robot_rollout_world,
-            "static_clearances": static_clearances,
-            "static_collisions": static_collisions,
-            "planning_collisions": planning_collisions,
-            "dynamic_clearances": dynamic_clearances,
-            "dynamic_collisions": dynamic_collisions,
-            "combined_clearances": combined_clearances,
-            "dynamic_positions_robot": dynamic_positions_robot,
+            "robot_rollout_world": rollout["robot_rollout_world"],
+            "static_clearances": rollout["static_clearances"],
+            "static_collisions": rollout["static_collisions"],
+            "planning_collisions": rollout["planning_collisions"],
+            "dynamic_clearances": rollout["dynamic_clearances"],
+            "dynamic_collisions": rollout["dynamic_collisions"],
+            "combined_clearances": rollout["combined_clearances"],
+            "dynamic_positions_robot": rollout["dynamic_positions_robot"],
             "feasible": bool(feasible),
-            "infeasible_reasons": infeasible_reasons,
-            "min_static_clearance": float(np.min(static_clearances)) if static_clearances else float("inf"),
-            "min_dynamic_clearance": float(np.min(dynamic_clearances)) if dynamic_clearances else float("inf"),
-            "min_combined_clearance": float(np.min(combined_clearances)) if combined_clearances else float("inf"),
+            "infeasible_reasons": rollout["infeasible_reasons"],
+            "min_static_clearance": float(rollout["min_static_clearance"]),
+            "min_dynamic_clearance": float(rollout["min_dynamic_clearance"]),
+            "min_combined_clearance": float(rollout["min_combined_clearance"]),
             "backward_penalty_applied": False,
             "backward_penalty_value": 0.0,
             "backward_gated": False,

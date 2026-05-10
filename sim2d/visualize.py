@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 import numpy as np
 
 try:
@@ -73,29 +74,56 @@ def save_episode_gif(episode: dict[str, object], output_path: Path, vis_config: 
 
 def save_episode_video(episode: dict[str, object], output_path: Path, vis_config: VisualizationConfig) -> bool:
     """Save an MP4 preview video for one episode if a video backend is available."""
-    if imageio is None:
-        print(f"Warning: could not save MP4 video to {output_path}: imageio is not installed", flush=True)
-        return False
     output_path.parent.mkdir(parents=True, exist_ok=True)
     steps = episode["steps"]
     if not steps:
         return False
 
-    writer = None
+    if imageio is not None:
+        writer = None
+        try:
+            writer = imageio.get_writer(output_path, fps=vis_config.gif_fps)
+            for step in steps:
+                writer.append_data(render_episode_step_frame(episode, step, vis_config))
+            return True
+        except Exception as exc:
+            print(f"Warning: imageio MP4 export failed for {output_path}: {exc}", flush=True)
+        finally:
+            if writer is not None:
+                try:
+                    writer.close()
+                except Exception as exc:
+                    print(f"Warning: could not close MP4 writer for {output_path}: {exc}", flush=True)
+
+    if not FFMpegWriter.isAvailable():
+        print(
+            f"Warning: could not save MP4 video to {output_path}: neither imageio nor matplotlib ffmpeg backend is available",
+            flush=True,
+        )
+        return False
+
     try:
-        writer = imageio.get_writer(output_path, fps=vis_config.gif_fps)
-        for step in steps:
-            writer.append_data(render_episode_step_frame(episode, step, vis_config))
+        figure = plt.figure(figsize=vis_config.figure_size, dpi=vis_config.dpi)
+        axis = figure.add_subplot(111)
+        axis.set_axis_off()
+        first_frame = render_episode_step_frame(episode, steps[0], vis_config)
+        image_artist = axis.imshow(first_frame)
+        figure.tight_layout(pad=0)
+        writer = FFMpegWriter(fps=vis_config.gif_fps)
+        with writer.saving(figure, str(output_path), dpi=vis_config.dpi):
+            writer.grab_frame()
+            for step in steps[1:]:
+                image_artist.set_data(render_episode_step_frame(episode, step, vis_config))
+                writer.grab_frame()
+        plt.close(figure)
         return True
     except Exception as exc:
         print(f"Warning: could not save MP4 video to {output_path}: {exc}", flush=True)
+        try:
+            plt.close("all")
+        except Exception:
+            pass
         return False
-    finally:
-        if writer is not None:
-            try:
-                writer.close()
-            except Exception as exc:
-                print(f"Warning: could not close MP4 writer for {output_path}: {exc}", flush=True)
 
 
 def save_episode_html_viewer(episode: dict[str, object], output_dir: Path, vis_config: VisualizationConfig) -> dict[str, str]:
@@ -125,6 +153,18 @@ def render_episode_step_frame(
     vis_config: VisualizationConfig,
 ) -> np.ndarray:
     """Render one episode step to an RGB image array."""
+    if str(step.get("controller_debug", {}).get("mode", "")) == "cbf_qp":
+        return _render_cbf_episode_step_frame(episode, step, vis_config)
+
+    return _render_standard_episode_step_frame(episode, step, vis_config)
+
+
+def _render_standard_episode_step_frame(
+    episode: dict[str, object],
+    step: dict[str, object],
+    vis_config: VisualizationConfig,
+) -> np.ndarray:
+    """Render one non-CBF episode step to an RGB image array."""
     occupancy = np.asarray(episode["occupancy_grid"])
     path_world = np.asarray(episode["astar_path_world"])
     resolution = float(episode["resolution"])
@@ -159,13 +199,130 @@ def render_episode_step_frame(
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
     ax.set_aspect("equal")
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.05, right=0.98, top=0.94, bottom=0.04, hspace=0.08)
     fig.canvas.draw()
     frame = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (4,))
     rgb = frame[:, :, :3].copy()
     plt.close(fig)
     return rgb
+
+
+def _render_cbf_episode_step_frame(
+    episode: dict[str, object],
+    step: dict[str, object],
+    vis_config: VisualizationConfig,
+) -> np.ndarray:
+    """Render one cbf_qp episode step with a bottom candidate-score panel."""
+    occupancy = np.asarray(episode["occupancy_grid"])
+    path_world = np.asarray(episode["astar_path_world"])
+    resolution = float(episode["resolution"])
+    origin = np.asarray(episode["origin"], dtype=float)
+    lidar_angles = _lidar_angles_from_episode(episode)
+    debug = dict(step.get("controller_debug", {}))
+
+    figure_height = float(vis_config.figure_size[1]) * 2.05
+    fig = plt.figure(figsize=(vis_config.figure_size[0], figure_height), dpi=vis_config.dpi)
+    grid = fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3.75, 2.45], hspace=0.06)
+    ax = fig.add_subplot(grid[0, 0])
+    panel_ax = fig.add_subplot(grid[1, 0])
+
+    _draw_map(ax, occupancy, resolution, origin)
+    if len(path_world):
+        ax.plot(path_world[:, 0], path_world[:, 1], color="tab:cyan", linewidth=1.2)
+
+    robot_pose = np.asarray(step["robot_pose"])
+    _draw_robot(ax, robot_pose)
+    goal = np.asarray(step["selected_subgoal_world"])
+    ax.scatter(goal[0], goal[1], c="orange", s=45, marker="x")
+
+    for obstacle_state in step["dynamic_obstacles_t"]:
+        _draw_dynamic_obstacle(ax, obstacle_state)
+
+    lidar_source = "none"
+    if vis_config.draw_lidar_in_gif:
+        lidar_ranges, lidar_source = _select_lidar_for_rendering(step, vis_config)
+        _draw_lidar(ax, robot_pose, lidar_ranges, lidar_angles)
+
+    mode_suffix = " | cbf_qp"
+    lidar_suffix = f" | {lidar_source}" if lidar_source != "none" else ""
+    ax.set_title(
+        f"Ep {int(episode['episode_id']):06d} | t={int(step['t'])} | action={step['action_name']} | "
+        f"{step['done_reason_t1']}{mode_suffix}{lidar_suffix}"
+    )
+    overlay_lines = [
+        f"omega*={float(debug.get('selected_omega_candidate', 0.0)):.2f}",
+        f"cmd=(v={float(step.get('v', 0.0)):.2f}, w={float(step.get('omega', 0.0)):.2f})",
+        f"qp_status={str(debug.get('qp_status', 'n/a'))}",
+    ]
+    fallback_reason = str(debug.get("qp_fallback_reason", "")).strip()
+    if fallback_reason:
+        overlay_lines.append(f"fallback={fallback_reason}")
+    ax.text(
+        0.02,
+        0.98,
+        "\n".join(overlay_lines),
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=8,
+        bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "black"},
+    )
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_aspect("equal")
+
+    panel_ax.set_axis_off()
+    panel_ax.set_facecolor("#f7f7f3")
+    candidate_rows = _format_cbf_candidate_rows(debug)
+    panel_ax.text(
+        0.01,
+        0.98,
+        "\n".join(candidate_rows),
+        transform=panel_ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=11.5,
+        family="monospace",
+        color="black",
+        bbox={"facecolor": "white", "alpha": 0.9, "edgecolor": "0.7"},
+    )
+
+    fig.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.035, hspace=0.08)
+    fig.canvas.draw()
+    frame = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+    frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+    rgb = frame[:, :, :3].copy()
+    plt.close(fig)
+    return rgb
+
+
+def _format_cbf_candidate_rows(debug: dict[str, object]) -> list[str]:
+    candidates = list(debug.get("candidate_debug", []) or debug.get("candidates", []))
+    header = (
+        f"{'sel':<3} {'omega':>5} | {'goal':>6} {'head':>6} {'path':>6} "
+        f"{'vel':>5} {'clear':>6} {'infeas':>8} {'cbf_m':>7} {'total':>8}"
+    )
+    if not candidates:
+        return [header, "no candidate debug available"]
+
+    rows = [header]
+    for candidate in candidates:
+        total_score = float(candidate.get("final_candidate_score", candidate.get("score", float("nan"))))
+        prefix = "*" if bool(candidate.get("selected", False)) else " "
+        rows.append(
+            f"{prefix:<3} {float(candidate.get('omega_candidate', 0.0)):>5.1f}"
+            f" | {float(candidate.get('goal_progress_cost', float('nan'))):>6.2f}"
+            f" {float(candidate.get('heading_cost', float('nan'))):>6.2f}"
+            f" {float(candidate.get('path_cost', float('nan'))):>6.2f}"
+            f" {float(candidate.get('velocity_penalty', float('nan'))):>5.2f}"
+            f" {float(candidate.get('static_clearance_cost', float('nan'))):>6.2f}"
+            f" {float(candidate.get('infeasibility_penalty', float('nan'))):>8.1f}"
+            f" {float(candidate.get('min_cbf_margin', float('nan'))):>7.2f}"
+            f" {float(total_score):>8.2f}"
+            f"{'  SELECTED' if bool(candidate.get('selected', False)) else ''}"
+        )
+    return rows
 
 
 def _select_lidar_for_rendering(step: dict[str, object], vis_config: VisualizationConfig) -> tuple[np.ndarray, str]:
