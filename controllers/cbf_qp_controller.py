@@ -19,6 +19,8 @@ from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.obstacles import DynamicObstacle
 from sim2d.utils import distance_point_to_polyline, wrap_angle
 
+CBF_OMEGA_MATCH_EPS = 1e-6
+
 
 @dataclass
 class CBFQPControllerConfig:
@@ -31,8 +33,7 @@ class CBFQPControllerConfig:
     cbf_dynamic_margin_priority_enabled: bool = False
     cbf_margin_priority_use_margin_trigger: bool = False
     cbf_margin_priority_threshold: float = 0.17
-    cbf_margin_priority_use_distance_trigger: bool = False
-    cbf_dynamic_priority_distance_threshold: float = 0.25
+    cbf_margin_tie_positive_eps: float = 1e-4
     cbf_alpha: float = 1.0
     cbf_safety_margin: float = 0.08
     cbf_k_v: float = 0.4
@@ -81,10 +82,14 @@ class CBFQPController:
         self.controller_cfg = controller_cfg
         self._previous_obstacle_positions: dict[object, np.ndarray] = {}
         self._obstacle_key_mode = "uninitialized"
+        self._previous_risk_mode_omega: float | None = None
+        self._previous_risk_mode_action_index: int | None = None
 
     def reset(self) -> None:
         self._previous_obstacle_positions = {}
         self._obstacle_key_mode = "uninitialized"
+        self._previous_risk_mode_omega = None
+        self._previous_risk_mode_action_index = None
 
     def commit_step(
         self,
@@ -140,8 +145,14 @@ class CBFQPController:
         worst_candidate_min_cbf_margin = math.nan
         cbf_margin_range = math.nan
         margin_trigger_active = False
-        distance_trigger_active = False
         priority_active = False
+        priority_best_margin = math.nan
+        priority_num_tied_best_candidates = 0
+        priority_tie_policy = ""
+        previous_risk_mode_omega_before_selection = self._previous_risk_mode_omega
+        previous_risk_mode_action_index_before_selection = self._previous_risk_mode_action_index
+        previous_risk_mode_omega_after_selection = self._previous_risk_mode_omega
+        previous_risk_mode_action_index_after_selection = self._previous_risk_mode_action_index
         theta_eff_source = (
             "heading_lookahead_time"
             if bool(self.controller_cfg.cbf_heading_lookahead_enabled)
@@ -277,6 +288,7 @@ class CBFQPController:
                 "qp_fallback_used": bool(not dynamic_cbf_feasible),
                 "qp_fallback_reason": str(dynamic_infeasible_reason),
                 "cbf_constraints_summary": projection["constraints_summary"] if self.controller_cfg.cbf_debug else [],
+                "is_priority_best_margin_candidate": False,
             }
             candidate_debug.append(candidate)
             if bool(candidate["feasible"]):
@@ -298,30 +310,73 @@ class CBFQPController:
                 and float(normal_selected_min_cbf_margin)
                 < float(self.controller_cfg.cbf_margin_priority_threshold)
             )
-            distance_trigger_active = bool(
-                bool(self.controller_cfg.cbf_margin_priority_use_distance_trigger)
-                and float(min_dynamic_boundary_distance)
-                < float(self.controller_cfg.cbf_dynamic_priority_distance_threshold)
-            )
-            priority_active = bool(margin_trigger_active or distance_trigger_active)
+            priority_active = bool(margin_trigger_active)
 
         if feasible_candidates and priority_active:
-            selected_candidate = min(
-                feasible_candidates,
-                key=lambda item: (
-                    -float(item["min_cbf_margin"]),
-                    float(item["static_clearance_cost"]),
-                    float(item["path_cost"]),
-                    float(item["heading_cost"]),
-                    abs(float(item["omega_candidate"]) - float(u_nom[1])),
-                ),
-            )
-            if margin_trigger_active and distance_trigger_active:
-                selection_mode = "dynamic_margin_priority_both_triggers"
-            elif margin_trigger_active:
-                selection_mode = "dynamic_margin_priority_margin_trigger"
+            priority_best_margin = max(float(item["min_cbf_margin"]) for item in feasible_candidates)
+            tied_best_candidates = [
+                item
+                for item in feasible_candidates
+                if abs(float(item["min_cbf_margin"]) - float(priority_best_margin))
+                <= float(self.controller_cfg.cbf_margin_tie_positive_eps)
+            ]
+            priority_num_tied_best_candidates = int(len(tied_best_candidates))
+            for candidate in tied_best_candidates:
+                candidate["is_priority_best_margin_candidate"] = True
+
+            if float(priority_best_margin) > float(self.controller_cfg.cbf_margin_tie_positive_eps):
+                selected_candidate = min(
+                    tied_best_candidates,
+                    key=lambda item: (
+                        float(item["static_clearance_cost"]),
+                        float(item["path_cost"]),
+                        float(item["heading_cost"]),
+                        abs(float(item["omega_candidate"]) - float(u_nom[1])),
+                    ),
+                )
+                priority_tie_policy = "positive_margin_tiebreak"
             else:
-                selection_mode = "dynamic_margin_priority_distance_trigger"
+                previous_risk_omega_match = next(
+                    (
+                        item
+                        for item in tied_best_candidates
+                        if previous_risk_mode_omega_before_selection is not None
+                        and abs(float(item["omega_candidate"]) - float(previous_risk_mode_omega_before_selection))
+                        <= float(CBF_OMEGA_MATCH_EPS)
+                    ),
+                    None,
+                )
+                if previous_risk_omega_match is not None:
+                    selected_candidate = previous_risk_omega_match
+                    priority_tie_policy = "zero_margin_previous_risk_omega"
+                else:
+                    previous_risk_action_match = next(
+                        (
+                            item
+                            for item in tied_best_candidates
+                            if previous_risk_mode_action_index_before_selection is not None
+                            and int(item["action_index"]) == int(previous_risk_mode_action_index_before_selection)
+                        ),
+                        None,
+                    )
+                    if previous_risk_action_match is not None:
+                        selected_candidate = previous_risk_action_match
+                        priority_tie_policy = "zero_margin_previous_risk_action"
+                    else:
+                        selected_candidate = min(
+                            tied_best_candidates,
+                            key=lambda item: (
+                                abs(float(item["omega_candidate"])),
+                                int(item["candidate_index"]),
+                            ),
+                        )
+                        priority_tie_policy = "zero_margin_stable_fallback"
+
+            self._previous_risk_mode_omega = float(selected_candidate["omega_candidate"])
+            self._previous_risk_mode_action_index = int(selected_candidate["action_index"])
+            previous_risk_mode_omega_after_selection = self._previous_risk_mode_omega
+            previous_risk_mode_action_index_after_selection = self._previous_risk_mode_action_index
+            selection_mode = "dynamic_margin_priority_margin_trigger"
         elif feasible_candidates:
             selected_candidate = normal_selected_candidate
             selection_mode = "feasible_candidates"
@@ -433,8 +488,7 @@ class CBFQPController:
             "cbf_dynamic_margin_priority_enabled_deprecated": bool(self.controller_cfg.cbf_dynamic_margin_priority_enabled),
             "cbf_margin_priority_use_margin_trigger": bool(self.controller_cfg.cbf_margin_priority_use_margin_trigger),
             "cbf_margin_priority_threshold": float(self.controller_cfg.cbf_margin_priority_threshold),
-            "cbf_margin_priority_use_distance_trigger": bool(self.controller_cfg.cbf_margin_priority_use_distance_trigger),
-            "cbf_dynamic_priority_distance_threshold": float(self.controller_cfg.cbf_dynamic_priority_distance_threshold),
+            "cbf_margin_tie_positive_eps": float(self.controller_cfg.cbf_margin_tie_positive_eps),
             "normal_selected_candidate_index": normal_selected_candidate_index,
             "normal_selected_min_cbf_margin": normal_selected_min_cbf_margin,
             "best_candidate_min_cbf_margin": best_candidate_min_cbf_margin,
@@ -442,9 +496,14 @@ class CBFQPController:
             "cbf_margin_range": cbf_margin_range,
             "min_dynamic_boundary_distance": float(min_dynamic_boundary_distance),
             "margin_trigger_active": bool(margin_trigger_active),
-            "distance_trigger_active": bool(distance_trigger_active),
             "priority_active": bool(priority_active),
-            "high_dynamic_risk": bool(priority_active),
+            "priority_best_margin": priority_best_margin,
+            "priority_num_tied_best_candidates": int(priority_num_tied_best_candidates),
+            "priority_tie_policy": str(priority_tie_policy),
+            "previous_risk_mode_omega_before_selection": previous_risk_mode_omega_before_selection,
+            "previous_risk_mode_action_index_before_selection": previous_risk_mode_action_index_before_selection,
+            "previous_risk_mode_omega_after_selection": previous_risk_mode_omega_after_selection,
+            "previous_risk_mode_action_index_after_selection": previous_risk_mode_action_index_after_selection,
             "selected_omega_candidate": float(omega_star),
             "selected_candidate_index": int(selected_candidate["candidate_index"]),
             "candidate_count": int(len(candidate_debug)),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import json
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import matplotlib
 
@@ -25,7 +25,12 @@ from .lidar import beam_angles
 from .utils import json_safe, save_json
 
 
-def save_episode_preview_png(episode: dict[str, object], output_path: Path, vis_config: VisualizationConfig) -> None:
+def save_episode_preview_png(
+    episode: dict[str, object],
+    output_path: Path,
+    vis_config: VisualizationConfig,
+    render_context: dict[str, object] | None = None,
+) -> None:
     """Save a static overview plot for one episode."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     occupancy = np.asarray(episode["occupancy_grid"])
@@ -58,8 +63,13 @@ def save_episode_preview_png(episode: dict[str, object], output_path: Path, vis_
     plt.close(fig)
 
 
-def save_episode_gif(episode: dict[str, object], output_path: Path, vis_config: VisualizationConfig) -> None:
-    """Save an animated preview GIF for one episode."""
+def save_episode_gif(
+    episode: dict[str, object],
+    output_path: Path,
+    vis_config: VisualizationConfig,
+    render_context: dict[str, object] | None = None,
+) -> None:
+    """Deprecated: save an animated preview GIF for one episode."""
     if imageio is None:
         raise ModuleNotFoundError("Install imageio to save GIF previews")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,10 +79,15 @@ def save_episode_gif(episode: dict[str, object], output_path: Path, vis_config: 
 
     with imageio.get_writer(output_path, mode="I", fps=vis_config.gif_fps) as writer:
         for step in steps:
-            writer.append_data(render_episode_step_frame(episode, step, vis_config))
+            writer.append_data(render_episode_step_frame(episode, step, vis_config, render_context=render_context))
 
 
-def save_episode_video(episode: dict[str, object], output_path: Path, vis_config: VisualizationConfig) -> bool:
+def save_episode_video(
+    episode: dict[str, object],
+    output_path: Path,
+    vis_config: VisualizationConfig,
+    render_context: dict[str, object] | None = None,
+) -> bool:
     """Save an MP4 preview video for one episode if a video backend is available."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     steps = episode["steps"]
@@ -84,7 +99,7 @@ def save_episode_video(episode: dict[str, object], output_path: Path, vis_config
         try:
             writer = imageio.get_writer(output_path, fps=vis_config.gif_fps)
             for step in steps:
-                writer.append_data(render_episode_step_frame(episode, step, vis_config))
+                writer.append_data(render_episode_step_frame(episode, step, vis_config, render_context=render_context))
             return True
         except Exception as exc:
             print(f"Warning: imageio MP4 export failed for {output_path}: {exc}", flush=True)
@@ -103,17 +118,20 @@ def save_episode_video(episode: dict[str, object], output_path: Path, vis_config
         return False
 
     try:
-        figure = plt.figure(figsize=vis_config.figure_size, dpi=vis_config.dpi)
+        first_frame = render_episode_step_frame(episode, steps[0], vis_config, render_context=render_context)
+        height_px, width_px = first_frame.shape[:2]
+        frame_aspect = float(width_px) / max(float(height_px), 1.0)
+        base_height = float(vis_config.figure_size[1])
+        figure = plt.figure(figsize=(base_height * frame_aspect, base_height), dpi=vis_config.dpi)
         axis = figure.add_subplot(111)
         axis.set_axis_off()
-        first_frame = render_episode_step_frame(episode, steps[0], vis_config)
         image_artist = axis.imshow(first_frame)
         figure.tight_layout(pad=0)
         writer = FFMpegWriter(fps=vis_config.gif_fps)
         with writer.saving(figure, str(output_path), dpi=vis_config.dpi):
             writer.grab_frame()
             for step in steps[1:]:
-                image_artist.set_data(render_episode_step_frame(episode, step, vis_config))
+                image_artist.set_data(render_episode_step_frame(episode, step, vis_config, render_context=render_context))
                 writer.grab_frame()
         plt.close(figure)
         return True
@@ -151,10 +169,20 @@ def render_episode_step_frame(
     episode: dict[str, object],
     step: dict[str, object],
     vis_config: VisualizationConfig,
+    *,
+    render_context: dict[str, object] | None = None,
 ) -> np.ndarray:
     """Render one episode step to an RGB image array."""
-    if str(step.get("controller_debug", {}).get("mode", "")) == "cbf_qp":
-        return _render_cbf_episode_step_frame(episode, step, vis_config)
+    debug = dict(step.get("controller_debug", {}))
+    if str(debug.get("mode", "")) == "cbf_qp":
+        return _render_cbf_episode_step_frame(episode, step, vis_config, render_context=render_context)
+    if _has_discrete_weighted_candidate_debug(debug):
+        return _render_discrete_weighted_episode_step_frame(
+            episode,
+            step,
+            vis_config,
+            render_context=render_context,
+        )
 
     return _render_standard_episode_step_frame(episode, step, vis_config)
 
@@ -208,12 +236,32 @@ def _render_standard_episode_step_frame(
     return rgb
 
 
-def _render_cbf_episode_step_frame(
+def _has_discrete_weighted_candidate_debug(debug: dict[str, object]) -> bool:
+    candidates = list(debug.get("candidates", []))
+    if not candidates:
+        return False
+    sample = dict(candidates[0])
+    return bool(
+        "action_name" in sample
+        and ("total_cost" in sample or "score" in sample)
+        and (
+            "goal_progress_cost" in sample
+            or "heading_cost" in sample
+            or "path_cost" in sample
+            or "velocity_cost" in sample
+            or "velocity_penalty" in sample
+        )
+    )
+
+
+def _render_discrete_weighted_episode_step_frame(
     episode: dict[str, object],
     step: dict[str, object],
     vis_config: VisualizationConfig,
+    *,
+    render_context: dict[str, object] | None = None,
 ) -> np.ndarray:
-    """Render one cbf_qp episode step with a bottom candidate-score panel."""
+    """Render one discrete-controller step with a right-side weighted-score panel."""
     occupancy = np.asarray(episode["occupancy_grid"])
     path_world = np.asarray(episode["astar_path_world"])
     resolution = float(episode["resolution"])
@@ -221,11 +269,231 @@ def _render_cbf_episode_step_frame(
     lidar_angles = _lidar_angles_from_episode(episode)
     debug = dict(step.get("controller_debug", {}))
 
-    figure_height = float(vis_config.figure_size[1]) * 2.05
-    fig = plt.figure(figsize=(vis_config.figure_size[0], figure_height), dpi=vis_config.dpi)
-    grid = fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3.75, 2.45], hspace=0.06)
+    figure_width = max(float(vis_config.figure_size[0]) * 2.2, 17.2)
+    figure_height = max(float(vis_config.figure_size[1]) * 1.05, 7.2)
+    fig = plt.figure(figsize=(figure_width, figure_height), dpi=vis_config.dpi)
+    grid = fig.add_gridspec(nrows=1, ncols=2, width_ratios=[3.15, 2.95], wspace=0.04)
     ax = fig.add_subplot(grid[0, 0])
-    panel_ax = fig.add_subplot(grid[1, 0])
+    panel_ax = fig.add_subplot(grid[0, 1])
+
+    _draw_map(ax, occupancy, resolution, origin)
+    if len(path_world):
+        ax.plot(path_world[:, 0], path_world[:, 1], color="tab:cyan", linewidth=1.2)
+
+    robot_pose = np.asarray(step["robot_pose"])
+    _draw_robot(ax, robot_pose)
+    goal = np.asarray(step["selected_subgoal_world"])
+    ax.scatter(goal[0], goal[1], c="orange", s=45, marker="x")
+
+    for obstacle_state in step["dynamic_obstacles_t"]:
+        _draw_dynamic_obstacle(ax, obstacle_state)
+
+    lidar_source = "none"
+    if vis_config.draw_lidar_in_gif:
+        lidar_ranges, lidar_source = _select_lidar_for_rendering(step, vis_config)
+        _draw_lidar(ax, robot_pose, lidar_ranges, lidar_angles)
+
+    mode = str(debug.get("mode", ""))
+    mode_suffix = f" | {mode}" if mode else ""
+    lidar_suffix = f" | {lidar_source}" if lidar_source != "none" else ""
+    ax.set_title(
+        f"Ep {int(episode['episode_id']):06d} | t={int(step['t'])} | action={step['action_name']} | "
+        f"{step['done_reason_t1']}{mode_suffix}{lidar_suffix}"
+    )
+    selected_score = debug.get("selected_score")
+    overlay_lines = [
+        f"action*={str(step.get('action_name', 'n/a'))}",
+        f"cmd=(v={float(step.get('v', 0.0)):.2f}, w={float(step.get('omega', 0.0)):.2f})",
+    ]
+    if selected_score is not None:
+        overlay_lines.append(f"score={float(selected_score):.2f}")
+    selection_mode = str(debug.get("selection_mode", "")).strip()
+    if selection_mode:
+        overlay_lines.append(f"mode={selection_mode}")
+    ax.text(
+        0.02,
+        0.98,
+        "\n".join(overlay_lines),
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9.5,
+        bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "black"},
+    )
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_aspect("equal")
+
+    panel_ax.set_axis_off()
+    panel_ax.set_facecolor("#f7f7f3")
+    panel_ax.text(
+        0.02,
+        0.98,
+        "Candidate Score Contributions",
+        transform=panel_ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=12.5,
+        fontweight="bold",
+        color="black",
+    )
+    _draw_discrete_candidate_table(panel_ax, debug, render_context)
+
+    fig.subplots_adjust(left=0.035, right=0.985, top=0.93, bottom=0.05, wspace=0.03)
+    fig.canvas.draw()
+    frame = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+    frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+    rgb = frame[:, :, :3].copy()
+    plt.close(fig)
+    return rgb
+
+
+def _draw_discrete_candidate_table(
+    ax: plt.Axes,
+    debug: dict[str, object],
+    render_context: dict[str, object] | None,
+) -> None:
+    candidates = list(debug.get("candidates", []))
+    if not candidates:
+        ax.text(
+            0.02,
+            0.90,
+            "No candidate debug available",
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            fontsize=11.0,
+            family="monospace",
+            color="black",
+        )
+        return
+
+    weights = _structured_render_weights(render_context)
+    columns = [
+        ("act", "action"),
+        ("prog", "progress"),
+        ("head", "heading"),
+        ("path", "path"),
+        ("vel", "velocity"),
+        ("clr", "clearance"),
+        ("inf", "infeasibility"),
+        ("total", "total"),
+    ]
+    cell_text: list[list[str]] = []
+    cell_colors: list[list[str]] = []
+    for candidate in candidates:
+        contributions = _structured_weighted_contributions(candidate, weights)
+        selected = _is_selected_discrete_candidate(candidate, debug)
+        row = [
+            _format_candidate_label(str(candidate.get("action_name", "n/a")), selected),
+            _format_compact_value(contributions["progress"]),
+            _format_compact_value(contributions["heading"]),
+            _format_compact_value(contributions["path"]),
+            _format_compact_value(contributions["velocity"]),
+            _format_compact_value(contributions["clearance"]),
+            _format_compact_value(contributions["infeasibility"]),
+            _format_compact_value(contributions["total"]),
+        ]
+        cell_text.append(row)
+        base_color = "#fff3c4" if selected else "white"
+        cell_colors.append([base_color] * len(columns))
+
+    table = ax.table(
+        cellText=cell_text,
+        colLabels=[label for label, _ in columns],
+        cellLoc="center",
+        colLoc="center",
+        colWidths=[0.22, 0.108, 0.108, 0.108, 0.102, 0.102, 0.102, 0.12],
+        bbox=[0.01, 0.04, 0.98, 0.87],
+        cellColours=cell_colors,
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(7.1)
+    table.scale(1.0, 1.74)
+    for (row_idx, col_idx), cell in table.get_celld().items():
+        cell.set_edgecolor("#d9dde2")
+        cell.set_linewidth(0.45)
+        cell.PAD = 0.028
+        if row_idx == 0:
+            cell.set_facecolor("#edf0f3")
+            cell.set_text_props(fontweight="bold", color="black", family="monospace")
+        else:
+            is_selected = _is_selected_discrete_candidate(candidates[row_idx - 1], debug)
+            cell.set_text_props(ha="center", family="monospace")
+            if is_selected:
+                cell.set_text_props(fontweight="bold")
+
+
+def _structured_render_weights(render_context: dict[str, object] | None) -> dict[str, float]:
+    context = dict(render_context or {})
+    structured_weights = dict(context.get("structured_weights", {}))
+    return {
+        "w_progress": float(structured_weights.get("w_progress", 1.0)),
+        "w_heading": float(structured_weights.get("w_heading", 1.0)),
+        "w_path": float(structured_weights.get("w_path", 1.0)),
+        "w_velocity": float(structured_weights.get("w_velocity", 1.0)),
+    }
+
+
+def _structured_weighted_contributions(
+    candidate: dict[str, object],
+    weights: dict[str, float],
+) -> dict[str, float]:
+    velocity_value = candidate.get("velocity_cost", candidate.get("velocity_penalty", float("nan")))
+    progress = weights["w_progress"] * float(candidate.get("goal_progress_cost", float("nan")))
+    heading = weights["w_heading"] * float(candidate.get("heading_cost", float("nan")))
+    path = weights["w_path"] * float(candidate.get("path_cost", float("nan")))
+    velocity = weights["w_velocity"] * float(velocity_value)
+    clearance = float(candidate.get("clearance_cost", float("nan")))
+    infeasibility = float(candidate.get("infeasibility_penalty", float("nan")))
+    total = float(candidate.get("total_cost", candidate.get("score", float("nan"))))
+    return {
+        "progress": progress,
+        "heading": heading,
+        "path": path,
+        "velocity": velocity,
+        "clearance": clearance,
+        "infeasibility": infeasibility,
+        "total": total,
+    }
+
+
+def _is_selected_discrete_candidate(candidate: dict[str, object], debug: dict[str, object]) -> bool:
+    if bool(candidate.get("selected", False)):
+        return True
+    chosen = dict(debug.get("chosen", {}))
+    chosen_action_index = chosen.get("action_index")
+    candidate_action_index = candidate.get("action_index")
+    if chosen_action_index is not None and candidate_action_index is not None:
+        return int(chosen_action_index) == int(candidate_action_index)
+    chosen_action_name = chosen.get("action_name")
+    candidate_action_name = candidate.get("action_name")
+    if chosen_action_name is not None and candidate_action_name is not None:
+        return str(chosen_action_name) == str(candidate_action_name)
+    return False
+
+
+def _render_cbf_episode_step_frame(
+    episode: dict[str, object],
+    step: dict[str, object],
+    vis_config: VisualizationConfig,
+    *,
+    render_context: dict[str, object] | None = None,
+) -> np.ndarray:
+    """Render one cbf_qp episode step with a right-side candidate-score panel."""
+    occupancy = np.asarray(episode["occupancy_grid"])
+    path_world = np.asarray(episode["astar_path_world"])
+    resolution = float(episode["resolution"])
+    origin = np.asarray(episode["origin"], dtype=float)
+    lidar_angles = _lidar_angles_from_episode(episode)
+    debug = dict(step.get("controller_debug", {}))
+
+    figure_width = max(float(vis_config.figure_size[0]) * 2.2, 17.4)
+    figure_height = max(float(vis_config.figure_size[1]) * 1.05, 7.2)
+    fig = plt.figure(figsize=(figure_width, figure_height), dpi=vis_config.dpi)
+    grid = fig.add_gridspec(nrows=1, ncols=2, width_ratios=[3.1, 3.0], wspace=0.04)
+    ax = fig.add_subplot(grid[0, 0])
+    panel_ax = fig.add_subplot(grid[0, 1])
 
     _draw_map(ax, occupancy, resolution, origin)
     if len(path_world):
@@ -265,7 +533,7 @@ def _render_cbf_episode_step_frame(
         transform=ax.transAxes,
         va="top",
         ha="left",
-        fontsize=8,
+        fontsize=9.5,
         bbox={"facecolor": "white", "alpha": 0.82, "edgecolor": "black"},
     )
     ax.set_xlabel("x [m]")
@@ -274,21 +542,20 @@ def _render_cbf_episode_step_frame(
 
     panel_ax.set_axis_off()
     panel_ax.set_facecolor("#f7f7f3")
-    candidate_rows = _format_cbf_candidate_rows(debug)
     panel_ax.text(
-        0.01,
+        0.02,
         0.98,
-        "\n".join(candidate_rows),
+        "Candidate Score Contributions",
         transform=panel_ax.transAxes,
         va="top",
         ha="left",
-        fontsize=11.5,
-        family="monospace",
+        fontsize=12.5,
+        fontweight="bold",
         color="black",
-        bbox={"facecolor": "white", "alpha": 0.9, "edgecolor": "0.7"},
     )
+    _draw_cbf_candidate_table(panel_ax, debug, render_context)
 
-    fig.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.035, hspace=0.08)
+    fig.subplots_adjust(left=0.035, right=0.985, top=0.93, bottom=0.05, wspace=0.03)
     fig.canvas.draw()
     frame = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
     frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (4,))
@@ -297,32 +564,154 @@ def _render_cbf_episode_step_frame(
     return rgb
 
 
-def _format_cbf_candidate_rows(debug: dict[str, object]) -> list[str]:
+def _draw_cbf_candidate_table(
+    ax: plt.Axes,
+    debug: dict[str, object],
+    render_context: dict[str, object] | None,
+) -> None:
     candidates = list(debug.get("candidate_debug", []) or debug.get("candidates", []))
-    header = (
-        f"{'sel':<3} {'omega':>5} | {'goal':>6} {'head':>6} {'path':>6} "
-        f"{'vel':>5} {'clear':>6} {'infeas':>8} {'cbf_m':>7} {'total':>8}"
-    )
     if not candidates:
-        return [header, "no candidate debug available"]
-
-    rows = [header]
-    for candidate in candidates:
-        total_score = float(candidate.get("final_candidate_score", candidate.get("score", float("nan"))))
-        prefix = "*" if bool(candidate.get("selected", False)) else " "
-        rows.append(
-            f"{prefix:<3} {float(candidate.get('omega_candidate', 0.0)):>5.1f}"
-            f" | {float(candidate.get('goal_progress_cost', float('nan'))):>6.2f}"
-            f" {float(candidate.get('heading_cost', float('nan'))):>6.2f}"
-            f" {float(candidate.get('path_cost', float('nan'))):>6.2f}"
-            f" {float(candidate.get('velocity_penalty', float('nan'))):>5.2f}"
-            f" {float(candidate.get('static_clearance_cost', float('nan'))):>6.2f}"
-            f" {float(candidate.get('infeasibility_penalty', float('nan'))):>8.1f}"
-            f" {float(candidate.get('min_cbf_margin', float('nan'))):>7.2f}"
-            f" {float(total_score):>8.2f}"
-            f"{'  SELECTED' if bool(candidate.get('selected', False)) else ''}"
+        ax.text(
+            0.02,
+            0.90,
+            "No candidate debug available",
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            fontsize=11.0,
+            family="monospace",
+            color="black",
         )
-    return rows
+        return
+
+    weights = _cbf_render_weights(debug, render_context)
+    columns = [
+        ("ω", "omega"),
+        ("prog", "progress"),
+        ("head", "heading"),
+        ("path", "path"),
+        ("vel", "velocity"),
+        ("clr", "clear"),
+        ("inf", "infeas"),
+        ("ωdev", "omega_dev"),
+        ("cbf", "cbf_margin"),
+        ("total", "total"),
+    ]
+    cell_text: list[list[str]] = []
+    cell_colors: list[list[str]] = []
+    for candidate in candidates:
+        contributions = _cbf_weighted_contributions(candidate, debug, weights)
+        selected = bool(candidate.get("selected", False))
+        row = [
+            _format_omega_value(float(candidate.get("omega_candidate", 0.0)), selected),
+            _format_compact_value(contributions["progress"]),
+            _format_compact_value(contributions["heading"]),
+            _format_compact_value(contributions["path"]),
+            _format_compact_value(contributions["velocity"]),
+            _format_compact_value(contributions["clear"]),
+            _format_compact_value(contributions["infeas"]),
+            _format_compact_value(contributions["omega_dev"]),
+            _format_compact_value(contributions["cbf_margin"]),
+            _format_compact_value(contributions["total"]),
+        ]
+        cell_text.append(row)
+        base_color = "#fff3c4" if selected else "white"
+        cell_colors.append([base_color] * len(columns))
+
+    table = ax.table(
+        cellText=cell_text,
+        colLabels=[label for label, _ in columns],
+        cellLoc="center",
+        colLoc="center",
+        colWidths=[0.12, 0.092, 0.092, 0.092, 0.088, 0.088, 0.088, 0.098, 0.088, 0.104],
+        bbox=[0.01, 0.04, 0.98, 0.87],
+        cellColours=cell_colors,
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(6.8)
+    table.scale(1.0, 1.74)
+    for (row_idx, col_idx), cell in table.get_celld().items():
+        cell.set_edgecolor("#d9dde2")
+        cell.set_linewidth(0.45)
+        cell.PAD = 0.026
+        if row_idx == 0:
+            cell.set_facecolor("#edf0f3")
+            cell.set_text_props(fontweight="bold", color="black", family="monospace")
+        else:
+            is_selected = bool(candidates[row_idx - 1].get("selected", False))
+            cell.set_text_props(ha="center", family="monospace")
+            if is_selected:
+                cell.set_text_props(fontweight="bold")
+
+
+def _format_compact_value(value: float) -> str:
+    numeric_value = float(value)
+    if not np.isfinite(numeric_value):
+        return "nan"
+    magnitude = abs(numeric_value)
+    if magnitude >= 1e4:
+        exponent = int(np.floor(np.log10(magnitude)))
+        mantissa = numeric_value / (10**exponent)
+        rounded_mantissa = round(mantissa, 1)
+        if abs(rounded_mantissa - round(rounded_mantissa)) < 1e-9:
+            return f"{int(round(rounded_mantissa))}e{exponent}"
+        return f"{rounded_mantissa:.1f}e{exponent}"
+    return f"{numeric_value:.2f}"
+
+
+def _format_omega_value(value: float, selected: bool = False) -> str:
+    _ = selected
+    return f"{float(value):+.1f}"
+
+
+def _format_candidate_label(label: str, selected: bool = False) -> str:
+    _ = selected
+    return label
+
+
+def _cbf_render_weights(
+    debug: dict[str, object],
+    render_context: dict[str, object] | None,
+) -> dict[str, float]:
+    context = dict(render_context or {})
+    cbf_weights = dict(context.get("cbf_weights", {}))
+    return {
+        "w_progress": float(cbf_weights.get("w_progress", 1.0)),
+        "w_heading": float(cbf_weights.get("w_heading", 1.0)),
+        "w_path": float(cbf_weights.get("w_path", 1.0)),
+        "w_velocity": float(cbf_weights.get("w_velocity", 1.0)),
+        "cbf_w_omega_dev": float(cbf_weights.get("cbf_w_omega_dev", 0.0)),
+        "cbf_w_cbf_margin": float(cbf_weights.get("cbf_w_cbf_margin", 0.0)),
+    }
+
+
+def _cbf_weighted_contributions(
+    candidate: dict[str, object],
+    debug: dict[str, object],
+    weights: dict[str, float],
+) -> dict[str, float]:
+    omega_candidate = float(candidate.get("omega_candidate", 0.0))
+    omega_nom = float(debug.get("omega_nom", 0.0))
+    progress = weights["w_progress"] * float(candidate.get("goal_progress_cost", float("nan")))
+    heading = weights["w_heading"] * float(candidate.get("heading_cost", float("nan")))
+    path = weights["w_path"] * float(candidate.get("path_cost", float("nan")))
+    velocity = weights["w_velocity"] * float(candidate.get("velocity_penalty", float("nan")))
+    clear = float(candidate.get("static_clearance_cost", float("nan")))
+    infeas = float(candidate.get("infeasibility_penalty", float("nan")))
+    omega_dev = weights["cbf_w_omega_dev"] * abs(omega_candidate - omega_nom)
+    cbf_margin = -weights["cbf_w_cbf_margin"] * float(candidate.get("min_cbf_margin", float("nan")))
+    total = float(candidate.get("final_candidate_score", candidate.get("score", float("nan"))))
+    return {
+        "progress": progress,
+        "heading": heading,
+        "path": path,
+        "velocity": velocity,
+        "clear": clear,
+        "infeas": infeas,
+        "omega_dev": omega_dev,
+        "cbf_margin": cbf_margin,
+        "total": total,
+    }
 
 
 def _select_lidar_for_rendering(step: dict[str, object], vis_config: VisualizationConfig) -> tuple[np.ndarray, str]:

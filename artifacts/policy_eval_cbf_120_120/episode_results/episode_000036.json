@@ -1,0 +1,20 @@
+{
+  "average_backward_penalty_applied": NaN,
+  "backward_allowed_count": 0,
+  "backward_gated_count": 0,
+  "backward_selected_count": 0,
+  "controller": "cbf_qp",
+  "done_reason": "timeout",
+  "dynamic_collision": false,
+  "episode_id": 36,
+  "min_dynamic_clearance": 0.23129496510353675,
+  "min_static_clearance": 0.14468472443515418,
+  "num_steps": 250,
+  "robot_path_length": 9.736788418439993,
+  "seed": 1838212325,
+  "static_collision": false,
+  "stop_fraction": 0.0,
+  "success": false,
+  "timeout": true,
+  "total_progress": 0.007874488830566406
+}

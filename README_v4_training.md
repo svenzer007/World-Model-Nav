@@ -9,8 +9,11 @@ model:
   model_type: factorized_world_v3
 ```
 
-For the detailed state semantics and causal-velocity definition, see [dynamic_state_data.md](/home/stavan/s4/rnl/longer_horizons/dynamic_state_data.md).
-For how trained checkpoints are evaluated and used in the current model-eval / policy-eval / compare-two-runs workflow, see [README_v4_evaluation.md](/home/stavan/s4/rnl/longer_horizons/README_v4_evaluation.md).
+For the detailed state semantics and causal-velocity definition, see [README_model_data_and_architecture.md](./README_model_data_and_architecture.md).
+For the current controller and evaluation workflow, see:
+
+- [README_controllers.md](./README_controllers.md)
+- [README_policy_evaluation_and_comparison.md](./README_policy_evaluation_and_comparison.md)
 
 ## Current practical model
 
@@ -129,7 +132,7 @@ So the practical rule is:
 
 ## After Training
 
-After training a checkpoint, use [README_v4_evaluation.md](/home/stavan/s4/rnl/longer_horizons/README_v4_evaluation.md) for:
+After training a checkpoint, use [README_policy_evaluation_and_comparison.md](./README_policy_evaluation_and_comparison.md) for:
 
 - offline checkpoint evaluation on a dataset
 - closed-loop policy evaluation with `run_policy_eval.py`

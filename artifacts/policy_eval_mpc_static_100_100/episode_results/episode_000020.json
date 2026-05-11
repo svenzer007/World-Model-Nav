@@ -1,0 +1,20 @@
+{
+  "average_backward_penalty_applied": 10.0,
+  "backward_allowed_count": 0,
+  "backward_gated_count": 87,
+  "backward_selected_count": 0,
+  "controller": "mpc_static",
+  "done_reason": "dynamic_collision",
+  "dynamic_collision": true,
+  "episode_id": 20,
+  "min_dynamic_clearance": -0.017321537387672864,
+  "min_static_clearance": 0.1498601045759153,
+  "num_steps": 87,
+  "robot_path_length": 2.7399999999999975,
+  "seed": 1928057705,
+  "static_collision": false,
+  "stop_fraction": 0.011494252873563218,
+  "success": false,
+  "timeout": false,
+  "total_progress": 0.10931503772735596
+}

@@ -29,7 +29,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--controller",
         type=str,
-        choices=("learned_structured", "baseline_structured", "cbf_qp"),
+        choices=("learned_structured", "baseline_structured", "cbf_qp", "mpc_static"),
         default="learned_structured",
     )
     parser.add_argument("--checkpoint", type=str, default="artifacts/structured_world_model_factorized_world_v3_stage2/best.pt")
@@ -103,14 +103,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         disable_help="Disable margin-based priority selection trigger for cbf_qp",
     )
     parser.add_argument("--cbf_margin_priority_threshold", type=float, default=0.17)
-    _add_bool_flag(
-        parser,
-        name="cbf_margin_priority_use_distance_trigger",
-        default=False,
-        enable_help="Enable distance-based priority selection trigger for cbf_qp",
-        disable_help="Disable distance-based priority selection trigger for cbf_qp",
-    )
-    parser.add_argument("--cbf_dynamic_priority_distance_threshold", type=float, default=0.25)
+    parser.add_argument("--cbf_margin_tie_positive_eps", type=float, default=1e-4)
     parser.add_argument("--cbf_v_min", type=float, default=CBF_V_MIN_DEFAULT)
     parser.add_argument("--cbf_v_max", type=float, default=CBF_V_MAX_DEFAULT)
     parser.add_argument("--cbf_omega_min", type=float, default=CBF_OMEGA_MIN_DEFAULT)
@@ -125,9 +118,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--cbf_reverse_fallback_speed", type=float, default=0.1)
     parser.add_argument("--cbf_debug", action="store_true")
+    parser.add_argument("--mpc_horizon", type=int, default=10)
+    parser.add_argument("--mpc_obstacle_model", type=str, choices=("static",), default="static")
+    parser.add_argument("--mpc_debug", action="store_true")
     parser.add_argument("--save_episodes", action="store_true")
     parser.add_argument("--save_previews", action="store_true")
-    parser.add_argument("--save_gifs", action="store_true")
+    parser.add_argument(
+        "--save_gifs",
+        action="store_true",
+        help="Deprecated alias for --save_videos; saves MP4, not GIF.",
+    )
     parser.add_argument("--save_videos", action="store_true")
     return parser
 

@@ -12,13 +12,14 @@ from tqdm import tqdm
 
 from controllers.baseline_structured_controller import BaselineStructuredController, StructuredControllerConfig
 from controllers.cbf_qp_controller import CBFQPController, CBFQPControllerConfig
+from controllers.mpc_static_controller import MPCStaticController, MPCStaticControllerConfig
 from sim2d.config import ACTIONS, DatasetConfig
 from sim2d.dataset import load_episode_pickle, save_episode_pickle
 from sim2d.dynamics import disk_collides_with_occupancy, minimum_dynamic_clearance, minimum_static_clearance
 from sim2d.obstacles import DynamicObstacle
 from sim2d.simulator import EpisodeSimulator
 from sim2d.utils import euclidean, json_safe, path_length, save_json, seed_sequence
-from sim2d.visualize import save_episode_gif, save_episode_preview_png, save_episode_video
+from sim2d.visualize import save_episode_preview_png, save_episode_video
 from sim2d.waypoint import compute_local_subgoal
 from .sources import resolve_episode_source_paths, scenario_from_saved_episode
 
@@ -1181,6 +1182,7 @@ def _save_episode_artifacts(
     save_previews: bool,
     save_gifs: bool,
     save_videos: bool,
+    render_context: dict[str, object] | None = None,
 ) -> None:
     controller_dir = output_dir / str(episode["controller"]) if nest_by_controller else output_dir
     stem = f"episode_{int(episode['episode_id']):06d}"
@@ -1192,20 +1194,71 @@ def _save_episode_artifacts(
     if save_episodes:
         save_episode_pickle(episode, controller_dir / "episodes" / f"{stem}.pkl")
     if save_previews:
-        save_episode_preview_png(episode, controller_dir / "preview" / f"{stem}.png", vis_config)
-    controller_name = str(episode["controller"])
-    cbf_redirected_gif_to_video = False
-    if controller_name == "cbf_qp" and save_gifs:
-        print(
-            f"Info: redirecting cbf_qp GIF export for {stem} to MP4 video export",
-            flush=True,
+        save_episode_preview_png(
+            episode,
+            controller_dir / "preview" / f"{stem}.png",
+            vis_config,
+            render_context=render_context,
         )
-        save_episode_video(episode, controller_dir / "video" / f"{stem}.mp4", vis_config)
-        cbf_redirected_gif_to_video = True
-    elif save_gifs:
-        save_episode_gif(episode, controller_dir / "gif" / f"{stem}.gif", vis_config)
-    if save_videos and not (controller_name == "cbf_qp" and cbf_redirected_gif_to_video):
-        save_episode_video(episode, controller_dir / "video" / f"{stem}.mp4", vis_config)
+    if save_gifs or save_videos:
+        save_episode_video(
+            episode,
+            controller_dir / "video" / f"{stem}.mp4",
+            vis_config,
+            render_context=render_context,
+        )
+
+
+def _render_context_from_controller_cfg(controller_cfg: object) -> dict[str, object] | None:
+    if isinstance(controller_cfg, StructuredControllerConfig):
+        return {
+            "controller_category": "discrete_weighted_candidates",
+            "structured_weights": {
+                "w_progress": float(controller_cfg.w_progress),
+                "w_heading": float(controller_cfg.w_heading),
+                "w_path": float(controller_cfg.w_path),
+                "w_velocity": float(controller_cfg.w_velocity),
+            },
+        }
+    if isinstance(controller_cfg, MPCStaticControllerConfig):
+        score_cfg = controller_cfg.score_cfg
+        return {
+            "controller_category": "discrete_weighted_candidates",
+            "structured_weights": {
+                "w_progress": float(score_cfg.w_progress),
+                "w_heading": float(score_cfg.w_heading),
+                "w_path": float(score_cfg.w_path),
+                "w_velocity": float(score_cfg.w_velocity),
+            },
+        }
+    if isinstance(controller_cfg, CBFQPControllerConfig):
+        score_cfg = controller_cfg.score_cfg
+        if score_cfg is None:
+            return {
+                "controller": "cbf_qp",
+                "controller_category": "cbf_qp",
+                "cbf_weights": {
+                    "w_progress": 1.0,
+                    "w_heading": 1.0,
+                    "w_path": 1.0,
+                    "w_velocity": 1.0,
+                    "cbf_w_omega_dev": float(controller_cfg.cbf_w_omega_dev),
+                    "cbf_w_cbf_margin": float(controller_cfg.cbf_w_cbf_margin),
+                },
+            }
+        return {
+            "controller": "cbf_qp",
+            "controller_category": "cbf_qp",
+            "cbf_weights": {
+                "w_progress": float(score_cfg.w_progress),
+                "w_heading": float(score_cfg.w_heading),
+                "w_path": float(score_cfg.w_path),
+                "w_velocity": float(score_cfg.w_velocity),
+                "cbf_w_omega_dev": float(controller_cfg.cbf_w_omega_dev),
+                "cbf_w_cbf_margin": float(controller_cfg.cbf_w_cbf_margin),
+            },
+        }
+    return None
 
 
 def _controller_cfg_from_args(args: argparse.Namespace) -> StructuredControllerConfig:
@@ -1249,8 +1302,7 @@ def _cbf_controller_cfg_from_args(args: argparse.Namespace) -> CBFQPControllerCo
         cbf_dynamic_margin_priority_enabled=False,
         cbf_margin_priority_use_margin_trigger=bool(args.cbf_margin_priority_use_margin_trigger),
         cbf_margin_priority_threshold=float(args.cbf_margin_priority_threshold),
-        cbf_margin_priority_use_distance_trigger=bool(args.cbf_margin_priority_use_distance_trigger),
-        cbf_dynamic_priority_distance_threshold=float(args.cbf_dynamic_priority_distance_threshold),
+        cbf_margin_tie_positive_eps=float(args.cbf_margin_tie_positive_eps),
         cbf_alpha=float(args.cbf_alpha),
         cbf_safety_margin=float(args.cbf_safety_margin),
         cbf_k_v=float(args.cbf_k_v),
@@ -1265,6 +1317,15 @@ def _cbf_controller_cfg_from_args(args: argparse.Namespace) -> CBFQPControllerCo
         cbf_use_reverse_fallback=bool(args.cbf_use_reverse_fallback),
         cbf_reverse_fallback_speed=float(args.cbf_reverse_fallback_speed),
         cbf_debug=bool(args.cbf_debug),
+        score_cfg=_controller_cfg_from_args(args),
+    )
+
+
+def _mpc_controller_cfg_from_args(args: argparse.Namespace) -> MPCStaticControllerConfig:
+    return MPCStaticControllerConfig(
+        horizon=int(args.mpc_horizon),
+        obstacle_model=str(args.mpc_obstacle_model),
+        debug=bool(args.mpc_debug),
         score_cfg=_controller_cfg_from_args(args),
     )
 
@@ -1319,6 +1380,10 @@ def _build_policy_eval_controller(
         if not isinstance(controller_cfg, CBFQPControllerConfig):
             raise TypeError("cbf_qp requires CBFQPControllerConfig")
         return CBFQPController(config, controller_cfg), None
+    if controller_name == "mpc_static":
+        if not isinstance(controller_cfg, MPCStaticControllerConfig):
+            raise TypeError("mpc_static requires MPCStaticControllerConfig")
+        return MPCStaticController(config, controller_cfg), None
     if controller_name == "learned_structured":
         if not isinstance(controller_cfg, StructuredControllerConfig):
             raise TypeError("learned_structured requires StructuredControllerConfig")
@@ -1377,12 +1442,17 @@ def _iter_policy_eval_sources(
 def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
     output_dir = Path(args.output_dir)
     _validate_runtime_override_args(args)
+    if bool(args.save_gifs):
+        print("--save_gifs is deprecated; saving MP4 videos instead. Use --save_videos.", flush=True)
     config = _dataset_config_from_args(args)
     simulator = EpisodeSimulator(config)
     if str(args.controller) == "cbf_qp":
         controller_cfg: object = _cbf_controller_cfg_from_args(args)
+    elif str(args.controller) == "mpc_static":
+        controller_cfg = _mpc_controller_cfg_from_args(args)
     else:
         controller_cfg = _controller_cfg_from_args(args)
+    render_context = _render_context_from_controller_cfg(controller_cfg)
     controller, checkpoint_path = _build_policy_eval_controller(args=args, config=config, controller_cfg=controller_cfg)
     source_items, episode_source_details = _iter_policy_eval_sources(simulator=simulator, args=args)
     episodes: list[dict[str, object]] = []
@@ -1404,6 +1474,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             save_previews=bool(args.save_previews),
             save_gifs=bool(args.save_gifs),
             save_videos=bool(args.save_videos),
+            render_context=render_context,
         )
         episodes.append(episode)
 
@@ -1472,8 +1543,7 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "dynamic_margin_priority_enabled_deprecated": bool(controller_cfg.cbf_dynamic_margin_priority_enabled),
             "margin_priority_use_margin_trigger": bool(controller_cfg.cbf_margin_priority_use_margin_trigger),
             "margin_priority_threshold": float(controller_cfg.cbf_margin_priority_threshold),
-            "margin_priority_use_distance_trigger": bool(controller_cfg.cbf_margin_priority_use_distance_trigger),
-            "dynamic_priority_distance_threshold": float(controller_cfg.cbf_dynamic_priority_distance_threshold),
+            "margin_tie_positive_eps": float(controller_cfg.cbf_margin_tie_positive_eps),
             "v_min": float(controller_cfg.cbf_v_min),
             "v_max": float(controller_cfg.cbf_v_max),
             "omega_min": float(controller_cfg.cbf_omega_min),
@@ -1482,6 +1552,24 @@ def run_policy_eval(args: argparse.Namespace) -> dict[str, object]:
             "use_reverse_fallback": bool(controller_cfg.cbf_use_reverse_fallback),
             "reverse_fallback_speed": float(controller_cfg.cbf_reverse_fallback_speed),
             "debug": bool(controller_cfg.cbf_debug),
+        }
+    if isinstance(controller_cfg, MPCStaticControllerConfig):
+        score_cfg = controller_cfg.score_cfg
+        summary["config"]["mpc"] = {
+            "horizon": int(controller_cfg.horizon),
+            "obstacle_model": str(controller_cfg.obstacle_model),
+            "debug": bool(controller_cfg.debug),
+            "weights": {
+                "progress": float(score_cfg.w_progress),
+                "heading": float(score_cfg.w_heading),
+                "path": float(score_cfg.w_path),
+                "velocity": float(score_cfg.w_velocity),
+                "static": float(score_cfg.w_static),
+                "dynamic": float(score_cfg.w_dynamic),
+            },
+            "static_collision_penalty": float(score_cfg.static_collision_penalty),
+            "dynamic_collision_penalty": float(score_cfg.dynamic_collision_penalty),
+            "min_clearance_clip": float(score_cfg.min_clearance_clip),
         }
     if checkpoint_path is not None:
         summary["checkpoint"] = str(checkpoint_path)
